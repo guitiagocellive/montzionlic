@@ -37,3 +37,17 @@ export async function api<T>(caminho: string, opcoes: { metodo?: string; corpo?:
 export function mensagemDeErro(erro: unknown): string {
   return erro instanceof Error ? erro.message : "Algo deu errado. Tente novamente.";
 }
+
+/** Envia um arquivo (multipart) para a API. */
+export async function enviarArquivo<T>(caminho: string, dados: FormData): Promise<T> {
+  const resposta = await fetch(`/api${caminho}`, {
+    method: "POST",
+    body: dados,
+    credentials: "same-origin",
+  });
+  const json = (await resposta.json().catch(() => null)) as (T & { erro?: string }) | null;
+  if (!resposta.ok) {
+    throw new ErroApi(json?.erro ?? "Não foi possível enviar o arquivo.", resposta.status);
+  }
+  return json as T;
+}

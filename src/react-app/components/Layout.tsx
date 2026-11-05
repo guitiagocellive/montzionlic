@@ -1,4 +1,17 @@
-import { CalendarDays, LayoutDashboard, LogOut, Menu, UserRound, Users } from "lucide-react";
+import {
+  CalendarDays,
+  CalendarRange,
+  FileSignature,
+  KanbanSquare,
+  LayoutDashboard,
+  LogOut,
+  type LucideIcon,
+  Menu,
+  PackageCheck,
+  Truck,
+  UserRound,
+  Users,
+} from "lucide-react";
 import { type ReactNode, useState } from "react";
 import type { Usuario } from "../../shared/tipos";
 import { api } from "../api";
@@ -25,13 +38,39 @@ const dataHoje = () => {
 export function Layout({ usuario, caminho, aoSair, children }: Props) {
   const [menuAberto, setMenuAberto] = useState(false);
 
-  const itens = [
-    { caminho: "/", rotulo: "Painel", icone: LayoutDashboard },
-    ...(usuario.papel === "admin"
-      ? [{ caminho: "/equipe", rotulo: "Equipe", icone: Users }]
-      : []),
-    { caminho: "/conta", rotulo: "Minha conta", icone: UserRound },
+  const secoes: { titulo: string; itens: { caminho: string; rotulo: string; icone: LucideIcon }[] }[] = [
+    {
+      titulo: "Visão geral",
+      itens: [
+        { caminho: "/", rotulo: "Painel", icone: LayoutDashboard },
+        { caminho: "/calendario", rotulo: "Calendário", icone: CalendarRange },
+      ],
+    },
+    {
+      titulo: "Licitações",
+      itens: [
+        { caminho: "/licitacoes", rotulo: "Quadro de licitações", icone: KanbanSquare },
+        { caminho: "/fornecedores", rotulo: "Fornecedores", icone: Truck },
+      ],
+    },
+    {
+      titulo: "Pós-ganho",
+      itens: [
+        { caminho: "/pos-ganho", rotulo: "Empenhos e entregas", icone: PackageCheck },
+        { caminho: "/atas", rotulo: "Atas vigentes", icone: FileSignature },
+      ],
+    },
+    {
+      titulo: "Conta",
+      itens: [
+        ...(usuario.papel === "admin" ? [{ caminho: "/equipe", rotulo: "Equipe", icone: Users }] : []),
+        { caminho: "/conta", rotulo: "Minha conta", icone: UserRound },
+      ],
+    },
   ];
+
+  const ativo = (destino: string) =>
+    destino === "/" ? caminho === "/" : caminho === destino || caminho.startsWith(`${destino}/`);
 
   async function sair() {
     try {
@@ -62,23 +101,27 @@ export function Layout({ usuario, caminho, aoSair, children }: Props) {
           <div className="lateral-marca">
             <Marca />
           </div>
-          <div className="secao-menu">Menu</div>
           <nav>
-            {itens.map(({ caminho: destino, rotulo, icone: Icone }) => (
-              <a
-                key={destino}
-                href={destino}
-                className={caminho === destino ? "ativo" : ""}
-                aria-current={caminho === destino ? "page" : undefined}
-                onClick={(e) => {
-                  e.preventDefault();
-                  setMenuAberto(false);
-                  navegar(destino);
-                }}
-              >
-                <Icone aria-hidden="true" />
-                {rotulo}
-              </a>
+            {secoes.map((secao) => (
+              <div key={secao.titulo} className="grupo-menu">
+                <div className="secao-menu">{secao.titulo}</div>
+                {secao.itens.map(({ caminho: destino, rotulo, icone: Icone }) => (
+                  <a
+                    key={destino}
+                    href={destino}
+                    className={ativo(destino) ? "ativo" : ""}
+                    aria-current={ativo(destino) ? "page" : undefined}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setMenuAberto(false);
+                      navegar(destino);
+                    }}
+                  >
+                    <Icone aria-hidden="true" />
+                    {rotulo}
+                  </a>
+                ))}
+              </div>
             ))}
           </nav>
           <div className="lateral-rodape">

@@ -3,13 +3,21 @@ import type { Usuario } from "../shared/tipos";
 import { api } from "./api";
 import { FundoAnimado } from "./components/Fundo";
 import { Layout } from "./components/Layout";
+import { Avisos } from "./components/Ui";
+import { Calendario } from "./pages/Calendario";
 import { Equipe } from "./pages/Equipe";
+import { DetalheLicitacao } from "./pages/licitacoes/Detalhe";
+import { Fornecedores } from "./pages/licitacoes/Fornecedores";
+import { QuadroLicitacoes } from "./pages/licitacoes/Quadro";
 import { Login } from "./pages/Login";
 import { MinhaConta } from "./pages/MinhaConta";
 import { Painel } from "./pages/Painel";
+import { Atas } from "./pages/posganho/Atas";
+import { DetalheExecucao } from "./pages/posganho/Detalhe";
+import { QuadroExecucao } from "./pages/posganho/Quadro";
 import { PrimeiroAcesso } from "./pages/PrimeiroAcesso";
 import { TrocarSenhaObrigatoria } from "./pages/TrocarSenhaObrigatoria";
-import { useCaminho } from "./rota";
+import { combinar, useCaminho } from "./rota";
 
 type Estado =
   | { tipo: "carregando" }
@@ -22,8 +30,34 @@ export function App() {
     <>
       <FundoAnimado />
       <Conteudo />
+      <Avisos />
     </>
   );
+}
+
+function Pagina({ caminho, usuario }: { caminho: string; usuario: Usuario }) {
+  let p: Record<string, string> | null;
+  if ((p = combinar(caminho, "/licitacoes/:id"))) return <DetalheLicitacao key={p.id} id={Number(p.id)} usuario={usuario} />;
+  if ((p = combinar(caminho, "/pos-ganho/:id"))) return <DetalheExecucao key={p.id} id={Number(p.id)} usuario={usuario} />;
+
+  switch (caminho.replace(/\/+$/, "") || "/") {
+    case "/calendario":
+      return <Calendario />;
+    case "/licitacoes":
+      return <QuadroLicitacoes />;
+    case "/fornecedores":
+      return <Fornecedores usuario={usuario} />;
+    case "/pos-ganho":
+      return <QuadroExecucao />;
+    case "/atas":
+      return <Atas usuario={usuario} />;
+    case "/equipe":
+      return usuario.papel === "admin" ? <Equipe usuarioAtual={usuario} /> : <Painel usuario={usuario} />;
+    case "/conta":
+      return <MinhaConta usuario={usuario} />;
+    default:
+      return <Painel usuario={usuario} />;
+  }
 }
 
 function Conteudo() {
@@ -69,18 +103,9 @@ function Conteudo() {
     return <TrocarSenhaObrigatoria usuario={usuario} aoConcluir={carregar} />;
   }
 
-  let pagina;
-  if (caminho === "/equipe" && usuario.papel === "admin") {
-    pagina = <Equipe usuarioAtual={usuario} />;
-  } else if (caminho === "/conta") {
-    pagina = <MinhaConta usuario={usuario} />;
-  } else {
-    pagina = <Painel usuario={usuario} />;
-  }
-
   return (
     <Layout usuario={usuario} caminho={caminho} aoSair={() => setEstado({ tipo: "deslogado" })}>
-      {pagina}
+      <Pagina caminho={caminho} usuario={usuario} />
     </Layout>
   );
 }

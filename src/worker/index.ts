@@ -3,7 +3,13 @@ import { csrf } from "hono/csrf";
 import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
 import type { Ambiente } from "./auth";
+import { rotasArquivos } from "./rotas/arquivos";
+import { rotasAtas } from "./rotas/atas";
 import { rotasAuth } from "./rotas/auth";
+import { rotasExecucoes } from "./rotas/execucoes";
+import { rotasFornecedores } from "./rotas/fornecedores";
+import { rotasLicitacoes } from "./rotas/licitacoes";
+import { rotasPainel } from "./rotas/painel";
 import { rotasUsuarios } from "./rotas/usuarios";
 
 const app = new Hono<Ambiente>().basePath("/api");
@@ -18,6 +24,12 @@ app.use(async (c, next) => {
 
 app.route("/auth", rotasAuth);
 app.route("/usuarios", rotasUsuarios);
+app.route("/licitacoes", rotasLicitacoes);
+app.route("/execucoes", rotasExecucoes);
+app.route("/atas", rotasAtas);
+app.route("/fornecedores", rotasFornecedores);
+app.route("/arquivos", rotasArquivos);
+app.route("/", rotasPainel);
 
 app.notFound((c) => c.json({ erro: "Rota não encontrada." }, 404));
 app.onError((err, c) => {

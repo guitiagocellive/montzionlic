@@ -5,9 +5,17 @@ function iniciais(nome: string): string {
   return (primeira + ultima).toUpperCase();
 }
 
-export function Avatar({ nome, grande = false }: { nome: string; grande?: boolean }) {
+export function Avatar({
+  nome,
+  grande = false,
+  pequeno = false,
+}: {
+  nome: string;
+  grande?: boolean;
+  pequeno?: boolean;
+}) {
   return (
-    <span className={`avatar ${grande ? "grande" : ""}`} aria-hidden="true">
+    <span className={`avatar ${grande ? "grande" : ""} ${pequeno ? "pequeno" : ""}`} aria-hidden="true">
       {iniciais(nome)}
     </span>
   );
