@@ -119,8 +119,9 @@ rotasExecucoes.get("/:id", async (c) => {
     c.env.DB.prepare(
       `SELECT a.id, a.nome, a.tipo_mime, a.tamanho, a.categoria, a.criado_em, a.execucao_id,
               u.nome AS enviado_por_nome,
-              (SELECT COUNT(*) FROM analises_ia x WHERE x.arquivo_id = a.id) AS analisado
-         FROM arquivos a LEFT JOIN usuarios u ON u.id = a.enviado_por
+              (SELECT COUNT(*) FROM analises_ia x WHERE x.arquivo_id = a.id) AS analisado,
+              a.assinado_em, a.assinatura_titular, ua.nome AS assinado_por_nome
+         FROM arquivos a LEFT JOIN usuarios u ON u.id = a.enviado_por LEFT JOIN usuarios ua ON ua.id = a.assinado_por
         WHERE a.execucao_id = ? OR a.licitacao_id = ?
         ORDER BY a.execucao_id IS NULL, a.criado_em DESC`,
     ).bind(id, execucao.licitacao_id),

@@ -1,10 +1,11 @@
-import { Download, FileText, Settings, Sparkles } from "lucide-react";
+import { Download, Eye, FileText, FileType, PenLine, Settings, ShieldCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { calcularPreco } from "../../../shared/negocio";
-import type { Arquivo, Configuracoes, ContaBancaria, Cotacao, ItemLicitacao, Licitacao, ModeloProposta, Usuario } from "../../../shared/tipos";
+import { podeEditar } from "../../../shared/permissoes";
+import type { Arquivo, CertificadoInfo, Configuracoes, ContaBancaria, Cotacao, ItemLicitacao, Licitacao, ModeloProposta, Usuario } from "../../../shared/tipos";
 import { api, mensagemDeErro } from "../../api";
 import { Campo } from "../../components/Formulario";
-import { avisar, CampoArea, CampoSelect, Carregando, Vazio } from "../../components/Ui";
+import { avisar, CampoArea, CampoSelect, Carregando, SeloAssinado, Vazio } from "../../components/Ui";
 import { formatarData, formatarMoeda, formatarNumero, paraNumero } from "../../formato";
 import { link } from "../../rota";
 
@@ -33,7 +34,9 @@ export function AbaProposta({
   const [prazo, setPrazo] = useState("");
   const [garantia, setGarantia] = useState("");
   const [observacoes, setObservacoes] = useState("");
-  const [gerando, setGerando] = useState(false);
+  const [gerando, setGerando] = useState<"" | "docx" | "pdf" | "assinado">("");
+  const [certificado, setCertificado] = useState<CertificadoInfo | null>(null);
+  const podeAssinar = podeEditar(usuario.permissoes, "assinatura");
   const participando = itens.filter((i) => i.participar);
 
   // Sugestão por item: a cotação mais barata (marca e preço de venda).
@@ -78,8 +81,10 @@ export function AbaProposta({
       api<{ modelos: ModeloProposta[] }>("/propostas/modelos"),
       api<{ contas: ContaBancaria[] }>("/propostas/contas"),
       api<{ configuracoes: Configuracoes }>("/configuracoes"),
+      api<{ certificado: CertificadoInfo }>("/certificado").catch(() => ({ certificado: null })),
     ]).then(
-      ([m, c, cfg]) => {
+      ([m, c, cfg, cert]) => {
+        setCertificado(cert.certificado);
         setModelos(m.modelos);
         setContas(c.contas);
         setModeloId(String(m.modelos.find((x) => x.padrao)?.id ?? m.modelos[0]?.id ?? ""));
@@ -95,13 +100,27 @@ export function AbaProposta({
   const total = escolhidos.reduce((s, i) => s + (paraNumero(linhas[i.id].valor) ?? 0) * (i.quantidade ?? 0), 0);
   const semPreco = escolhidos.filter((i) => paraNumero(linhas[i.id].valor) == null);
   const anteriores = arquivos.filter((a) => a.categoria === "Proposta");
+  const prontoParaGerar = escolhidos.length > 0 && semPreco.length === 0;
 
-  async function gerar() {
-    setGerando(true);
+  const certificadoPronto = !!certificado?.configurado && certificado.segredo_configurado && (certificado.dias_restantes ?? 0) >= 0;
+  const motivoSemAssinatura = !podeAssinar
+    ? "Você não tem permissão para assinar com o certificado da empresa."
+    : !certificado?.configurado
+      ? "Nenhum certificado digital cadastrado (Configurações → Certificado digital)."
+      : !certificado.segredo_configurado
+        ? "A assinatura ainda não foi ativada no servidor."
+        : (certificado.dias_restantes ?? 0) < 0
+          ? "O certificado da empresa venceu."
+          : "";
+
+  async function gerar(tipo: "docx" | "pdf" | "assinado") {
+    setGerando(tipo);
     try {
       const r = await api<{ arquivo: { id: number; nome: string } }>(`/licitacoes/${licitacao.id}/proposta`, {
         corpo: {
-          modelo_id: Number(modeloId),
+          formato: tipo === "docx" ? "docx" : "pdf",
+          assinar: tipo === "assinado",
+          modelo_id: tipo === "docx" ? Number(modeloId) : null,
           conta_id: contaId ? Number(contaId) : null,
           validade_dias: Number(validade),
           prazo_entrega: prazo,
@@ -110,37 +129,18 @@ export function AbaProposta({
           itens: escolhidos.map((i) => ({ item_id: i.id, marca: linhas[i.id].marca, valor_unitario: paraNumero(linhas[i.id].valor) })),
         },
       });
-      window.location.href = `/api/arquivos/${r.arquivo.id}?baixar=1`;
-      avisar("Proposta gerada e salva nos arquivos da licitação.");
+      if (tipo === "docx") window.location.href = `/api/arquivos/${r.arquivo.id}?baixar=1`;
+      else window.open(`/api/arquivos/${r.arquivo.id}`, "_blank", "noopener");
+      avisar(tipo === "assinado" ? "Proposta assinada digitalmente e salva nos arquivos." : "Proposta gerada e salva nos arquivos da licitação.");
       await aoMudar();
     } catch (err) {
       avisar(mensagemDeErro(err), "erro");
     } finally {
-      setGerando(false);
+      setGerando("");
     }
   }
 
   if (modelos === null) return <Carregando />;
-
-  if (modelos.length === 0) {
-    return (
-      <section className="cartao">
-        <Vazio icone={<FileText />} titulo="Nenhum modelo de proposta cadastrado">
-          {usuario.papel === "admin" ? (
-            <>
-              Envie os seus modelos do Word em{" "}
-              <a className="link-suave" {...link("/configuracoes/propostas")}>
-                Configurações → Propostas
-              </a>
-              .
-            </>
-          ) : (
-            "Peça a um administrador para cadastrar os modelos de proposta."
-          )}
-        </Vazio>
-      </section>
-    );
-  }
 
   return (
     <>
@@ -156,7 +156,13 @@ export function AbaProposta({
           )}
         </div>
         <div className="grade-3">
-          <CampoSelect rotulo="Modelo" value={modeloId} onChange={(e) => setModeloId(e.target.value)} opcoes={modelos.map((m) => ({ valor: String(m.id), texto: m.nome }))} />
+          <CampoSelect
+            rotulo="Modelo do Word"
+            value={modeloId}
+            onChange={(e) => setModeloId(e.target.value)}
+            vazio={modelos.length ? undefined : "Nenhum (só PDF)"}
+            opcoes={modelos.map((m) => ({ valor: String(m.id), texto: m.nome }))}
+          />
           <CampoSelect
             rotulo="Banco para pagamento"
             value={contaId}
@@ -221,11 +227,48 @@ export function AbaProposta({
             Falta o valor de {semPreco.length} item(ns): {semPreco.map((i) => i.numero).join(", ")}.
           </p>
         )}
-        <div className="botoes-modal" style={{ marginTop: 16 }}>
-          <button className="botao acento" onClick={gerar} disabled={gerando || !modeloId || escolhidos.length === 0 || semPreco.length > 0}>
-            <Sparkles /> {gerando ? "Gerando…" : "Gerar proposta (.docx)"}
+        <div className="botoes-proposta">
+          <button className="botao secundario" onClick={() => gerar("docx")} disabled={!!gerando || !modeloId || !prontoParaGerar} title={modeloId ? "" : "Cadastre um modelo do Word em Configurações → Propostas"}>
+            <FileType /> {gerando === "docx" ? "Gerando…" : "Word (.docx)"}
+          </button>
+          <button className="botao secundario" onClick={() => gerar("pdf")} disabled={!!gerando || !prontoParaGerar}>
+            <FileText /> {gerando === "pdf" ? "Gerando…" : "PDF"}
+          </button>
+          <button
+            className="botao acento"
+            onClick={() => gerar("assinado")}
+            disabled={!!gerando || !prontoParaGerar || !certificadoPronto || !podeAssinar}
+            title={motivoSemAssinatura}
+          >
+            <PenLine /> {gerando === "assinado" ? "Assinando…" : "PDF assinado"}
           </button>
         </div>
+        <p className="texto-fraco pequeno nota-proposta">
+          {certificadoPronto && podeAssinar ? (
+            <>
+              <ShieldCheck size={14} /> O PDF assinado usa o certificado A1 de <strong>{certificado?.titular}</strong>
+              {certificado?.documento ? ` (${certificado.documento})` : ""}.
+            </>
+          ) : (
+            motivoSemAssinatura
+          )}
+          {modelos.length === 0 && (
+            <>
+              {" "}
+              {usuario.papel === "admin" ? (
+                <>
+                  Para gerar em Word, envie seus modelos em{" "}
+                  <a className="link-suave" {...link("/configuracoes/propostas")}>
+                    Configurações → Propostas
+                  </a>
+                  .
+                </>
+              ) : (
+                "Para gerar em Word, peça a um administrador para cadastrar os modelos."
+              )}
+            </>
+          )}
+        </p>
       </section>
 
       {anteriores.length > 0 && (
@@ -234,8 +277,8 @@ export function AbaProposta({
           <div className="lista-arquivos">
             {anteriores.map((a) => (
               <div key={a.id} className="linha-arquivo">
-                <span className="icone-redondo">
-                  <FileText />
+                <span className={`icone-redondo ${a.assinado_em ? "verde" : ""}`}>
+                  {a.assinado_em ? <ShieldCheck /> : <FileText />}
                 </span>
                 <div className="arquivo-texto">
                   <strong className="arquivo-nome">{a.nome}</strong>
@@ -243,7 +286,13 @@ export function AbaProposta({
                     {formatarData(a.criado_em)}
                     {a.enviado_por_nome && ` · ${a.enviado_por_nome}`}
                   </span>
+                  {a.assinado_em ? <SeloAssinado arquivo={a} /> : null}
                 </div>
+                {a.tipo_mime === "application/pdf" && (
+                  <a className="botao secundario pequeno" href={`/api/arquivos/${a.id}`} target="_blank" rel="noopener">
+                    <Eye /> Ver
+                  </a>
+                )}
                 <a className="botao secundario pequeno" href={`/api/arquivos/${a.id}?baixar=1`}>
                   <Download /> Baixar
                 </a>

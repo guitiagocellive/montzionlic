@@ -34,6 +34,11 @@ Não existe cadastro público: só um administrador adiciona pessoas.
   (`[data-paleta="..."]`) e na lista `TEMAS_CLAROS`/`TEMAS_ESCUROS` de `src/shared/tipos.ts`.
 - **Empresa e margens** (admin): margem de lucro e impostos padrão das licitações novas.
 - **Alertas** (admin): com quantos dias de antecedência avisar sessões, entregas e atas.
+- **Propostas** (admin): modelos do Word, contas bancárias, logo e declaração da proposta em PDF.
+- **Certificado digital** (admin): cadastro do certificado A1 (.pfx/.p12 + senha), validade e troca.
+  A senha não fica guardada; a chave fica criptografada com o segredo `CHAVE_CERTIFICADO` do Worker.
+  Quem pode assinar é definido em Equipe e acessos → **Assinatura digital** (Editar = pode assinar).
+  O sistema avisa 30 dias antes do certificado vencer.
 - **Equipe e acessos** (admin): convite por link (uso único, com validade), perfil, cor e acesso por
   área (sem acesso / ver / editar). O servidor bloqueia o que a pessoa não pode ver ou editar.
 
@@ -60,6 +65,10 @@ Não existe cadastro público: só um administrador adiciona pessoas.
   o banco para pagamento e a validade; órgão, itens, preços, total por extenso e dados da empresa entram
   sozinhos. Campos no Word entre chaves, ex.: `{orgao}`; tabela de itens com `{#itens}` … `{/itens}`.
   Modelo de exemplo em `public/modelos/modelo-proposta.docx`.
+- **Proposta em PDF e assinatura digital:** a própria plataforma monta a proposta em PDF (com logo, itens, total
+  por extenso, condições e declaração) e, se quiser, já sai **assinada com o certificado A1 da empresa**
+  (padrão ICP-Brasil/PAdES, conferível em validar.iti.gov.br). O PDF ganha um carimbo "Assinado digitalmente" e,
+  na plataforma, o arquivo aparece com o selo. PDFs já enviados também podem ser assinados na aba Arquivos.
 - **Resultado da disputa:** por item (ganho, perdido, cancelado), colocação, nosso lance, vencedor,
   valor vencedor e motivo da perda.
 - **Comentários e histórico** em cada licitação e empenho, com menção (@) que gera notificação.
@@ -94,8 +103,14 @@ Não existe cadastro público: só um administrador adiciona pessoas.
 5. **Conectar o GitHub:** no Worker, vá em *Settings → Build → Connect* e escolha este repositório.
    - Build command: `npm run build`
    - Deploy command: `npm run deploy:ci` (aplica as migrações do banco e publica)
-6. **Domínio:** no Worker, *Settings → Domains & Routes → Add → Custom domain*.
-7. **Logo após o primeiro deploy**, abra o site e crie o administrador na tela de primeiro acesso.
+6. **Ativar a assinatura digital:** no Worker, vá em *Settings → Variables and Secrets → Add*,
+   escolha o tipo **Secret**, nome `CHAVE_CERTIFICADO` e, como valor, um texto longo e aleatório
+   (por exemplo, gere com `openssl rand -base64 32`). Guarde esse valor só lá: se ele mudar, é preciso
+   cadastrar o certificado de novo. Depois, cadastre o certificado em *Configurações → Certificado digital*.
+7. **Plano do Worker:** recomendo o **Workers Paid** (US$ 5/mês). O plano grátis limita cada requisição a
+   10 ms de processamento, e gerar Word/PDF ou assinar leva de 50 a 100 ms — no grátis essas ações podem falhar.
+8. **Domínio:** no Worker, *Settings → Domains & Routes → Add → Custom domain*.
+9. **Logo após o primeiro deploy**, abra o site e crie o administrador na tela de primeiro acesso.
 
 A partir daí, cada push na branch de produção publica sozinho.
 
@@ -106,6 +121,9 @@ npm install
 npm run db:migrate:local
 npm run dev
 ```
+
+Para testar a assinatura no computador, crie um arquivo `.dev.vars` (não vai para o Git) com
+`CHAVE_CERTIFICADO="um-texto-longo-e-aleatorio"`.
 
 A IA só funciona conectada à conta Cloudflare. Para testar sem login, rode `SEM_IA=1 npm run dev`
 (tudo funciona, menos o botão "Analisar com IA").

@@ -197,6 +197,7 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
         {aba === "itens" && <AbaItens licitacaoId={l.id} itens={itens} aoMudar={carregar} />}
         {aba === "arquivos" && (
           <AbaArquivos
+            podeAssinar={podeEditar(usuario.permissoes, "assinatura")}
             arquivos={arquivos}
             destino={{ licitacao_id: l.id }}
             tipoAnalise="edital"

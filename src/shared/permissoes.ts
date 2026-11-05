@@ -9,6 +9,7 @@ export const MODULOS = [
   { chave: "posganho", nome: "Empenhos e entregas", descricao: "Quadro de pós-ganho, prazos e faturamento" },
   { chave: "atas", nome: "Atas vigentes", descricao: "Atas de registro de preço" },
   { chave: "documentacao", nome: "Documentação", descricao: "Documentos e certidões da empresa" },
+  { chave: "assinatura", nome: "Assinatura digital", descricao: "Assinar propostas e PDFs com o certificado da empresa (Editar = pode assinar)" },
 ] as const;
 
 export type Modulo = (typeof MODULOS)[number]["chave"];

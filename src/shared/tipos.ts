@@ -48,7 +48,7 @@ export interface Notificacao {
 }
 
 export interface Alerta {
-  tipo: "sessao" | "sessao_sem_orcamento" | "entrega_atrasada" | "entrega" | "ata" | "documento" | "saldo_ata";
+  tipo: "sessao" | "sessao_sem_orcamento" | "entrega_atrasada" | "entrega" | "ata" | "documento" | "saldo_ata" | "certificado";
   gravidade: "urgente" | "atencao" | "info";
   titulo: string;
   detalhe: string;
@@ -74,6 +74,22 @@ export interface Configuracoes {
   representante_cpf: string;
   representante_cargo: string;
   validade_proposta_padrao: number;
+  empresa_logo_chave: string;
+  proposta_declaracao: string;
+}
+
+export interface CertificadoInfo {
+  configurado: boolean;
+  titular?: string;
+  documento?: string | null;
+  emissor?: string;
+  valido_de?: string;
+  valido_ate?: string;
+  dias_restantes?: number;
+  enviado_por_nome?: string | null;
+  criado_em?: string;
+  /** false quando o segredo CHAVE_CERTIFICADO não foi configurado no Worker. */
+  segredo_configurado: boolean;
 }
 
 export interface Documento {
@@ -234,6 +250,9 @@ export interface Arquivo {
   enviado_por_nome: string | null;
   analisado: number;
   execucao_id?: number | null;
+  assinado_em?: number | null;
+  assinatura_titular?: string | null;
+  assinado_por_nome?: string | null;
 }
 
 export interface Fornecedor {

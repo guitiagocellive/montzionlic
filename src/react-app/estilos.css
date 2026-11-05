@@ -3698,6 +3698,198 @@ a.kpi:hover {
    Responsivo
    ========================================================= */
 
+/* ---------- Assinatura digital ---------- */
+
+.selo-assinado {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 5px;
+  margin-top: 5px;
+  padding: 2px 9px 2px 7px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  background: var(--verde-fundo);
+  color: var(--verde);
+  border: 1px solid color-mix(in srgb, var(--verde) 30%, transparent);
+  cursor: help;
+}
+
+.selo-assinado svg {
+  width: 13px;
+  height: 13px;
+}
+
+.icone-redondo.verde,
+.icone-brilho.verde {
+  background: var(--verde-fundo);
+  color: var(--verde);
+}
+
+.botoes-proposta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.nota-proposta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  margin: 10px 0 0;
+  text-align: right;
+}
+
+.nota-proposta svg {
+  color: var(--verde);
+}
+
+.linha-botoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.botao.secundario.perigo {
+  color: var(--vermelho);
+}
+
+.botao.secundario.perigo:hover:not(:disabled) {
+  background: var(--vermelho-fundo);
+}
+
+.etiqueta.verde {
+  background: var(--verde-fundo);
+  color: var(--verde);
+}
+
+.etiqueta.amarela {
+  background: var(--amarelo-fundo);
+  color: var(--amarelo);
+}
+
+.etiqueta.vermelha {
+  background: var(--vermelho-fundo);
+  color: var(--vermelho);
+}
+
+.certificado-status {
+  border-color: color-mix(in srgb, var(--verde) 35%, var(--borda));
+}
+
+.certificado-status.vencendo {
+  border-color: color-mix(in srgb, var(--amarelo) 45%, var(--borda));
+}
+
+.certificado-status.vencido {
+  border-color: color-mix(in srgb, var(--vermelho) 45%, var(--borda));
+}
+
+.certificado-cabeca {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.certificado-cabeca > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.certificado-cabeca h2 {
+  margin: 2px 0;
+  overflow-wrap: anywhere;
+}
+
+.certificado-cabeca .etiqueta {
+  margin-left: 0;
+  white-space: nowrap;
+  font-size: 0.76rem;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.certificado-icone {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  flex-shrink: 0;
+  border-radius: 14px;
+  background: var(--verde-fundo);
+  color: var(--verde);
+}
+
+.vencendo .certificado-icone {
+  background: var(--amarelo-fundo);
+  color: var(--amarelo);
+}
+
+.vencido .certificado-icone {
+  background: var(--vermelho-fundo);
+  color: var(--vermelho);
+}
+
+.certificado-dados {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.certificado-dados dt {
+  font-size: 0.76rem;
+  color: var(--texto-fraco);
+}
+
+.certificado-dados dd {
+  margin: 2px 0 0;
+  font-size: 0.88rem;
+  overflow-wrap: anywhere;
+}
+
+.lista-seguranca {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--texto-suave);
+  font-size: 0.88rem;
+}
+
+.logo-proposta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.logo-previa {
+  display: grid;
+  place-items: center;
+  width: 140px;
+  height: 72px;
+  border-radius: 12px;
+  border: 1px dashed var(--borda);
+  background: #fff;
+  color: #9ca3af;
+  overflow: hidden;
+}
+
+.logo-previa img {
+  max-width: 92%;
+  max-height: 86%;
+  object-fit: contain;
+}
+
 @media (max-width: 1180px) {
   .kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4949,6 +5141,7 @@ code {
   }
 
   .linha-proposta > .entrada,
+  .linha-proposta .entrada:first-of-type,
   .linha-proposta-total {
     grid-column: 2;
   }

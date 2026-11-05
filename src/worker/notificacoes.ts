@@ -165,6 +165,27 @@ export async function calcularAlertas(
     }
   }
 
+  if (pode("assinatura")) {
+    // Certificado digital A1 vencendo em até 30 dias (ou já vencido).
+    const cert = await db
+      .prepare("SELECT titular, valido_ate FROM certificado_digital WHERE id = 1")
+      .first<{ titular: string; valido_ate: string }>();
+    if (cert) {
+      const validade = cert.valido_ate.slice(0, 10);
+      const dias = diasAte(validade, hoje);
+      if (dias <= 30) {
+        alertas.push({
+          tipo: "certificado",
+          gravidade: dias <= 7 ? "urgente" : "atencao",
+          titulo: dias < 0 ? `Certificado digital vencido há ${-dias} dia(s)` : `Certificado digital vence ${quando(dias)}`,
+          detalhe: `${cert.titular} · renove e cadastre o novo em Configurações`,
+          data: validade,
+          link: "/configuracoes/certificado",
+        });
+      }
+    }
+  }
+
   const peso = { urgente: 0, atencao: 1, info: 2 };
   return alertas.sort((a, b) => peso[a.gravidade] - peso[b.gravidade] || a.data.localeCompare(b.data));
 }
@@ -177,6 +198,7 @@ const MODULOS_DO_ALERTA: Record<Alerta["tipo"], Modulo[]> = {
   ata: ["atas"],
   saldo_ata: ["atas"],
   documento: ["documentacao"],
+  certificado: ["assinatura"],
 };
 
 interface UsuarioAtivo {

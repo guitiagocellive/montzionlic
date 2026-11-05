@@ -6,6 +6,8 @@ import {
   FileSpreadsheet,
   FileText,
   FolderOpen,
+  PenLine,
+  ShieldCheck,
   Sparkles,
   Trash2,
   UploadCloud,
@@ -16,7 +18,7 @@ import type { AnaliseIA, Arquivo } from "../../shared/tipos";
 import { api, enviarArquivo, mensagemDeErro } from "../api";
 import { formatarData, formatarTamanho } from "../formato";
 import { ResultadoIA } from "./ResultadoIA";
-import { avisar, Modal, Vazio } from "./Ui";
+import { avisar, Modal, SeloAssinado, Vazio } from "./Ui";
 
 const VISUALIZAVEIS = ["application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp", "text/plain"];
 const ANALISAVEIS = [
@@ -45,6 +47,8 @@ interface Props {
   aoImportarItens: (itens: Record<string, unknown>[]) => Promise<void>;
   /** Texto que explica de onde vêm os arquivos herdados (ex.: da licitação). */
   rotuloHerdados?: string;
+  /** Pode assinar PDFs com o certificado da empresa. */
+  podeAssinar?: boolean;
 }
 
 export function AbaArquivos({
@@ -55,12 +59,14 @@ export function AbaArquivos({
   aoAplicarDados,
   aoImportarItens,
   rotuloHerdados,
+  podeAssinar = false,
 }: Props) {
   const [categoria, setCategoria] = useState(tipoAnalise === "edital" ? "Edital" : "Empenho");
   const [enviando, setEnviando] = useState<string | null>(null);
   const [sobre, setSobre] = useState(false);
   const [vendo, setVendo] = useState<Arquivo | null>(null);
   const [analisando, setAnalisando] = useState<number | null>(null);
+  const [assinando, setAssinando] = useState<number | null>(null);
   const [analise, setAnalise] = useState<{ arquivo: Arquivo; dados: AnaliseIA } | null>(null);
   const entrada = useRef<HTMLInputElement>(null);
 
@@ -107,6 +113,20 @@ export function AbaArquivos({
     }
   }
 
+  async function assinar(a: Arquivo) {
+    if (!confirm(`Assinar "${a.nome}" com o certificado digital da empresa? Será criada uma cópia assinada.`)) return;
+    setAssinando(a.id);
+    try {
+      await api(`/arquivos/${a.id}/assinar`, { corpo: {} });
+      avisar("PDF assinado digitalmente. A cópia assinada está na lista.");
+      await aoMudar();
+    } catch (err) {
+      avisar(mensagemDeErro(err), "erro");
+    } finally {
+      setAssinando(null);
+    }
+  }
+
   async function analisar(a: Arquivo, refazer = false) {
     setAnalisando(a.id);
     try {
@@ -139,8 +159,8 @@ export function AbaArquivos({
         const analisavel = ANALISAVEIS.includes(a.tipo_mime ?? "");
         return (
           <article key={a.id} className="linha-arquivo">
-            <span className="icone-brilho">
-              <IconeArquivo tipo={a.tipo_mime} />
+            <span className={`icone-brilho ${a.assinado_em ? "verde" : ""}`}>
+              {a.assinado_em ? <ShieldCheck /> : <IconeArquivo tipo={a.tipo_mime} />}
             </span>
             <div className="arquivo-texto">
               <button className="arquivo-nome" onClick={() => (visualizavel ? setVendo(a) : window.open(`/api/arquivos/${a.id}?baixar=1`))}>
@@ -150,6 +170,7 @@ export function AbaArquivos({
                 {formatarTamanho(a.tamanho)} · {formatarData(a.criado_em)}
                 {a.enviado_por_nome && ` · ${a.enviado_por_nome}`}
               </span>
+              <SeloAssinado arquivo={a} />
             </div>
             <select
               className="seletor-pequeno"
@@ -175,6 +196,19 @@ export function AbaArquivos({
                   ) : (
                     <>
                       <Sparkles aria-hidden="true" /> {a.analisado ? "Ver análise" : "Analisar com IA"}
+                    </>
+                  )}
+                </button>
+              )}
+              {podeAssinar && a.tipo_mime === "application/pdf" && !a.assinado_em && (
+                <button className="botao secundario" onClick={() => assinar(a)} disabled={assinando !== null} title="Assinar com o certificado digital da empresa">
+                  {assinando === a.id ? (
+                    <>
+                      <span className="anel mini" /> Assinando…
+                    </>
+                  ) : (
+                    <>
+                      <PenLine aria-hidden="true" /> Assinar
                     </>
                   )}
                 </button>

@@ -18,6 +18,8 @@ export const CONFIG_PADRAO: Configuracoes = {
   representante_cpf: "",
   representante_cargo: "",
   validade_proposta_padrao: 60,
+  empresa_logo_chave: "",
+  proposta_declaracao: "",
 };
 
 /** Lê as configurações da empresa, completando com os valores padrão. */

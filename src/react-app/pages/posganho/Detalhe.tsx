@@ -202,6 +202,7 @@ export function DetalheExecucao({ id, usuario }: { id: number; usuario: Usuario 
         {aba === "itens" && <AbaItensGanhos ficha={ficha} aoSalvar={carregar} />}
         {aba === "arquivos" && (
           <AbaArquivos
+            podeAssinar={podeEditar(usuario.permissoes, "assinatura")}
             arquivos={arquivos}
             destino={{ execucao_id: e.id }}
             tipoAnalise="empenho"

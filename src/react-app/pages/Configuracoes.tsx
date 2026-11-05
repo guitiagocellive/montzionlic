@@ -15,6 +15,9 @@ import {
   Palette,
   Pencil,
   Shield,
+  ShieldCheck,
+  ShieldAlert,
+  ImageIcon,
   Trash2,
   UserPlus,
   UserRound,
@@ -29,6 +32,7 @@ import {
   type Permissoes,
 } from "../../shared/permissoes";
 import {
+  type CertificadoInfo,
   type Configuracoes as Config,
   type Convite,
   type Papel,
@@ -64,6 +68,7 @@ export function Configuracoes({ usuario, secao, aoMudarUsuario }: Props) {
       ? [
           { chave: "empresa", rotulo: "Empresa e margens", icone: Building2 },
           { chave: "propostas", rotulo: "Propostas", icone: FileText },
+          { chave: "certificado", rotulo: "Certificado digital", icone: ShieldCheck },
           { chave: "alertas", rotulo: "Alertas", icone: BellRing },
           { chave: "equipe", rotulo: "Equipe e acessos", icone: Users },
         ]
@@ -106,7 +111,13 @@ export function Configuracoes({ usuario, secao, aoMudarUsuario }: Props) {
             </section>
           )}
           {atual === "empresa" && <Empresa />}
-          {atual === "propostas" && <PropostasConfig />}
+          {atual === "propostas" && (
+            <>
+              <PropostaPdfConfig />
+              <PropostasConfig />
+            </>
+          )}
+          {atual === "certificado" && <CertificadoConfig />}
           {atual === "alertas" && <AlertasConfig />}
           {atual === "equipe" && <Equipe usuarioAtual={usuario} />}
         </div>
@@ -450,6 +461,250 @@ function AlertasConfig() {
         </div>
       </section>
     </form>
+  );
+}
+
+// ---------------- Proposta em PDF: logo e declaração (admin) ----------------
+
+function PropostaPdfConfig() {
+  const { config, salvar } = useConfig();
+  const [versaoLogo, setVersaoLogo] = useState(0);
+  const [temLogo, setTemLogo] = useState<boolean | null>(null);
+  const entrada = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (config) setTemLogo(!!config.empresa_logo_chave);
+  }, [config]);
+
+  async function enviarLogo(arquivo: File) {
+    try {
+      const dados = new FormData();
+      dados.set("logo", arquivo);
+      await enviarArquivo("/configuracoes/logo", dados);
+      setTemLogo(true);
+      setVersaoLogo((v) => v + 1);
+      avisar("Logo atualizado.");
+    } catch (err) {
+      avisar(mensagemDeErro(err), "erro");
+    }
+  }
+
+  async function removerLogo() {
+    if (!confirm("Remover o logo da proposta?")) return;
+    try {
+      await api("/configuracoes/logo", { metodo: "DELETE" });
+      setTemLogo(false);
+    } catch (err) {
+      avisar(mensagemDeErro(err), "erro");
+    }
+  }
+
+  if (!config) return <Carregando />;
+  return (
+    <section className="cartao">
+      <h2>Proposta em PDF</h2>
+      <p className="descricao">
+        O PDF é montado pela própria plataforma (sem modelo do Word), com os dados da empresa, os itens e o total por extenso.
+        Pode sair assinado com o certificado digital.
+      </p>
+      <div className="logo-proposta">
+        <div className="logo-previa">
+          {temLogo ? <img src={`/api/configuracoes/logo?v=${versaoLogo}`} alt="Logo da empresa" /> : <ImageIcon aria-hidden="true" />}
+        </div>
+        <div>
+          <strong>Logo no cabeçalho</strong>
+          <p className="texto-fraco pequeno" style={{ margin: "2px 0 10px" }}>
+            PNG ou JPG, até 1,5 MB. Fundo branco ou transparente fica melhor.
+          </p>
+          <div className="linha-botoes">
+            <button type="button" className="botao secundario pequeno" onClick={() => entrada.current?.click()}>
+              <Upload /> {temLogo ? "Trocar logo" : "Enviar logo"}
+            </button>
+            {temLogo && (
+              <button type="button" className="botao secundario pequeno perigo" onClick={removerLogo}>
+                <Trash2 /> Remover
+              </button>
+            )}
+          </div>
+          <input
+            ref={entrada}
+            type="file"
+            accept="image/png,image/jpeg"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) enviarLogo(f);
+              e.target.value = "";
+            }}
+          />
+        </div>
+      </div>
+      <form
+        className="formulario"
+        style={{ marginTop: 16 }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          const f = new FormData(e.currentTarget);
+          salvar({ proposta_declaracao: String(f.get("proposta_declaracao") ?? "") });
+        }}
+      >
+        <label className="campo">
+          <span>Declaração no fim da proposta</span>
+          <textarea name="proposta_declaracao" rows={4} maxLength={3000} defaultValue={config.proposta_declaracao} />
+        </label>
+        <div>
+          <button className="botao">Salvar declaração</button>
+        </div>
+      </form>
+    </section>
+  );
+}
+
+// ---------------- Certificado digital A1 (admin) ----------------
+
+function CertificadoConfig() {
+  const [info, setInfo] = useState<CertificadoInfo | null>(null);
+  const [arquivo, setArquivo] = useState<File | null>(null);
+  const [enviando, setEnviando] = useState(false);
+  const [trocando, setTrocando] = useState(false);
+  const formulario = useRef<HTMLFormElement>(null);
+
+  async function carregar() {
+    try {
+      const r = await api<{ certificado: CertificadoInfo }>("/certificado");
+      setInfo(r.certificado);
+    } catch (err) {
+      avisar(mensagemDeErro(err), "erro");
+    }
+  }
+  useEffect(() => {
+    carregar();
+  }, []);
+
+  async function enviar(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!arquivo) return;
+    const senha = String(new FormData(e.currentTarget).get("senha") ?? "");
+    setEnviando(true);
+    try {
+      const dados = new FormData();
+      dados.set("arquivo", arquivo);
+      dados.set("senha", senha);
+      await enviarArquivo("/certificado", dados);
+      formulario.current?.reset();
+      setArquivo(null);
+      setTrocando(false);
+      avisar("Certificado cadastrado. As propostas já podem sair assinadas.");
+      await carregar();
+    } catch (err) {
+      avisar(mensagemDeErro(err), "erro");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  async function remover() {
+    if (!confirm("Remover o certificado da plataforma? Ninguém conseguirá assinar até cadastrar outro.")) return;
+    try {
+      await api("/certificado", { metodo: "DELETE" });
+      await carregar();
+    } catch (err) {
+      avisar(mensagemDeErro(err), "erro");
+    }
+  }
+
+  if (!info) return <Carregando />;
+  const dias = info.dias_restantes ?? 0;
+  const vencido = info.configurado && dias < 0;
+  const vencendo = info.configurado && dias >= 0 && dias <= 30;
+
+  return (
+    <>
+      {!info.segredo_configurado && (
+        <Alerta tipo="erro">
+          A assinatura ainda não foi ativada no servidor. Crie o segredo <code>CHAVE_CERTIFICADO</code> no Worker da Cloudflare
+          (Settings → Variables and Secrets → tipo Secret) com um texto longo e aleatório. Veja o passo a passo no README.
+        </Alerta>
+      )}
+
+      {info.configurado && (
+        <section className={`cartao certificado-status ${vencido ? "vencido" : vencendo ? "vencendo" : ""}`}>
+          <div className="certificado-cabeca">
+            <span className="certificado-icone">{vencido || vencendo ? <ShieldAlert /> : <ShieldCheck />}</span>
+            <div>
+              <span className="sobretitulo">Certificado A1 da empresa</span>
+              <h2>{info.titular}</h2>
+              <span className="texto-fraco pequeno">{info.documento ? `CNPJ/CPF ${info.documento}` : "Documento não identificado"}</span>
+            </div>
+            <span className={`etiqueta ${vencido ? "vermelha" : vencendo ? "amarela" : "verde"}`}>
+              {vencido ? "Vencido" : vencendo ? `Vence em ${dias} dia(s)` : "Ativo"}
+            </span>
+          </div>
+          <dl className="certificado-dados">
+            <div>
+              <dt>Validade</dt>
+              <dd>
+                {formatarData(info.valido_de)} até {formatarData(info.valido_ate)}
+              </dd>
+            </div>
+            <div>
+              <dt>Emissor</dt>
+              <dd>{info.emissor || "—"}</dd>
+            </div>
+            <div>
+              <dt>Cadastrado</dt>
+              <dd>
+                {formatarData(info.criado_em)}
+                {info.enviado_por_nome && ` por ${info.enviado_por_nome}`}
+              </dd>
+            </div>
+          </dl>
+          <div className="linha-botoes">
+            <button type="button" className="botao secundario" onClick={() => setTrocando((t) => !t)}>
+              <Upload /> Trocar certificado
+            </button>
+            <button type="button" className="botao secundario perigo" onClick={remover}>
+              <Trash2 /> Remover
+            </button>
+          </div>
+        </section>
+      )}
+
+      {(!info.configurado || trocando) && (
+        <section className="cartao">
+          <h2>{info.configurado ? "Cadastrar o novo certificado" : "Cadastrar o certificado A1"}</h2>
+          <p className="descricao">
+            Envie o arquivo do certificado A1 (.pfx ou .p12) e a senha dele. Depois disso, quem tiver permissão de
+            <strong> Assinatura digital</strong> consegue gerar propostas e PDFs já assinados.
+          </p>
+          <form ref={formulario} className="formulario" onSubmit={enviar}>
+            <div className="grade-2">
+              <label className="campo">
+                <span>Arquivo do certificado</span>
+                <input type="file" accept=".pfx,.p12,application/x-pkcs12" onChange={(e) => setArquivo(e.target.files?.[0] ?? null)} required />
+              </label>
+              <Campo rotulo="Senha do certificado" name="senha" type="password" autoComplete="off" required />
+            </div>
+            <div>
+              <button className="botao acento" disabled={enviando || !arquivo || !info.segredo_configurado}>
+                <ShieldCheck /> {enviando ? "Conferindo…" : "Cadastrar certificado"}
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+
+      <section className="cartao">
+        <h2>Como a plataforma protege o certificado</h2>
+        <ul className="lista-seguranca">
+          <li>A senha é usada só para abrir o arquivo na hora do cadastro e <strong>não fica guardada</strong>.</li>
+          <li>A chave do certificado fica criptografada (AES-256) com um segredo que só existe no servidor da Cloudflare.</li>
+          <li>Só administradores cadastram ou trocam o certificado; só quem tem permissão de <strong>Assinatura digital → Editar</strong> assina.</li>
+          <li>Toda assinatura fica registrada no histórico da licitação, com quem assinou e quando.</li>
+          <li>A assinatura segue o padrão ICP-Brasil (PAdES) e pode ser conferida em validar.iti.gov.br.</li>
+        </ul>
+      </section>
+    </>
   );
 }
 
@@ -909,6 +1164,7 @@ const ACESSO_PADRAO_MEMBRO: Permissoes = {
   posganho: "ver",
   atas: "ver",
   documentacao: "ver",
+  assinatura: "nenhum",
 };
 
 function ModalConvite({ aoFechar }: { aoFechar: () => void }) {

@@ -13,6 +13,7 @@ import {
   TrendingUp,
   Truck,
   TriangleAlert,
+  ShieldAlert,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { diasAte, ETAPAS_EXECUCAO, ETAPAS_LICITACAO, ETAPAS_LICITACAO_ATIVAS } from "../../shared/negocio";
@@ -42,6 +43,7 @@ export const ICONES_ALERTA = {
   ata: FileSignature,
   saldo_ata: PackageMinus,
   documento: FileWarning,
+  certificado: ShieldAlert,
 };
 
 function saudacao(hora: number) {

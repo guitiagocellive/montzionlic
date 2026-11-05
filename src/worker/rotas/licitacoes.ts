@@ -6,6 +6,9 @@ import { notificar } from "../notificacoes";
 import { comandoEvento, registrarEvento } from "../atividades";
 import { hojeBrasilia, lerConfiguracoes } from "../configuracoes";
 import { gerarDocumento, mensagemDoModelo, montarDados } from "../proposta";
+import { DECLARACAO_PADRAO, gerarPropostaPdf } from "../propostaPdf";
+import { assinarPdf } from "../assinatura";
+import { carregarCertificado } from "../certificado";
 import { nomeEtapa } from "../../shared/negocio";
 import { buscar, comandoAtualizar, comExtras, inserir } from "../banco";
 import { calcularPreco } from "../../shared/negocio";
@@ -221,8 +224,9 @@ rotasLicitacoes.get("/:id", async (c) => {
     ).bind(id),
     c.env.DB.prepare(
       `SELECT a.id, a.nome, a.tipo_mime, a.tamanho, a.categoria, a.criado_em, u.nome AS enviado_por_nome,
-              (SELECT COUNT(*) FROM analises_ia x WHERE x.arquivo_id = a.id) AS analisado
-         FROM arquivos a LEFT JOIN usuarios u ON u.id = a.enviado_por
+              (SELECT COUNT(*) FROM analises_ia x WHERE x.arquivo_id = a.id) AS analisado,
+              a.assinado_em, a.assinatura_titular, ua.nome AS assinado_por_nome
+         FROM arquivos a LEFT JOIN usuarios u ON u.id = a.enviado_por LEFT JOIN usuarios ua ON ua.id = a.assinado_por
         WHERE a.licitacao_id = ? ORDER BY a.criado_em DESC`,
     ).bind(id),
     c.env.DB.prepare(
@@ -480,7 +484,8 @@ rotasLicitacoes.delete("/cotacoes/:cotacaoId", async (c) => {
 
 // ---------------- Proposta comercial ----------------
 
-// Gera a proposta (.docx) a partir de um modelo, e guarda nos arquivos da licitação.
+// Gera a proposta (Word a partir de um modelo, ou PDF — opcionalmente assinado com o certificado A1)
+// e guarda nos arquivos da licitação.
 rotasLicitacoes.post("/:id/proposta", async (c) => {
   const id = idDaRota(c.req.param("id"));
   if (!id) return c.json({ erro: "Licitação inválida." }, 400);
@@ -501,10 +506,18 @@ rotasLicitacoes.post("/:id/proposta", async (c) => {
   }>(c.env.DB, "licitacoes", id);
   if (!lic) return c.json({ erro: "Licitação não encontrada." }, 404);
 
-  const modeloId = idDaRota(String(corpo.modelo_id ?? ""));
-  if (!modeloId) return c.json({ erro: "Escolha o modelo da proposta." }, 400);
-  const modelo = await buscar<{ chave: string; nome: string }>(c.env.DB, "modelos_proposta", modeloId);
-  if (!modelo) return c.json({ erro: "Modelo não encontrado." }, 404);
+  const formato = corpo.formato === "pdf" ? "pdf" : "docx";
+  const assinar = formato === "pdf" && corpo.assinar === true;
+  if (assinar && !podeEditar(usuario.permissoes, "assinatura")) {
+    return c.json({ erro: "Você não tem permissão para assinar com o certificado da empresa." }, 403);
+  }
+  let modelo: { chave: string; nome: string } | null = null;
+  if (formato === "docx") {
+    const modeloId = idDaRota(String(corpo.modelo_id ?? ""));
+    if (!modeloId) return c.json({ erro: "Escolha o modelo da proposta." }, 400);
+    modelo = await buscar<{ chave: string; nome: string }>(c.env.DB, "modelos_proposta", modeloId);
+    if (!modelo) return c.json({ erro: "Modelo não encontrado." }, 404);
+  }
   const contaId = idDaRota(String(corpo.conta_id ?? ""));
   const conta = contaId ? await buscar<NonNullable<Parameters<typeof montarDados>[0]["conta"]>>(c.env.DB, "contas_bancarias", contaId) : null;
   if (contaId && !conta) return c.json({ erro: "Conta bancária não encontrada." }, 404);
@@ -537,41 +550,77 @@ rotasLicitacoes.post("/:id/proposta", async (c) => {
     });
   }
 
-  const objeto = await c.env.ARQUIVOS.get(modelo.chave);
-  if (!objeto) return c.json({ erro: "Arquivo do modelo não encontrado." }, 404);
-
   const config = await lerConfiguracoes(c.env.DB);
   const hoje = hojeBrasilia();
+  const dados = montarDados({
+    config,
+    hoje,
+    licitacao: lic,
+    conta,
+    validadeDias: validade,
+    prazoEntrega: typeof corpo.prazo_entrega === "string" ? corpo.prazo_entrega.trim().slice(0, 300) : "",
+    garantia: typeof corpo.garantia === "string" ? corpo.garantia.trim().slice(0, 300) : "",
+    observacoes: typeof corpo.observacoes === "string" ? corpo.observacoes.trim().slice(0, 4000) : "",
+    itens,
+  });
+  const base = `Proposta ${lic.numero ?? ""} ${lic.orgao ?? ""}`.replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim().slice(0, 110);
+
   let documento: Uint8Array;
-  try {
-    documento = gerarDocumento(
-      await objeto.arrayBuffer(),
-      montarDados({
-        config,
-        hoje,
-        licitacao: lic,
-        conta,
-        validadeDias: validade,
-        prazoEntrega: typeof corpo.prazo_entrega === "string" ? corpo.prazo_entrega.trim().slice(0, 300) : "",
-        garantia: typeof corpo.garantia === "string" ? corpo.garantia.trim().slice(0, 300) : "",
-        observacoes: typeof corpo.observacoes === "string" ? corpo.observacoes.trim().slice(0, 4000) : "",
-        itens,
-      }),
-    );
-  } catch (err) {
-    return c.json({ erro: mensagemDoModelo(err) }, 400);
+  let nome: string;
+  let tipo: string;
+  let titular: string | null = null;
+  if (modelo) {
+    const objeto = await c.env.ARQUIVOS.get(modelo.chave);
+    if (!objeto) return c.json({ erro: "Arquivo do modelo não encontrado." }, 404);
+    try {
+      documento = gerarDocumento(await objeto.arrayBuffer(), dados);
+    } catch (err) {
+      return c.json({ erro: mensagemDoModelo(err) }, 400);
+    }
+    nome = `${base}.docx`;
+    tipo = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  } else {
+    let logo: { bytes: Uint8Array; tipo: string } | null = null;
+    if (config.empresa_logo_chave) {
+      const obj = await c.env.ARQUIVOS.get(config.empresa_logo_chave);
+      if (obj) logo = { bytes: new Uint8Array(await obj.arrayBuffer()), tipo: obj.httpMetadata?.contentType ?? "image/png" };
+    }
+    try {
+      documento = await gerarPropostaPdf(dados, { logo, declaracao: config.proposta_declaracao || DECLARACAO_PADRAO });
+    } catch {
+      return c.json({ erro: "Não foi possível montar o PDF da proposta." }, 500);
+    }
+    if (assinar) {
+      try {
+        const material = await carregarCertificado(c.env);
+        documento = await assinarPdf(documento, material, {
+          motivo: "Proposta comercial",
+          local: config.empresa_cidade || "Brasil",
+          contato: config.empresa_email || undefined,
+        });
+        titular = material.titular;
+      } catch (err) {
+        return c.json({ erro: (err as Error).message || "Não foi possível assinar a proposta." }, 400);
+      }
+    }
+    nome = `${base}${assinar ? " (assinada)" : ""}.pdf`;
+    tipo = "application/pdf";
   }
 
-  const nome = `Proposta ${lic.numero ?? ""} ${lic.orgao ?? ""}`.replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim().slice(0, 120) + ".docx";
-  const chave = `licitacoes/${id}/${crypto.randomUUID()}-proposta.docx`;
-  const tipo = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  const extensao = formato === "pdf" ? "pdf" : "docx";
+  const chave = `licitacoes/${id}/${crypto.randomUUID()}-proposta.${extensao}`;
   await c.env.ARQUIVOS.put(chave, documento, { httpMetadata: { contentType: tipo } });
   const arquivo = await c.env.DB.prepare(
-    `INSERT INTO arquivos (licitacao_id, chave, nome, tipo_mime, tamanho, categoria, enviado_por)
-     VALUES (?, ?, ?, ?, ?, 'Proposta', ?) RETURNING id, nome`,
+    `INSERT INTO arquivos (licitacao_id, chave, nome, tipo_mime, tamanho, categoria, enviado_por, assinado_em, assinado_por, assinatura_titular)
+     VALUES (?, ?, ?, ?, ?, 'Proposta', ?, ?, ?, ?) RETURNING id, nome, assinado_em, assinatura_titular`,
   )
-    .bind(id, chave, nome, tipo, documento.byteLength, usuario.id)
-    .first<{ id: number; nome: string }>();
-  await registrarEvento(c.env.DB, { licitacao_id: id }, usuario.id, `gerou a proposta comercial (modelo "${modelo.nome}")`);
+    .bind(id, chave, nome, tipo, documento.byteLength, usuario.id, titular ? Date.now() : null, titular ? usuario.id : null, titular)
+    .first<{ id: number; nome: string; assinado_em: number | null; assinatura_titular: string | null }>();
+  const descricao = modelo
+    ? `gerou a proposta comercial (modelo "${modelo.nome}")`
+    : titular
+      ? `gerou e assinou digitalmente a proposta comercial em PDF (certificado de ${titular})`
+      : "gerou a proposta comercial em PDF";
+  await registrarEvento(c.env.DB, { licitacao_id: id }, usuario.id, descricao);
   return c.json({ arquivo }, 201);
 });

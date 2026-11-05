@@ -26,7 +26,7 @@ rotasConfiguracoes.patch("/", exigirAdmin, async (c) => {
   const comandos: D1PreparedStatement[] = [];
 
   for (const chave of Object.keys(CONFIG_PADRAO) as (keyof Configuracoes)[]) {
-    if (!(chave in corpo)) continue;
+    if (!(chave in corpo) || chave === "empresa_logo_chave") continue;
     const valor = corpo[chave];
     const limite = LIMITES[chave];
     if (limite) {
@@ -36,7 +36,8 @@ rotasConfiguracoes.patch("/", exigirAdmin, async (c) => {
       }
       comandos.push(salvar(c.env.DB, chave, chave.startsWith("alerta") || chave === "validade_proposta_padrao" ? Math.round(n) : n));
     } else {
-      if (typeof valor !== "string" || valor.length > 200) return c.json({ erro: `Valor inválido em "${chave}".` }, 400);
+      const limite = chave === "proposta_declaracao" ? 3000 : 200;
+      if (typeof valor !== "string" || valor.length > limite) return c.json({ erro: `Valor inválido em "${chave}".` }, 400);
       comandos.push(salvar(c.env.DB, chave, valor.trim()));
     }
   }
@@ -55,3 +56,38 @@ function salvar(db: D1Database, chave: string, valor: unknown) {
     )
     .bind(chave, JSON.stringify(valor));
 }
+
+// ---------- Logo da empresa (usada na proposta em PDF) ----------
+
+const TIPOS_LOGO = new Set(["image/png", "image/jpeg"]);
+
+rotasConfiguracoes.get("/logo", async (c) => {
+  const config = await lerConfiguracoes(c.env.DB);
+  if (!config.empresa_logo_chave) return c.json({ erro: "Sem logo." }, 404);
+  const objeto = await c.env.ARQUIVOS.get(config.empresa_logo_chave);
+  if (!objeto) return c.json({ erro: "Sem logo." }, 404);
+  return new Response(objeto.body, {
+    headers: { "Content-Type": objeto.httpMetadata?.contentType ?? "image/png", "X-Content-Type-Options": "nosniff", "Cache-Control": "private, max-age=300" },
+  });
+});
+
+rotasConfiguracoes.post("/logo", exigirAdmin, async (c) => {
+  const form = await c.req.formData().catch(() => null);
+  const logo = form?.get("logo");
+  if (!logo || typeof logo === "string") return c.json({ erro: "Escolha a imagem do logo." }, 400);
+  if (!TIPOS_LOGO.has(logo.type)) return c.json({ erro: "Use uma imagem PNG ou JPG." }, 400);
+  if (logo.size > 1.5 * 1024 * 1024) return c.json({ erro: "O logo passa de 1,5 MB." }, 400);
+  const anterior = (await lerConfiguracoes(c.env.DB)).empresa_logo_chave;
+  const chave = `empresa/logo-${crypto.randomUUID()}`;
+  await c.env.ARQUIVOS.put(chave, logo.stream(), { httpMetadata: { contentType: logo.type } });
+  await salvar(c.env.DB, "empresa_logo_chave", chave).run();
+  if (anterior) await c.env.ARQUIVOS.delete(anterior);
+  return c.json({ ok: true });
+});
+
+rotasConfiguracoes.delete("/logo", exigirAdmin, async (c) => {
+  const anterior = (await lerConfiguracoes(c.env.DB)).empresa_logo_chave;
+  if (anterior) await c.env.ARQUIVOS.delete(anterior);
+  await salvar(c.env.DB, "empresa_logo_chave", "").run();
+  return c.json({ ok: true });
+});

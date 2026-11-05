@@ -1,4 +1,4 @@
-import { CircleAlert, CircleCheck, X } from "lucide-react";
+import { CircleAlert, CircleCheck, ShieldCheck, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import {
   type ReactNode,
@@ -132,6 +132,25 @@ export function Carregando() {
     <div className="carregando bloco">
       <div className="anel" />
     </div>
+  );
+}
+
+// ---------------- Selo de assinatura digital ----------------
+
+export function SeloAssinado({ arquivo }: { arquivo: { assinado_em?: number | null; assinatura_titular?: string | null; assinado_por_nome?: string | null } }) {
+  if (!arquivo.assinado_em) return null;
+  const quando = new Date(arquivo.assinado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+  const detalhe = [
+    arquivo.assinatura_titular && `Certificado: ${arquivo.assinatura_titular}`,
+    arquivo.assinado_por_nome && `Assinado por ${arquivo.assinado_por_nome}`,
+    quando,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <span className="selo-assinado" title={detalhe}>
+      <ShieldCheck /> Assinado digitalmente
+    </span>
   );
 }
 
