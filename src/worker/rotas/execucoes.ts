@@ -1,5 +1,7 @@
 import { Hono } from "hono";
-import { ETAPAS_EXECUCAO, somarPrazo, type TipoPrazo } from "../../shared/negocio";
+import { ETAPAS_EXECUCAO, nomeEtapa, somarPrazo, type TipoPrazo } from "../../shared/negocio";
+import { comandoEvento } from "../atividades";
+import { hojeBrasilia } from "../configuracoes";
 import { type Ambiente, exigirAdmin, exigirLogin, exigirModulo } from "../auth";
 import { buscar, comandoAtualizar, comExtras, inserir } from "../banco";
 import { type Esquema, idDaRota, lerCampos, lerJson, temErro } from "../validacao";
@@ -22,10 +24,12 @@ const ESQUEMA_EXECUCAO: Esquema = {
   fat_email: "texto",
   fat_telefone: "texto",
   observacoes: "textoLongo",
+  ata_id: "id",
 };
 
 const ESQUEMA_ITEM: Esquema = {
   item_id: "id",
+  ata_item_id: "id",
   item_numero: "texto",
   produto: "texto",
   quantidade: "numero",
@@ -37,6 +41,7 @@ interface Execucao {
   id: number;
   licitacao_id: number;
   etapa: string;
+  numero_empenho: string | null;
   data_empenho: string | null;
   prazo_dias: number | null;
   prazo_tipo: TipoPrazo;
@@ -121,8 +126,26 @@ rotasExecucoes.get("/:id", async (c) => {
     ).bind(id, execucao.licitacao_id),
   ]);
 
+  // Atas que podem ser usadas neste empenho, com o saldo de cada item.
+  const [atas, itensAta] = await c.env.DB.batch([
+    c.env.DB.prepare(
+      `SELECT id, nome, numero_ata, licitacao_id, orgao_gerenciador, data_fim FROM atas
+        WHERE data_fim IS NULL OR data_fim >= ? OR id = (SELECT ata_id FROM execucoes WHERE id = ?)
+        ORDER BY (licitacao_id = ?) DESC, data_fim`,
+    ).bind(hojeBrasilia(), id, execucao.licitacao_id),
+    c.env.DB.prepare(
+      `SELECT ai.id, ai.ata_id, ai.item_numero, ai.produto, ai.unidade, ai.quantidade, ai.valor_unitario,
+              COALESCE((SELECT SUM(ei.quantidade) FROM execucao_itens ei WHERE ei.ata_item_id = ai.id), 0) AS empenhado,
+              COALESCE((SELECT SUM(ei.quantidade) FROM execucao_itens ei WHERE ei.ata_item_id = ai.id AND ei.execucao_id = ?), 0) AS empenhado_aqui
+         FROM ata_itens ai ORDER BY ai.id`,
+    ).bind(id),
+  ]);
+  const itensPorAta = new Map<number, unknown[]>();
+  for (const i of itensAta.results as { ata_id: number }[]) itensPorAta.set(i.ata_id, [...(itensPorAta.get(i.ata_id) ?? []), i]);
+
   return c.json({
     execucao,
+    atas: (atas.results as { id: number }[]).map((a) => ({ ...a, itens: itensPorAta.get(a.id) ?? [] })),
     licitacao: licitacao.results[0],
     itens: itens.results,
     itensLicitacao: itensLicitacao.results,
@@ -169,6 +192,30 @@ rotasExecucoes.patch("/:id", async (c) => {
 
   // Itens ganhos: a lista enviada substitui a anterior.
   if (Array.isArray(corpo.itens)) {
+    // Confere o saldo das atas: não dá para empenhar mais do que o registrado.
+    const pedido = new Map<number, number>();
+    for (const bruto of corpo.itens as Record<string, unknown>[]) {
+      const ataItem = Number(bruto?.ata_item_id);
+      if (Number.isInteger(ataItem) && ataItem > 0) pedido.set(ataItem, (pedido.get(ataItem) ?? 0) + (Number(bruto.quantidade) || 0));
+    }
+    if (pedido.size > 0) {
+      const ids = [...pedido.keys()];
+      const { results: saldos } = await c.env.DB.prepare(
+        `SELECT ai.id, ai.item_numero, ai.quantidade,
+                COALESCE((SELECT SUM(ei.quantidade) FROM execucao_itens ei WHERE ei.ata_item_id = ai.id AND ei.execucao_id <> ?), 0) AS outros
+           FROM ata_itens ai WHERE ai.id IN (${ids.map(() => "?").join(", ")})`,
+      )
+        .bind(id, ...ids)
+        .all<{ id: number; item_numero: string | null; quantidade: number | null; outros: number }>();
+      if (saldos.length !== ids.length) return c.json({ erro: "Item da ata não encontrado." }, 400);
+      for (const s of saldos) {
+        const disponivel = (s.quantidade ?? 0) - s.outros;
+        if ((pedido.get(s.id) ?? 0) > disponivel + 1e-9) {
+          return c.json({ erro: `O item ${s.item_numero ?? ""} da ata só tem ${Math.max(0, disponivel)} de saldo.` }, 400);
+        }
+      }
+    }
+
     comandos.push(c.env.DB.prepare("DELETE FROM execucao_itens WHERE execucao_id = ?").bind(id));
     for (const bruto of corpo.itens as Record<string, unknown>[]) {
       if (!bruto || typeof bruto !== "object") return c.json({ erro: "Item inválido." }, 400);
@@ -184,6 +231,14 @@ rotasExecucoes.patch("/:id", async (c) => {
   }
 
   if (comandos.length === 0) return c.json({ erro: "Nada para alterar." }, 400);
+  const usuarioId = c.get("usuario").id;
+  const evento = (t: string) => comandos.push(comandoEvento(c.env.DB, { execucao_id: id }, usuarioId, t));
+  if (corpo.etapa && corpo.etapa !== atual.etapa) {
+    evento(`moveu de "${nomeEtapa(ETAPAS_EXECUCAO, atual.etapa)}" para "${nomeEtapa(ETAPAS_EXECUCAO, corpo.etapa as string)}"`);
+  }
+  if (corpo.numero_empenho && corpo.numero_empenho !== atual.numero_empenho) evento(`registrou o empenho ${corpo.numero_empenho}`);
+  if (Array.isArray(corpo.itens)) evento(`atualizou os itens ganhos (${(corpo.itens as unknown[]).length})`);
+  if ("ata_id" in corpo) evento(corpo.ata_id ? "vinculou o empenho a uma ata" : "desvinculou o empenho da ata");
   await c.env.DB.batch(comandos);
   return c.json({ execucao: await buscar(c.env.DB, "execucoes", id) });
 });

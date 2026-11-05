@@ -4,6 +4,12 @@ import {
   Camera,
   Check,
   Copy,
+  Download,
+  FileText,
+  Landmark,
+  Plus,
+  Star,
+  Upload,
   KeyRound,
   Link2,
   Palette,
@@ -32,6 +38,7 @@ import {
   type Usuario,
 } from "../../shared/tipos";
 import { api, enviarArquivo, mensagemDeErro } from "../api";
+import type { ContaBancaria, ModeloProposta } from "../../shared/tipos";
 import { Avatar } from "../components/Avatar";
 import { Alerta, Campo } from "../components/Formulario";
 import { FormTrocarSenha } from "../components/FormTrocarSenha";
@@ -56,6 +63,7 @@ export function Configuracoes({ usuario, secao, aoMudarUsuario }: Props) {
     ...(admin
       ? [
           { chave: "empresa", rotulo: "Empresa e margens", icone: Building2 },
+          { chave: "propostas", rotulo: "Propostas", icone: FileText },
           { chave: "alertas", rotulo: "Alertas", icone: BellRing },
           { chave: "equipe", rotulo: "Equipe e acessos", icone: Users },
         ]
@@ -98,6 +106,7 @@ export function Configuracoes({ usuario, secao, aoMudarUsuario }: Props) {
             </section>
           )}
           {atual === "empresa" && <Empresa />}
+          {atual === "propostas" && <PropostasConfig />}
           {atual === "alertas" && <AlertasConfig />}
           {atual === "equipe" && <Equipe usuarioAtual={usuario} />}
         </div>
@@ -350,25 +359,53 @@ function Empresa() {
         salvar({
           empresa_nome: String(f.get("empresa_nome")),
           empresa_cnpj: String(f.get("empresa_cnpj")),
+          empresa_ie: String(f.get("empresa_ie")),
+          empresa_endereco: String(f.get("empresa_endereco")),
+          empresa_cidade: String(f.get("empresa_cidade")),
+          empresa_telefone: String(f.get("empresa_telefone")),
+          empresa_email: String(f.get("empresa_email")),
+          representante_nome: String(f.get("representante_nome")),
+          representante_cpf: String(f.get("representante_cpf")),
+          representante_cargo: String(f.get("representante_cargo")),
           margem_padrao: Number(f.get("margem_padrao")),
           imposto_padrao: Number(f.get("imposto_padrao")),
+          validade_proposta_padrao: Number(f.get("validade_proposta_padrao")),
         });
       }}
     >
       <section className="cartao">
         <h2>Dados da empresa</h2>
-        <p className="descricao">Aparecem nos convites e, no futuro, nos documentos gerados.</p>
-        <div className="grade-2">
-          <Campo rotulo="Nome da empresa" name="empresa_nome" defaultValue={config.empresa_nome} />
+        <p className="descricao">Vão automaticamente para as propostas comerciais e aparecem nos convites.</p>
+        <div className="grade-3">
+          <Campo rotulo="Razão social" name="empresa_nome" defaultValue={config.empresa_nome} />
           <Campo rotulo="CNPJ" name="empresa_cnpj" defaultValue={config.empresa_cnpj} />
+          <Campo rotulo="Inscrição estadual" name="empresa_ie" defaultValue={config.empresa_ie} />
+        </div>
+        <div className="grade-3" style={{ marginTop: 14 }}>
+          <Campo rotulo="Endereço" name="empresa_endereco" defaultValue={config.empresa_endereco} />
+          <Campo rotulo="Cidade / UF" name="empresa_cidade" defaultValue={config.empresa_cidade} placeholder="Ex.: Campinas/SP" />
+          <Campo rotulo="Telefone" name="empresa_telefone" defaultValue={config.empresa_telefone} />
+        </div>
+        <div className="grade-3" style={{ marginTop: 14 }}>
+          <Campo rotulo="E-mail" name="empresa_email" type="email" defaultValue={config.empresa_email} />
         </div>
       </section>
       <section className="cartao">
-        <h2>Pré-definições do orçamento</h2>
+        <h2>Representante legal</h2>
+        <p className="descricao">Quem assina as propostas.</p>
+        <div className="grade-3">
+          <Campo rotulo="Nome" name="representante_nome" defaultValue={config.representante_nome} />
+          <Campo rotulo="CPF" name="representante_cpf" defaultValue={config.representante_cpf} />
+          <Campo rotulo="Cargo" name="representante_cargo" defaultValue={config.representante_cargo} placeholder="Ex.: Sócio-administrador" />
+        </div>
+      </section>
+      <section className="cartao">
+        <h2>Pré-definições do orçamento e da proposta</h2>
         <p className="descricao">Usadas em toda licitação nova. Cada licitação ainda pode ter os seus próprios valores.</p>
-        <div className="grade-2">
+        <div className="grade-3">
           <Campo rotulo="Margem de lucro padrão (%)" name="margem_padrao" type="number" step="0.1" min="0" max="95" defaultValue={config.margem_padrao} />
           <Campo rotulo="Impostos sobre a venda (%)" name="imposto_padrao" type="number" step="0.01" min="0" max="95" defaultValue={config.imposto_padrao} />
+          <Campo rotulo="Validade padrão da proposta (dias)" name="validade_proposta_padrao" type="number" min="1" max="365" defaultValue={config.validade_proposta_padrao} />
         </div>
         <div>
           <button className="botao">Salvar</button>
@@ -391,6 +428,7 @@ function AlertasConfig() {
           alerta_sessao_dias: Number(f.get("alerta_sessao_dias")),
           alerta_entrega_dias: Number(f.get("alerta_entrega_dias")),
           alerta_ata_dias: Number(f.get("alerta_ata_dias")),
+          alerta_documento_dias: Number(f.get("alerta_documento_dias")),
         });
       }}
     >
@@ -404,11 +442,275 @@ function AlertasConfig() {
           <Campo rotulo="Prazos de entrega (dias)" name="alerta_entrega_dias" type="number" min="0" max="60" defaultValue={config.alerta_entrega_dias} />
           <Campo rotulo="Vencimento de atas (dias)" name="alerta_ata_dias" type="number" min="0" max="365" defaultValue={config.alerta_ata_dias} />
         </div>
+        <div className="grade-3" style={{ marginTop: 14 }}>
+          <Campo rotulo="Vencimento de documentos (dias)" name="alerta_documento_dias" type="number" min="0" max="180" defaultValue={config.alerta_documento_dias} />
+        </div>
         <div>
           <button className="botao">Salvar</button>
         </div>
       </section>
     </form>
+  );
+}
+
+// ---------------- Propostas: contas bancárias e modelos (admin) ----------------
+
+function PropostasConfig() {
+  const [contas, setContas] = useState<ContaBancaria[] | null>(null);
+  const [modelos, setModelos] = useState<ModeloProposta[]>([]);
+  const [campos, setCampos] = useState<{ campos: [string, string][]; camposItem: [string, string][] } | null>(null);
+  const [editandoConta, setEditandoConta] = useState<ContaBancaria | "nova" | null>(null);
+  const [enviando, setEnviando] = useState(false);
+  const entrada = useRef<HTMLInputElement>(null);
+
+  async function carregar() {
+    try {
+      const [c, m] = await Promise.all([
+        api<{ contas: ContaBancaria[] }>("/propostas/contas"),
+        api<{ modelos: ModeloProposta[] }>("/propostas/modelos"),
+      ]);
+      setContas(c.contas);
+      setModelos(m.modelos);
+    } catch (err) {
+      avisar(mensagemDeErro(err), "erro");
+    }
+  }
+
+  useEffect(() => {
+    carregar();
+    api<{ campos: [string, string][]; camposItem: [string, string][] }>("/propostas/campos").then(setCampos, () => {});
+  }, []);
+
+  async function enviarModelo(arquivo: File | Blob, nome: string) {
+    setEnviando(true);
+    try {
+      const dados = new FormData();
+      dados.set("arquivo", arquivo, arquivo instanceof File ? arquivo.name : "modelo-proposta.docx");
+      dados.set("nome", nome);
+      await enviarArquivo("/propostas/modelos", dados);
+      avisar("Modelo adicionado.");
+      carregar();
+    } catch (err) {
+      avisar(mensagemDeErro(err), "erro");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  async function usarExemplo() {
+    const r = await fetch("/modelos/modelo-proposta.docx");
+    await enviarModelo(await r.blob(), "Modelo padrão Montzion");
+  }
+
+  async function acao(caminho: string, metodo: string, corpo?: unknown) {
+    try {
+      await api(caminho, { metodo, corpo });
+      carregar();
+    } catch (err) {
+      avisar(mensagemDeErro(err), "erro");
+    }
+  }
+
+  return (
+    <>
+      <section className="cartao">
+        <div className="cartao-titulo">
+          <h2>
+            <FileText size={17} /> Modelos de proposta (Word)
+          </h2>
+          <div className="linha-acoes">
+            <a className="botao link" href="/modelos/modelo-proposta.docx" download>
+              <Download size={14} /> Baixar exemplo
+            </a>
+            <button className="botao" onClick={() => entrada.current?.click()} disabled={enviando}>
+              <Upload /> {enviando ? "Enviando…" : "Enviar modelo"}
+            </button>
+          </div>
+          <input
+            ref={entrada}
+            type="file"
+            accept=".docx"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) enviarModelo(f, f.name.replace(/\.docx$/i, ""));
+              e.target.value = "";
+            }}
+          />
+        </div>
+        <p className="descricao">
+          Use os seus próprios modelos do Word. Onde quiser que a plataforma preencha, escreva o campo entre chaves, como{" "}
+          <code>{"{orgao}"}</code>. Na tabela de itens, comece a linha com <code>{"{#itens}"}</code> e termine com <code>{"{/itens}"}</code>.
+        </p>
+        {modelos.length === 0 ? (
+          <div className="vazio-bloco">
+            <strong>Nenhum modelo ainda</strong>
+            <div className="texto-suave pequeno">Envie um modelo seu ou comece com o modelo de exemplo.</div>
+            <button className="botao secundario" onClick={usarExemplo} disabled={enviando}>
+              <Plus /> Usar o modelo de exemplo
+            </button>
+          </div>
+        ) : (
+          <div className="lista-membros">
+            {modelos.map((m) => (
+              <div key={m.id} className="membro">
+                <span className="icone-redondo info">
+                  <FileText />
+                </span>
+                <div className="membro-texto">
+                  <strong>
+                    {m.nome}
+                    {m.padrao === 1 && <span className="etiqueta">padrão</span>}
+                  </strong>
+                  <span>{m.arquivo_nome} · {formatarData(m.criado_em)}</span>
+                </div>
+                <div className="membro-acoes">
+                  {m.padrao !== 1 && (
+                    <button className="botao link" onClick={() => acao(`/propostas/modelos/${m.id}`, "PATCH", { padrao: true })}>
+                      <Star size={14} /> Tornar padrão
+                    </button>
+                  )}
+                  <a className="botao-icone" href={`/api/propostas/modelos/${m.id}/arquivo`} aria-label="Baixar modelo">
+                    <Download />
+                  </a>
+                  <button className="botao-icone perigo" onClick={() => confirm(`Excluir o modelo "${m.nome}"?`) && acao(`/propostas/modelos/${m.id}`, "DELETE")} aria-label="Excluir modelo">
+                    <Trash2 />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {campos && (
+          <details className="campos-modelo">
+            <summary>Ver todos os campos que dá para usar no modelo</summary>
+            <div className="lista-campos">
+              {campos.campos.map(([chave, nome]) => (
+                <span key={chave}>
+                  <code>{`{${chave}}`}</code> {nome}
+                </span>
+              ))}
+            </div>
+            <p className="texto-fraco pequeno">Dentro da tabela de itens (entre {"{#itens}"} e {"{/itens}"}):</p>
+            <div className="lista-campos">
+              {campos.camposItem.map(([chave, nome]) => (
+                <span key={chave}>
+                  <code>{`{${chave}}`}</code> {nome}
+                </span>
+              ))}
+            </div>
+          </details>
+        )}
+      </section>
+
+      <section className="cartao">
+        <div className="cartao-titulo">
+          <h2>
+            <Landmark size={17} /> Contas bancárias para pagamento
+          </h2>
+          <button className="botao secundario" onClick={() => setEditandoConta("nova")}>
+            <Plus /> Nova conta
+          </button>
+        </div>
+        {contas === null ? (
+          <Carregando />
+        ) : contas.length === 0 ? (
+          <p className="texto-fraco pequeno">Cadastre as contas que aparecem nas propostas para o órgão pagar.</p>
+        ) : (
+          <div className="lista-membros">
+            {contas.map((c) => (
+              <div key={c.id} className="membro">
+                <span className="icone-redondo">
+                  <Landmark />
+                </span>
+                <div className="membro-texto">
+                  <strong>
+                    {c.apelido}
+                    {c.padrao === 1 && <span className="etiqueta">padrão</span>}
+                  </strong>
+                  <span>
+                    {[c.banco, c.agencia && `ag. ${c.agencia}`, c.conta && `${c.tipo ?? "conta"} ${c.conta}`, c.pix && `PIX ${c.pix}`].filter(Boolean).join(" · ")}
+                  </span>
+                </div>
+                <div className="membro-acoes">
+                  {c.padrao !== 1 && (
+                    <button className="botao link" onClick={() => acao(`/propostas/contas/${c.id}`, "PATCH", { padrao: true })}>
+                      <Star size={14} /> Tornar padrão
+                    </button>
+                  )}
+                  <button className="botao-icone" onClick={() => setEditandoConta(c)} aria-label="Editar conta">
+                    <Pencil />
+                  </button>
+                  <button className="botao-icone perigo" onClick={() => confirm(`Excluir a conta "${c.apelido}"?`) && acao(`/propostas/contas/${c.id}`, "DELETE")} aria-label="Excluir conta">
+                    <Trash2 />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {editandoConta && (
+        <ModalConta
+          conta={editandoConta === "nova" ? null : editandoConta}
+          aoFechar={() => setEditandoConta(null)}
+          aoSalvar={() => {
+            setEditandoConta(null);
+            carregar();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function ModalConta({ conta, aoFechar, aoSalvar }: { conta: ContaBancaria | null; aoFechar: () => void; aoSalvar: () => void }) {
+  const [erro, setErro] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  async function enviar(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const corpo = Object.fromEntries(new FormData(e.currentTarget));
+    setErro("");
+    setEnviando(true);
+    try {
+      if (conta) await api(`/propostas/contas/${conta.id}`, { metodo: "PATCH", corpo });
+      else await api("/propostas/contas", { corpo });
+      avisar("Conta salva.");
+      aoSalvar();
+    } catch (err) {
+      setErro(mensagemDeErro(err));
+      setEnviando(false);
+    }
+  }
+  return (
+    <Modal titulo={conta ? conta.apelido : "Nova conta bancária"} aoFechar={aoFechar}>
+      <form className="formulario" onSubmit={enviar}>
+        <Alerta>{erro}</Alerta>
+        <div className="grade-2">
+          <Campo rotulo="Apelido" name="apelido" defaultValue={conta?.apelido ?? ""} placeholder="Ex.: Conta principal" required autoFocus />
+          <Campo rotulo="Banco" name="banco" defaultValue={conta?.banco ?? ""} placeholder="Ex.: Banco do Brasil" required />
+        </div>
+        <div className="grade-3">
+          <Campo rotulo="Código do banco" name="codigo_banco" defaultValue={conta?.codigo_banco ?? ""} placeholder="001" />
+          <Campo rotulo="Agência" name="agencia" defaultValue={conta?.agencia ?? ""} />
+          <Campo rotulo="Conta" name="conta" defaultValue={conta?.conta ?? ""} />
+        </div>
+        <div className="grade-3">
+          <CampoSelect rotulo="Tipo" name="tipo" defaultValue={conta?.tipo ?? "Corrente"} opcoes={["Corrente", "Poupança", "Pagamento"]} />
+          <Campo rotulo="Chave PIX" name="pix" defaultValue={conta?.pix ?? ""} />
+          <Campo rotulo="Titular" name="titular" defaultValue={conta?.titular ?? ""} />
+        </div>
+        <div className="botoes-modal">
+          <button type="button" className="botao secundario" onClick={aoFechar}>
+            Cancelar
+          </button>
+          <button className="botao" disabled={enviando}>
+            {enviando ? "Salvando…" : "Salvar"}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 

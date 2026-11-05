@@ -4,6 +4,8 @@ import {
   CalendarClock,
   ChartColumnBig,
   Clock,
+  FileWarning,
+  PackageMinus,
   FileSignature,
   Gavel,
   Plus,
@@ -38,6 +40,8 @@ export const ICONES_ALERTA = {
   entrega: Truck,
   entrega_atrasada: Truck,
   ata: FileSignature,
+  saldo_ata: PackageMinus,
+  documento: FileWarning,
 };
 
 function saudacao(hora: number) {

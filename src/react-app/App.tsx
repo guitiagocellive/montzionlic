@@ -14,6 +14,7 @@ import { Fornecedores } from "./pages/licitacoes/Fornecedores";
 import { QuadroLicitacoes } from "./pages/licitacoes/Quadro";
 import { Login } from "./pages/Login";
 import { Painel } from "./pages/Painel";
+import { Relatorios } from "./pages/Relatorios";
 import { Atas } from "./pages/posganho/Atas";
 import { DetalheExecucao } from "./pages/posganho/Detalhe";
 import { QuadroExecucao } from "./pages/posganho/Quadro";
@@ -65,6 +66,8 @@ function Pagina({ caminho, usuario, aoMudarUsuario }: { caminho: string; usuario
       return <Calendario />;
     case "/alertas":
       return <Alertas usuario={usuario} />;
+    case "/relatorios":
+      return podeVer(p, "licitacoes") ? <Relatorios /> : <SemAcesso />;
     case "/licitacoes":
       return podeVer(p, "licitacoes") ? <QuadroLicitacoes usuario={usuario} /> : <SemAcesso />;
     case "/fornecedores":
@@ -74,7 +77,7 @@ function Pagina({ caminho, usuario, aoMudarUsuario }: { caminho: string; usuario
     case "/atas":
       return podeVer(p, "atas") ? <Atas usuario={usuario} /> : <SemAcesso />;
     case "/documentacao":
-      return podeVer(p, "documentacao") ? <Documentacao /> : <SemAcesso />;
+      return podeVer(p, "documentacao") ? <Documentacao usuario={usuario} /> : <SemAcesso />;
     default:
       return <Painel usuario={usuario} />;
   }

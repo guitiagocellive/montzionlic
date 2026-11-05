@@ -174,16 +174,34 @@ export function Atas({ usuario }: { usuario: Usuario }) {
 
                 {ata.itens.length > 0 && (
                   <div className="ata-itens">
-                    {ata.itens.slice(0, 4).map((it, j) => (
-                      <div key={j} className="ata-item">
-                        <span className="numero-item">{it.item_numero || "—"}</span>
-                        <span className="ata-item-produto">{it.produto || "Produto"}</span>
-                        <span className="texto-fraco">
-                          {formatarNumero(it.quantidade)} {it.unidade} × {formatarMoeda(it.valor_unitario)}
-                        </span>
-                      </div>
-                    ))}
-                    {ata.itens.length > 4 && <span className="texto-fraco pequeno">+ {ata.itens.length - 4} item(ns)</span>}
+                    <div className="ata-itens-cabecalho">
+                      <span>Saldo dos itens</span>
+                      <span>{ata.total_empenhos ? `${ata.total_empenhos} empenho(s) vinculado(s)` : "Nenhum empenho vinculado"}</span>
+                    </div>
+                    {ata.itens.slice(0, 5).map((it, j) => {
+                      const registrado = it.quantidade ?? 0;
+                      const empenhado = it.empenhado ?? 0;
+                      const saldo = Math.max(0, registrado - empenhado);
+                      const uso = registrado > 0 ? Math.min(100, (empenhado / registrado) * 100) : 0;
+                      return (
+                        <div key={j} className="ata-item">
+                          <span className="numero-item">{it.item_numero || "—"}</span>
+                          <div className="ata-item-texto">
+                            <span className="ata-item-produto">{it.produto || "Produto"}</span>
+                            <div className={`barra-progresso fina ${uso >= 100 ? "cheia" : uso >= 80 ? "alta" : ""}`}>
+                              <span style={{ width: `${uso}%` }} />
+                            </div>
+                          </div>
+                          <span className="ata-item-saldo">
+                            <strong className={saldo === 0 ? "texto-vermelho" : uso >= 80 ? "texto-amarelo" : ""}>{formatarNumero(saldo)}</strong>
+                            <small className="texto-fraco">
+                              de {formatarNumero(registrado)} {it.unidade} · {formatarMoeda(it.valor_unitario)}
+                            </small>
+                          </span>
+                        </div>
+                      );
+                    })}
+                    {ata.itens.length > 5 && <span className="texto-fraco pequeno">+ {ata.itens.length - 5} item(ns)</span>}
                   </div>
                 )}
 
@@ -224,9 +242,11 @@ export function Atas({ usuario }: { usuario: Usuario }) {
   );
 }
 
-type LinhaAta = { item_numero: string; produto: string; unidade: string; quantidade: string; valor_unitario: string };
+type LinhaAta = { id?: number; empenhado?: number; item_numero: string; produto: string; unidade: string; quantidade: string; valor_unitario: string };
 
 const paraLinha = (i: AtaItem): LinhaAta => ({
+  id: i.id,
+  empenhado: i.empenhado,
   item_numero: i.item_numero ?? "",
   produto: i.produto ?? "",
   unidade: i.unidade ?? "",
@@ -305,6 +325,7 @@ function ModalAta({ ata, aoFechar, aoSalvar }: { ata: Ata | null; aoFechar: () =
       licitacao_id: licitacaoId ? Number(licitacaoId) : null,
       prazo_entrega: paraNumero(dados.prazo_entrega) == null ? null : Math.round(paraNumero(dados.prazo_entrega)!),
       itens: linhas.map((l) => ({
+        ...(l.id ? { id: l.id } : {}),
         item_numero: l.item_numero,
         produto: l.produto,
         unidade: l.unidade,
@@ -382,7 +403,15 @@ function ModalAta({ ata, aoFechar, aoSalvar }: { ata: Ata | null; aoFechar: () =
                 <Campo rotulo="Unid." name={`un-${i}`} value={l.unidade} onChange={(e) => mudarLinha(i, { unidade: e.target.value })} />
                 <Campo rotulo="Qtd" name={`qtd-${i}`} type="number" step="any" min="0" value={l.quantidade} onChange={(e) => mudarLinha(i, { quantidade: e.target.value })} />
                 <Campo rotulo="Valor unit." name={`vu-${i}`} type="number" step="0.01" min="0" value={l.valor_unitario} onChange={(e) => mudarLinha(i, { valor_unitario: e.target.value })} />
-                <button type="button" className="botao-icone perigo" onClick={() => setLinhas((ls) => ls.filter((_, j) => j !== i))} aria-label="Remover produto">
+                <button
+                  type="button"
+                  className="botao-icone perigo"
+                  onClick={() => {
+                    if ((l.empenhado ?? 0) > 0 && !confirm("Este item já tem empenhos vinculados. Remover mesmo assim?")) return;
+                    setLinhas((ls) => ls.filter((_, j) => j !== i));
+                  }}
+                  aria-label="Remover produto"
+                >
                   <Trash2 />
                 </button>
               </div>

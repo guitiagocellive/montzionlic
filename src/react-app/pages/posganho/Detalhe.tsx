@@ -4,6 +4,8 @@ import {
   CalendarCheck,
   FolderOpen,
   Gavel,
+  MessageSquare,
+  FileSignature,
   Package,
   Plus,
   Save,
@@ -22,6 +24,7 @@ import { podeEditar } from "../../../shared/permissoes";
 import type { Arquivo, Execucao, ItemExecucao, Usuario } from "../../../shared/tipos";
 import { api, mensagemDeErro } from "../../api";
 import { AbaArquivos } from "../../components/AbaArquivos";
+import { PainelAtividade } from "../../components/Atividade";
 import { Etapas } from "../../components/Etapas";
 import { Campo } from "../../components/Formulario";
 import { avisar, CampoArea, CampoSelect, Carregando, Interruptor, Vazio } from "../../components/Ui";
@@ -46,6 +49,26 @@ interface Ficha {
   itensLicitacao: { id: number; numero: string | null; descricao: string | null; quantidade: number | null; unidade: string | null }[];
   cotacoes: { id: number; item_id: number | null; produto: string | null; marca: string | null; custo_unitario: number | null; frete: number | null }[];
   arquivos: Arquivo[];
+  atas: AtaDisponivel[];
+}
+
+interface AtaDisponivel {
+  id: number;
+  nome: string | null;
+  numero_ata: string | null;
+  licitacao_id: number | null;
+  orgao_gerenciador: string | null;
+  data_fim: string | null;
+  itens: {
+    id: number;
+    item_numero: string | null;
+    produto: string | null;
+    unidade: string | null;
+    quantidade: number | null;
+    valor_unitario: number | null;
+    empenhado: number;
+    empenhado_aqui: number;
+  }[];
 }
 
 function valoresIniciais(e: Execucao) {
@@ -67,7 +90,10 @@ function valoresIniciais(e: Execucao) {
 export function DetalheExecucao({ id, usuario }: { id: number; usuario: Usuario }) {
   const [ficha, setFicha] = useState<Ficha | null>(null);
   const [erro, setErro] = useState("");
-  const [aba, setAba] = useState(() => new URLSearchParams(location.search).get("aba") ?? "empenho");
+  const abaInicial = new URLSearchParams(location.search).get("aba") ?? "empenho";
+  const [aba, setAba] = useState(abaInicial === "atividade" ? "empenho" : abaInicial);
+  const [atividadeAberta, setAtividadeAberta] = useState(abaInicial === "atividade");
+  const [comentarios, setComentarios] = useState(0);
 
   const carregar = useCallback(async () => {
     try {
@@ -156,6 +182,9 @@ export function DetalheExecucao({ id, usuario }: { id: number; usuario: Usuario 
               </option>
             ))}
           </select>
+          <button className="botao secundario" onClick={() => setAtividadeAberta(true)}>
+            <MessageSquare /> Atividade{comentarios > 0 && <span className="chip destaque">{comentarios}</span>}
+          </button>
           {usuario.papel === "admin" && (
             <button className="botao-icone perigo" onClick={excluir} aria-label="Excluir empenho" title="Excluir">
               <Trash2 />
@@ -193,6 +222,14 @@ export function DetalheExecucao({ id, usuario }: { id: number; usuario: Usuario 
           />
         )}
       </div>
+
+      <PainelAtividade
+        alvo={{ execucao_id: e.id }}
+        usuario={usuario}
+        aberto={atividadeAberta}
+        aoFechar={() => setAtividadeAberta(false)}
+        aoContar={setComentarios}
+      />
     </>
   );
 }
@@ -317,6 +354,7 @@ function FormEmpenho({
 }
 
 type Linha = {
+  ata_item_id: string;
   item_id: string;
   item_numero: string;
   produto: string;
@@ -326,6 +364,7 @@ type Linha = {
 };
 
 const paraLinha = (i: ItemExecucao): Linha => ({
+  ata_item_id: i.ata_item_id == null ? "" : String(i.ata_item_id),
   item_id: i.item_id == null ? "" : String(i.item_id),
   item_numero: i.item_numero ?? "",
   produto: i.produto ?? "",
@@ -336,13 +375,45 @@ const paraLinha = (i: ItemExecucao): Linha => ({
 
 function AbaItensGanhos({ ficha, aoSalvar }: { ficha: Ficha; aoSalvar: () => Promise<void> }) {
   const [linhas, setLinhas] = useState<Linha[]>(() => ficha.itens.map(paraLinha));
+  const [ataId, setAtaId] = useState(ficha.execucao.ata_id ? String(ficha.execucao.ata_id) : "");
   const [sujo, setSujo] = useState(false);
   const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
     setLinhas(ficha.itens.map(paraLinha));
+    setAtaId(ficha.execucao.ata_id ? String(ficha.execucao.ata_id) : "");
     setSujo(false);
-  }, [ficha.itens]);
+  }, [ficha.itens, ficha.execucao.ata_id]);
+
+  const ata = ficha.atas.find((a) => String(a.id) === ataId) ?? null;
+  const sugerida = !ficha.execucao.ata_id ? ficha.atas.find((a) => a.licitacao_id === ficha.licitacao.id) : null;
+
+  /** Saldo do item da ata disponível para esta linha (descontando outras linhas deste empenho). */
+  function saldoDaLinha(i: number): number | null {
+    const l = linhas[i];
+    const item = ata?.itens.find((x) => String(x.id) === l.ata_item_id);
+    if (!item) return null;
+    const outrasLinhas = linhas.reduce((s, x, j) => (j !== i && x.ata_item_id === l.ata_item_id ? s + (paraNumero(x.quantidade) ?? 0) : s), 0);
+    return (item.quantidade ?? 0) - item.empenhado + item.empenhado_aqui - outrasLinhas;
+  }
+
+  function escolherItemAta(i: number, ataItemId: string) {
+    const item = ata?.itens.find((x) => String(x.id) === ataItemId);
+    if (!item) {
+      mudar(i, { ata_item_id: "" });
+      return;
+    }
+    const doEdital = ficha.itensLicitacao.find((x) => x.numero && x.numero === item.item_numero);
+    mudar(i, {
+      ata_item_id: ataItemId,
+      item_numero: item.item_numero ?? linhas[i].item_numero,
+      item_id: doEdital ? String(doEdital.id) : linhas[i].item_id,
+      produto: item.produto ?? linhas[i].produto,
+      valor_unitario: item.valor_unitario == null ? linhas[i].valor_unitario : String(item.valor_unitario),
+    });
+  }
+
+  const excedidos = linhas.map((_, i) => saldoDaLinha(i)).some((s, i) => s != null && (paraNumero(linhas[i].quantidade) ?? 0) > s + 1e-9);
 
   function mudar(i: number, novo: Partial<Linha>) {
     setLinhas((ls) => ls.map((l, j) => (j === i ? { ...l, ...novo } : l)));
@@ -381,7 +452,9 @@ function AbaItensGanhos({ ficha, aoSalvar }: { ficha: Ficha; aoSalvar: () => Pro
       await api(`/execucoes/${ficha.execucao.id}`, {
         metodo: "PATCH",
         corpo: {
+          ata_id: ataId ? Number(ataId) : null,
           itens: linhas.map((l) => ({
+            ata_item_id: ataId && l.ata_item_id ? Number(l.ata_item_id) : null,
             item_id: l.item_id ? Number(l.item_id) : null,
             item_numero: l.item_numero,
             produto: l.produto,
@@ -414,14 +487,48 @@ function AbaItensGanhos({ ficha, aoSalvar }: { ficha: Ficha; aoSalvar: () => Pro
           <button
             className="botao secundario"
             onClick={() => {
-              setLinhas((ls) => [...ls, { item_id: "", item_numero: "", produto: "", quantidade: "", valor_unitario: "", custo_unitario: "" }]);
+              setLinhas((ls) => [...ls, { ata_item_id: "", item_id: "", item_numero: "", produto: "", quantidade: "", valor_unitario: "", custo_unitario: "" }]);
               setSujo(true);
             }}
           >
             <Plus aria-hidden="true" /> Adicionar item
           </button>
         </div>
-        <p className="texto-fraco pequeno" style={{ marginTop: -6 }}>
+        <div className="seletor-ata">
+          <span className="icone-redondo info">
+            <FileSignature />
+          </span>
+          <div className="seletor-ata-texto">
+            <strong>Ata de registro de preço</strong>
+            <span className="texto-fraco pequeno">Se este empenho é de uma ata, escolha a ata e o item: o saldo é descontado sozinho.</span>
+          </div>
+          <select
+            value={ataId}
+            onChange={(e) => {
+              setAtaId(e.target.value);
+              if (!e.target.value) setLinhas((ls) => ls.map((l) => ({ ...l, ata_item_id: "" })));
+              setSujo(true);
+            }}
+            aria-label="Ata de registro de preço"
+          >
+            <option value="">Não é de ata</option>
+            {ficha.atas.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.nome || `Ata ${a.numero_ata ?? ""}`}
+                {a.data_fim ? ` · até ${formatarData(a.data_fim)}` : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+        {sugerida && !ataId && (
+          <p className="dica-ia" style={{ margin: "10px 0 0" }}>
+            Existe uma ata desta licitação ({sugerida.nome || `Ata ${sugerida.numero_ata ?? ""}`}).{" "}
+            <button className="botao link" onClick={() => { setAtaId(String(sugerida.id)); setSujo(true); }}>
+              Usar esta ata
+            </button>
+          </p>
+        )}
+        <p className="texto-fraco pequeno" style={{ marginTop: 12 }}>
           Escolha o item do edital e o produto cotado. Informe o valor unitário que ganhamos. O lucro desconta{" "}
           {formatarNumero(ficha.licitacao.imposto_percentual)}% de impostos.
         </p>
@@ -439,8 +546,28 @@ function AbaItensGanhos({ ficha, aoSalvar }: { ficha: Ficha; aoSalvar: () => Pro
               totalVenda += total ?? 0;
               totalLucro += lucro ?? 0;
               const cotacoesDoItem = ficha.cotacoes.filter((c) => String(c.item_id) === l.item_id);
+              const saldo = saldoDaLinha(i);
               return (
-                <div key={i} className="linha-ganho">
+                <div key={i} className={`linha-ganho ${saldo != null && (paraNumero(l.quantidade) ?? 0) > saldo + 1e-9 ? "sem-saldo" : ""}`}>
+                  {ata && (
+                    <div className="item-ata-linha">
+                      <CampoSelect
+                        rotulo="Item da ata"
+                        value={l.ata_item_id}
+                        onChange={(e) => escolherItemAta(i, e.target.value)}
+                        vazio="Escolha o item da ata"
+                        opcoes={ata.itens.map((x) => ({
+                          valor: String(x.id),
+                          texto: `${x.item_numero ?? "—"} · ${(x.produto ?? "").slice(0, 50)} — saldo ${formatarNumero((x.quantidade ?? 0) - x.empenhado + x.empenhado_aqui)}`,
+                        }))}
+                      />
+                      {saldo != null && (
+                        <span className={`selo ${(paraNumero(l.quantidade) ?? 0) > saldo + 1e-9 ? "vermelho" : "verde"}`}>
+                          Pode empenhar até {formatarNumero(Math.max(0, saldo))}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   <div className="grade-ganho">
                     <CampoSelect
                       rotulo="Item do edital"
@@ -518,8 +645,8 @@ function AbaItensGanhos({ ficha, aoSalvar }: { ficha: Ficha; aoSalvar: () => Pro
         >
           Descartar
         </button>
-        <button className="botao" onClick={salvar} disabled={salvando}>
-          <Save aria-hidden="true" /> {salvando ? "Salvando…" : "Salvar itens"}
+        <button className="botao" onClick={salvar} disabled={salvando || excedidos}>
+          <Save aria-hidden="true" /> {salvando ? "Salvando…" : excedidos ? "Quantidade acima do saldo" : "Salvar itens"}
         </button>
       </div>
     </>

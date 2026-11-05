@@ -48,7 +48,7 @@ export interface Notificacao {
 }
 
 export interface Alerta {
-  tipo: "sessao" | "sessao_sem_orcamento" | "entrega_atrasada" | "entrega" | "ata";
+  tipo: "sessao" | "sessao_sem_orcamento" | "entrega_atrasada" | "entrega" | "ata" | "documento" | "saldo_ata";
   gravidade: "urgente" | "atencao" | "info";
   titulo: string;
   detalhe: string;
@@ -64,6 +64,63 @@ export interface Configuracoes {
   alerta_sessao_dias: number;
   alerta_entrega_dias: number;
   alerta_ata_dias: number;
+  alerta_documento_dias: number;
+  empresa_endereco: string;
+  empresa_cidade: string;
+  empresa_telefone: string;
+  empresa_email: string;
+  empresa_ie: string;
+  representante_nome: string;
+  representante_cpf: string;
+  representante_cargo: string;
+  validade_proposta_padrao: number;
+}
+
+export interface Documento {
+  id: number;
+  nome: string;
+  categoria: string;
+  emissao: string | null;
+  validade: string | null;
+  observacoes: string | null;
+  arquivo_nome: string | null;
+  arquivo_tipo: string | null;
+  arquivo_tamanho: number | null;
+  atualizado_por_nome: string | null;
+  atualizado_em: string;
+}
+
+export interface ContaBancaria {
+  id: number;
+  apelido: string;
+  banco: string;
+  codigo_banco: string | null;
+  agencia: string | null;
+  conta: string | null;
+  tipo: string | null;
+  pix: string | null;
+  titular: string | null;
+  padrao: number;
+}
+
+export interface ModeloProposta {
+  id: number;
+  nome: string;
+  arquivo_nome: string;
+  tamanho: number | null;
+  padrao: number;
+  criado_em: string;
+}
+
+export interface Atividade {
+  id: number;
+  tipo: "comentario" | "evento";
+  texto: string;
+  criado_em: number;
+  usuario_id: number | null;
+  usuario_nome: string | null;
+  usuario_cor: string | null;
+  usuario_foto: string | null;
 }
 
 export interface Convite {
@@ -129,6 +186,9 @@ export interface Licitacao {
   lucro_percentual: number;
   imposto_percentual: number;
   responsavel_id: number | null;
+  data_resultado: string | null;
+  motivo_perda: string | null;
+  observacao_resultado: string | null;
   criado_em: string;
   atualizado_em: string;
 }
@@ -142,6 +202,12 @@ export interface ItemLicitacao {
   unidade: string | null;
   valor_referencia: number | null;
   participar: number;
+  resultado: "ganho" | "perdido" | "cancelado" | null;
+  colocacao: number | null;
+  nosso_lance: number | null;
+  vencedor: string | null;
+  valor_vencedor: number | null;
+  motivo_perda: string | null;
 }
 
 export interface Cotacao {
@@ -225,10 +291,12 @@ export interface Execucao {
   fat_email: string | null;
   fat_telefone: string | null;
   observacoes: string | null;
+  ata_id: number | null;
 }
 
 export interface ItemExecucao {
   id?: number;
+  ata_item_id?: number | null;
   item_id: number | null;
   item_numero: string | null;
   produto: string | null;
@@ -239,6 +307,7 @@ export interface ItemExecucao {
 
 export interface AtaItem {
   id?: number;
+  empenhado?: number;
   item_numero: string | null;
   produto: string | null;
   unidade: string | null;
@@ -260,6 +329,7 @@ export interface Ata {
   observacoes: string | null;
   licitacao_numero_vinculada?: string | null;
   licitacao_orgao?: string | null;
+  total_empenhos?: number;
   itens: AtaItem[];
 }
 

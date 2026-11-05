@@ -184,3 +184,41 @@ export function somarPrazo(inicio: string, dias: number, tipo: TipoPrazo): strin
 export function diasAte(iso: string, hojeIso: string): number {
   return Math.round((paraData(iso).getTime() - paraData(hojeIso).getTime()) / 86_400_000);
 }
+
+// ---------------------------------------------------------
+// Documentação, resultado da disputa
+// ---------------------------------------------------------
+
+export const CATEGORIAS_DOCUMENTO = [
+  "CND Federal (Receita/PGFN)",
+  "CRF – FGTS",
+  "CNDT – Trabalhista",
+  "Certidão Estadual",
+  "Certidão Municipal",
+  "Certidão de Falência",
+  "SICAF",
+  "Contrato social",
+  "Balanço patrimonial",
+  "Atestado de capacidade técnica",
+  "Alvará / Licença",
+  "Procuração",
+  "Outro",
+];
+
+export const RESULTADOS_ITEM = [
+  { chave: "ganho", nome: "Ganhamos" },
+  { chave: "perdido", nome: "Perdemos" },
+  { chave: "cancelado", nome: "Cancelado / fracassado" },
+];
+
+export const MOTIVOS_PERDA = [
+  "Preço",
+  "Inabilitação (documentação)",
+  "Desclassificação técnica",
+  "Proposta fora do prazo",
+  "Recurso de concorrente",
+  "Licitação deserta / fracassada",
+  "Licitação revogada / anulada",
+  "Desistência",
+  "Outro",
+];

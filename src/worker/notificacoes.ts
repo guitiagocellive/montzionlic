@@ -121,6 +121,50 @@ export async function calcularAlertas(
     }
   }
 
+  if (pode("atas")) {
+    // Itens de atas vigentes com 80% ou mais da quantidade já empenhada.
+    const { results } = await db
+      .prepare(
+        `SELECT a.id, a.nome, a.numero_ata, a.data_fim, ai.item_numero, ai.produto, ai.quantidade,
+                COALESCE((SELECT SUM(ei.quantidade) FROM execucao_itens ei WHERE ei.ata_item_id = ai.id), 0) AS empenhado
+           FROM ata_itens ai JOIN atas a ON a.id = ai.ata_id
+          WHERE (a.data_fim IS NULL OR a.data_fim >= ?) AND ai.quantidade > 0`,
+      )
+      .bind(hoje)
+      .all<{ id: number; nome: string | null; numero_ata: string | null; data_fim: string | null; item_numero: string | null; produto: string | null; quantidade: number; empenhado: number }>();
+    for (const i of results) {
+      const usado = i.empenhado / i.quantidade;
+      if (usado < 0.8) continue;
+      const saldo = Math.max(0, i.quantidade - i.empenhado);
+      alertas.push({
+        tipo: "saldo_ata",
+        gravidade: saldo === 0 ? "atencao" : "info",
+        titulo: saldo === 0 ? `Saldo esgotado no item ${i.item_numero ?? ""}` : `Saldo baixo no item ${i.item_numero ?? ""}: restam ${saldo}`,
+        detalhe: [i.produto, i.nome || `Ata ${i.numero_ata ?? ""}`].filter(Boolean).join(" · "),
+        data: i.data_fim ?? hoje,
+        link: "/atas",
+      });
+    }
+  }
+
+  if (pode("documentacao")) {
+    const { results } = await db
+      .prepare("SELECT id, nome, categoria, validade FROM documentos WHERE validade IS NOT NULL AND validade <= ? ORDER BY validade")
+      .bind(hojeBrasilia(config.alerta_documento_dias))
+      .all<{ id: number; nome: string; categoria: string; validade: string }>();
+    for (const d of results) {
+      const dias = diasAte(d.validade, hoje);
+      alertas.push({
+        tipo: "documento",
+        gravidade: dias < 0 ? "urgente" : dias <= 5 ? "urgente" : "atencao",
+        titulo: dias < 0 ? `Documento vencido há ${-dias} dia(s)` : `Documento vence ${quando(dias)}`,
+        detalhe: `${d.nome} · ${d.categoria}`,
+        data: d.validade,
+        link: "/documentacao",
+      });
+    }
+  }
+
   const peso = { urgente: 0, atencao: 1, info: 2 };
   return alertas.sort((a, b) => peso[a.gravidade] - peso[b.gravidade] || a.data.localeCompare(b.data));
 }
@@ -131,6 +175,8 @@ const MODULOS_DO_ALERTA: Record<Alerta["tipo"], Modulo[]> = {
   entrega: ["posganho"],
   entrega_atrasada: ["posganho"],
   ata: ["atas"],
+  saldo_ata: ["atas"],
+  documento: ["documentacao"],
 };
 
 interface UsuarioAtivo {

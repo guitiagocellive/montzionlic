@@ -1,6 +1,7 @@
 import {
   BellRing,
   CalendarDays,
+  ChartColumnIncreasing,
   FileSignature,
   FolderLock,
   Gauge,
@@ -38,6 +39,7 @@ export const AREAS: Area[] = [
       { caminho: "/", rotulo: "Dashboard", icone: LayoutDashboard },
       { caminho: "/calendario", rotulo: "Calendário", icone: CalendarDays },
       { caminho: "/alertas", rotulo: "Alertas", icone: BellRing },
+      { caminho: "/relatorios", rotulo: "Relatórios", icone: ChartColumnIncreasing, modulo: "licitacoes" },
     ],
   },
   {

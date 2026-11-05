@@ -8,6 +8,16 @@ export const CONFIG_PADRAO: Configuracoes = {
   alerta_sessao_dias: 3,
   alerta_entrega_dias: 3,
   alerta_ata_dias: 30,
+  alerta_documento_dias: 15,
+  empresa_endereco: "",
+  empresa_cidade: "",
+  empresa_telefone: "",
+  empresa_email: "",
+  empresa_ie: "",
+  representante_nome: "",
+  representante_cpf: "",
+  representante_cargo: "",
+  validade_proposta_padrao: 60,
 };
 
 /** Lê as configurações da empresa, completando com os valores padrão. */

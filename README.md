@@ -56,6 +56,14 @@ Não existe cadastro público: só um administrador adiciona pessoas.
 - **Fornecedores** por nicho, com WhatsApp, site e catálogo.
 - **Calendário** e **Painel** com números reais.
 
+- **Proposta comercial:** gera a proposta em Word a partir dos **seus modelos** (.docx) — escolha o modelo,
+  o banco para pagamento e a validade; órgão, itens, preços, total por extenso e dados da empresa entram
+  sozinhos. Campos no Word entre chaves, ex.: `{orgao}`; tabela de itens com `{#itens}` … `{/itens}`.
+  Modelo de exemplo em `public/modelos/modelo-proposta.docx`.
+- **Resultado da disputa:** por item (ganho, perdido, cancelado), colocação, nosso lance, vencedor,
+  valor vencedor e motivo da perda.
+- **Comentários e histórico** em cada licitação e empenho, com menção (@) que gera notificação.
+
 **Seção 2 — Pós-ganho**
 - Ao mover uma licitação para **Ganhas**, o card aparece sozinho no quadro de **Empenhos e entregas**,
   já com os itens e o produto mais barato cotado.
@@ -64,6 +72,14 @@ Não existe cadastro público: só um administrador adiciona pessoas.
 - Prazo de entrega calculado em dias corridos ou úteis; itens ganhos com lucro; dados de faturamento;
   arquivos e leitura do empenho pela IA.
 - **Atas vigentes** com vigência, alerta de vencimento, prazo e produtos registrados.
+- **Saldo das atas automático:** no empenho, escolha a ata e o item da ata; o saldo é descontado
+  sozinho e o sistema não deixa empenhar acima do saldo. Alerta quando o saldo passa de 80% do registrado.
+
+**Documentação e relatórios**
+- **Documentos da empresa:** certidões, contrato social, balanço, atestados — com validade, arquivo e
+  alerta antes de vencer (antecedência em Configurações → Alertas).
+- **Relatórios:** taxa de sucesso, resultados por mês, motivos de perda, concorrentes que mais ganham,
+  desempenho por órgão, nicho e modalidade, empenhado e lucro no período; exportação em CSV.
 
 ## Publicar na Cloudflare
 

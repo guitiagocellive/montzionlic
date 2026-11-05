@@ -16,6 +16,8 @@ const LIMITES: Partial<Record<keyof Configuracoes, [number, number]>> = {
   alerta_sessao_dias: [0, 60],
   alerta_entrega_dias: [0, 60],
   alerta_ata_dias: [0, 365],
+  alerta_documento_dias: [0, 180],
+  validade_proposta_padrao: [1, 365],
 };
 
 rotasConfiguracoes.patch("/", exigirAdmin, async (c) => {
@@ -32,7 +34,7 @@ rotasConfiguracoes.patch("/", exigirAdmin, async (c) => {
       if (!Number.isFinite(n) || n < limite[0] || n > limite[1]) {
         return c.json({ erro: `Valor inválido em "${chave}" (entre ${limite[0]} e ${limite[1]}).` }, 400);
       }
-      comandos.push(salvar(c.env.DB, chave, chave.startsWith("alerta") ? Math.round(n) : n));
+      comandos.push(salvar(c.env.DB, chave, chave.startsWith("alerta") || chave === "validade_proposta_padrao" ? Math.round(n) : n));
     } else {
       if (typeof valor !== "string" || valor.length > 200) return c.json({ erro: `Valor inválido em "${chave}".` }, 400);
       comandos.push(salvar(c.env.DB, chave, valor.trim()));

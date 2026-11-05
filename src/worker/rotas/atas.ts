@@ -28,35 +28,59 @@ const ESQUEMA_ITEM: Esquema = {
   valor_unitario: "numero",
 };
 
+/**
+ * Atualiza os itens da ata sem perder a ligação com os empenhos:
+ * itens com id são atualizados, novos são inseridos e os que sumiram são apagados.
+ */
 function comandosItens(
   db: D1Database,
   ataId: number,
   itens: unknown,
 ): D1PreparedStatement[] | { erro: string } {
   if (!Array.isArray(itens)) return [];
-  const comandos = [db.prepare("DELETE FROM ata_itens WHERE ata_id = ?").bind(ataId)];
+  const manter: number[] = [];
+  const comandos: D1PreparedStatement[] = [];
   for (const bruto of itens) {
     if (!bruto || typeof bruto !== "object") return { erro: "Item inválido." };
     const item = lerCampos(bruto as Record<string, unknown>, ESQUEMA_ITEM);
     if (temErro(item)) return item;
-    const cols = ["ata_id", ...item.colunas];
-    comandos.push(
-      db
-        .prepare(`INSERT INTO ata_itens (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`)
-        .bind(ataId, ...item.valores),
-    );
+    const idItem = Number((bruto as { id?: unknown }).id);
+    if (Number.isInteger(idItem) && idItem > 0) {
+      manter.push(idItem);
+      if (item.colunas.length > 0) {
+        comandos.push(
+          db
+            .prepare(`UPDATE ata_itens SET ${item.colunas.map((c) => `${c} = ?`).join(", ")} WHERE id = ? AND ata_id = ?`)
+            .bind(...item.valores, idItem, ataId),
+        );
+      }
+    } else {
+      const cols = ["ata_id", ...item.colunas];
+      comandos.push(
+        db
+          .prepare(`INSERT INTO ata_itens (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`)
+          .bind(ataId, ...item.valores),
+      );
+    }
   }
-  return comandos;
+  const apagar = manter.length
+    ? db.prepare(`DELETE FROM ata_itens WHERE ata_id = ? AND id NOT IN (${manter.map(() => "?").join(", ")})`).bind(ataId, ...manter)
+    : db.prepare("DELETE FROM ata_itens WHERE ata_id = ?").bind(ataId);
+  return [apagar, ...comandos];
 }
 
 rotasAtas.get("/", async (c) => {
   const [atas, itens] = await c.env.DB.batch([
     c.env.DB.prepare(
-      `SELECT a.*, l.numero AS licitacao_numero_vinculada, l.orgao AS licitacao_orgao
+      `SELECT a.*, l.numero AS licitacao_numero_vinculada, l.orgao AS licitacao_orgao,
+              (SELECT COUNT(*) FROM execucoes e WHERE e.ata_id = a.id) AS total_empenhos
          FROM atas a LEFT JOIN licitacoes l ON l.id = a.licitacao_id
         ORDER BY a.data_fim IS NULL, a.data_fim`,
     ),
-    c.env.DB.prepare("SELECT * FROM ata_itens ORDER BY id"),
+    c.env.DB.prepare(
+      `SELECT ai.*, COALESCE((SELECT SUM(ei.quantidade) FROM execucao_itens ei WHERE ei.ata_item_id = ai.id), 0) AS empenhado
+         FROM ata_itens ai ORDER BY ai.id`,
+    ),
   ]);
   const porAta = new Map<number, unknown[]>();
   for (const item of itens.results as { ata_id: number }[]) {

@@ -5,6 +5,7 @@ import type { Usuario } from "../../shared/tipos";
 import { type Ambiente, exigirLogin } from "../auth";
 import { buscar } from "../banco";
 import { analisarDocumento, type TipoAnalise } from "../ia";
+import { registrarEvento } from "../atividades";
 import { idDaRota } from "../validacao";
 
 export const rotasArquivos = new Hono<Ambiente>();
@@ -113,6 +114,12 @@ rotasArquivos.post("/", async (c) => {
       c.get("usuario").id,
     )
     .first();
+  await registrarEvento(
+    c.env.DB,
+    execucaoId ? { execucao_id: execucaoId } : { licitacao_id: licitacaoId! },
+    c.get("usuario").id,
+    `enviou o arquivo "${arquivo.name.slice(0, 120)}" (${categoria})`,
+  );
   return c.json({ arquivo: registro }, 201);
 });
 

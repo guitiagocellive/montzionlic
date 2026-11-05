@@ -1,16 +1,19 @@
-import { ArrowLeft, Calculator, ClipboardList, ExternalLink, FolderOpen, ListChecks, Trash2, Trophy } from "lucide-react";
+import { ArrowLeft, Calculator, ClipboardList, ExternalLink, FileText, FolderOpen, ListChecks, MessageSquare, Trash2, Trophy } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { ETAPAS_LICITACAO, ETAPAS_EXECUCAO, nomeEtapa } from "../../../shared/negocio";
 import { podeEditar, podeVer } from "../../../shared/permissoes";
 import type { Arquivo, Cotacao, ItemLicitacao, Licitacao, Usuario } from "../../../shared/tipos";
 import { api, mensagemDeErro } from "../../api";
 import { AbaArquivos } from "../../components/AbaArquivos";
+import { PainelAtividade } from "../../components/Atividade";
 import { Etapas } from "../../components/Etapas";
 import { avisar, Carregando } from "../../components/Ui";
 import { link, navegar } from "../../rota";
 import { AbaDados } from "./AbaDados";
 import { AbaItens } from "./AbaItens";
 import { AbaOrcamento } from "./AbaOrcamento";
+import { AbaProposta } from "./AbaProposta";
+import { AbaResultado } from "./AbaResultado";
 
 export interface FichaLicitacao {
   licitacao: Licitacao;
@@ -23,7 +26,10 @@ export interface FichaLicitacao {
 export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario }) {
   const [ficha, setFicha] = useState<FichaLicitacao | null>(null);
   const [erro, setErro] = useState("");
-  const [aba, setAba] = useState(() => new URLSearchParams(location.search).get("aba") ?? "dados");
+  const abaInicial = new URLSearchParams(location.search).get("aba") ?? "dados";
+  const [aba, setAba] = useState(abaInicial === "atividade" ? "dados" : abaInicial);
+  const [atividadeAberta, setAtividadeAberta] = useState(abaInicial === "atividade");
+  const [comentarios, setComentarios] = useState(0);
 
   const carregar = useCallback(async () => {
     try {
@@ -105,7 +111,21 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
       icone: Calculator,
       completo: cotacoes.length > 0,
     },
-  ].filter((p) => p.chave !== "orcamento" || podeVer(usuario.permissoes, "orcamento"));
+    {
+      chave: "proposta",
+      titulo: "Proposta",
+      descricao: `${arquivos.filter((a) => a.categoria === "Proposta").length} gerada(s)`,
+      icone: FileText,
+      completo: arquivos.some((a) => a.categoria === "Proposta"),
+    },
+    {
+      chave: "resultado",
+      titulo: "Resultado",
+      descricao: itens.some((i) => i.resultado) ? `${itens.filter((i) => i.resultado === "ganho").length} ganho(s)` : "Disputa",
+      icone: Trophy,
+      completo: itens.filter((i) => i.participar).length > 0 && itens.filter((i) => i.participar).every((i) => i.resultado),
+    },
+  ].filter((p) => !["orcamento", "proposta"].includes(p.chave) || podeVer(usuario.permissoes, "orcamento"));
 
   return (
     <>
@@ -141,6 +161,9 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
               </option>
             ))}
           </select>
+          <button className="botao secundario" onClick={() => setAtividadeAberta(true)}>
+            <MessageSquare /> Atividade{comentarios > 0 && <span className="chip destaque">{comentarios}</span>}
+          </button>
           {l.link && (
             <a className="botao secundario" href={l.link} target="_blank" rel="noreferrer noopener">
               <ExternalLink aria-hidden="true" /> Portal
@@ -191,7 +214,21 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
         {aba === "orcamento" && (
           <AbaOrcamento licitacao={l} itens={itens} cotacoes={cotacoes} aoMudar={carregar} />
         )}
+        {aba === "proposta" && (
+          <AbaProposta licitacao={l} itens={itens} cotacoes={cotacoes} arquivos={arquivos} usuario={usuario} aoMudar={carregar} />
+        )}
+        {aba === "resultado" && (
+          <AbaResultado licitacao={l} itens={itens} podeEditar={podeEditar(usuario.permissoes, "licitacoes")} aoMudar={carregar} />
+        )}
       </div>
+
+      <PainelAtividade
+        alvo={{ licitacao_id: l.id }}
+        usuario={usuario}
+        aberto={atividadeAberta}
+        aoFechar={() => setAtividadeAberta(false)}
+        aoContar={setComentarios}
+      />
     </>
   );
 }
