@@ -125,7 +125,7 @@ rotasPainel.get("/painel/licitacoes", async (c) => {
         WHERE etapa IN ('ganha', 'perdida') ORDER BY COALESCE(data_resultado, atualizado_em) DESC LIMIT 6`,
     ),
     db.prepare(
-      `SELECT u.id, COALESCE(u.nome, 'Sem responsável') AS nome, u.cor, COUNT(*) AS total
+      `SELECT u.id, COALESCE(u.nome, 'Sem responsável') AS nome, u.cor, CASE WHEN u.foto_chave IS NOT NULL THEN '/api/fotos/' || u.id || '?v=' || substr(u.foto_chave, -8) END AS foto, COUNT(*) AS total
          FROM licitacoes l LEFT JOIN usuarios u ON u.id = l.responsavel_id
         WHERE l.etapa IN (${ativas}) GROUP BY u.id ORDER BY total DESC`,
     ),
@@ -248,7 +248,8 @@ rotasPainel.get("/calendario", async (c) => {
 // Lista simples do time (para escolher responsável).
 rotasPainel.get("/equipe", async (c) => {
   const { results } = await c.env.DB.prepare(
-    "SELECT id, nome FROM usuarios WHERE ativo = 1 ORDER BY nome COLLATE NOCASE",
+    `SELECT u.id, u.nome, u.cor, CASE WHEN u.foto_chave IS NOT NULL THEN '/api/fotos/' || u.id || '?v=' || substr(u.foto_chave, -8) END AS foto
+       FROM usuarios u WHERE u.ativo = 1 ORDER BY u.nome COLLATE NOCASE`,
   ).all();
   return c.json({ equipe: results });
 });

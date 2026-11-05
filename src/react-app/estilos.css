@@ -4876,6 +4876,99 @@ a.kpi:hover {
   }
 }
 
+/* ---------- Seções que abrem e fecham (aba Proposta) ---------- */
+
+.secao-recolhivel {
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+
+.secao-topo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.secao-alternar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.secao-alternar h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.secao-seta {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--texto-fraco);
+  transition: transform 0.2s;
+}
+
+.secao-recolhivel.aberta .secao-seta {
+  transform: rotate(90deg);
+}
+
+.secao-resumo {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.82rem;
+  color: var(--texto-fraco);
+}
+
+.secao-extra {
+  flex-shrink: 0;
+}
+
+.secao-corpo {
+  margin-top: 14px;
+}
+
+.responsavel-resumo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-rodape-dir {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .secao-topo {
+    flex-wrap: wrap;
+  }
+
+  .secao-alternar {
+    flex-wrap: wrap;
+  }
+
+  .secao-resumo {
+    flex-basis: 100%;
+    padding-left: 28px;
+    white-space: normal;
+  }
+}
+
 @media (max-width: 1180px) {
   .kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));

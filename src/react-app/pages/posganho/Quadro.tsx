@@ -4,6 +4,7 @@ import { diasAte, ETAPAS_ANTES_DA_ENTREGA, ETAPAS_EXECUCAO, MODALIDADES } from "
 import { podeEditar } from "../../../shared/permissoes";
 import type { ExecucaoResumo, LicitacaoResumo, Usuario } from "../../../shared/tipos";
 import { api, mensagemDeErro } from "../../api";
+import { Avatar } from "../../components/Avatar";
 import { Alerta, Campo } from "../../components/Formulario";
 import { Kanban } from "../../components/Kanban";
 import { avisar, CampoSelect, Carregando, Interruptor, Modal } from "../../components/Ui";
@@ -124,7 +125,14 @@ export function QuadroExecucao({ usuario }: { usuario: Usuario }) {
                         <Package aria-hidden="true" /> {e.total_itens}
                       </span>
                     </div>
-                    {e.valor_total > 0 && <strong className="card-valor">{formatarMoeda(e.valor_total)}</strong>}
+                    <span className="card-rodape-dir">
+                      {e.valor_total > 0 && <strong className="card-valor">{formatarMoeda(e.valor_total)}</strong>}
+                      {e.responsavel_nome && (
+                        <span title={`Responsável: ${e.responsavel_nome}`}>
+                          <Avatar nome={e.responsavel_nome} cor={e.responsavel_cor} foto={e.responsavel_foto} pequeno />
+                        </span>
+                      )}
+                    </span>
                   </div>
                 </>
               );

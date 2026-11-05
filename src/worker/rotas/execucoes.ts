@@ -64,9 +64,11 @@ rotasExecucoes.get("/", async (c) => {
     `SELECT e.id, e.etapa, e.posicao, e.numero_empenho, e.data_empenho, e.data_limite,
             e.prazo_dias, e.prazo_tipo, e.registro_preco, e.licitacao_id,
             l.numero AS licitacao_numero, l.orgao, l.uasg, l.modalidade, l.nicho,
+            u.nome AS responsavel_nome, u.cor AS responsavel_cor, CASE WHEN u.foto_chave IS NOT NULL THEN '/api/fotos/' || u.id || '?v=' || substr(u.foto_chave, -8) END AS responsavel_foto,
             (SELECT COUNT(*) FROM execucao_itens i WHERE i.execucao_id = e.id) AS total_itens,
             (SELECT COALESCE(SUM(i.quantidade * i.valor_unitario), 0) FROM execucao_itens i WHERE i.execucao_id = e.id) AS valor_total
        FROM execucoes e JOIN licitacoes l ON l.id = e.licitacao_id
+       LEFT JOIN usuarios u ON u.id = l.responsavel_id
       ORDER BY e.posicao`,
   ).all();
   return c.json({ execucoes: results });

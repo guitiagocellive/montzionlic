@@ -5,6 +5,7 @@ import { podeEditar, podeVer } from "../../../shared/permissoes";
 import type { Arquivo, Cotacao, ItemLicitacao, Licitacao, Usuario } from "../../../shared/tipos";
 import { api, mensagemDeErro } from "../../api";
 import { AbaArquivos } from "../../components/AbaArquivos";
+import { Avatar } from "../../components/Avatar";
 import { PainelAtividade } from "../../components/Atividade";
 import { avisar, Carregando, Modal } from "../../components/Ui";
 import { diasAte } from "../../../shared/negocio";
@@ -35,10 +36,10 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
   const [editando, setEditando] = useState(abaInicial === "dados");
   const [ganhando, setGanhando] = useState(new URLSearchParams(location.search).get("ganhar") === "1");
   const [comentarios, setComentarios] = useState(0);
-  const [equipe, setEquipe] = useState<{ id: number; nome: string }[]>([]);
+  const [equipe, setEquipe] = useState<{ id: number; nome: string; cor: string | null; foto: string | null }[]>([]);
 
   useEffect(() => {
-    api<{ equipe: { id: number; nome: string }[] }>("/equipe").then((r) => setEquipe(r.equipe), () => {});
+    api<{ equipe: { id: number; nome: string; cor: string | null; foto: string | null }[] }>("/equipe").then((r) => setEquipe(r.equipe), () => {});
   }, []);
 
   const carregar = useCallback(async () => {
@@ -123,7 +124,7 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
   const dataSessao = reaberta ? l.data_reabertura : l.data_sessao;
   const horaSessao = reaberta ? l.hora_reabertura : l.horario;
   const dias = dataSessao ? diasAte(dataSessao, hoje) : null;
-  const responsavel = equipe.find((p) => p.id === l.responsavel_id)?.nome;
+  const responsavel = equipe.find((p) => p.id === l.responsavel_id);
   const editar = podeEditar(usuario.permissoes, "licitacoes");
 
   return (
@@ -242,7 +243,16 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
                   <dt>
                     <UserRound /> Responsável
                   </dt>
-                  <dd>{responsavel ?? "Ninguém"}</dd>
+                  <dd>
+                    {responsavel ? (
+                      <span className="responsavel-resumo">
+                        <Avatar nome={responsavel.nome} cor={responsavel.cor} foto={responsavel.foto} pequeno />
+                        {responsavel.nome.split(" ")[0]}
+                      </span>
+                    ) : (
+                      "Ninguém"
+                    )}
+                  </dd>
                 </div>
               </div>
               <div>

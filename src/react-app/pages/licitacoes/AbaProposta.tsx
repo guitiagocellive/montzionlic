@@ -1,4 +1,4 @@
-import { Building2, Check, Download, Eye, FileCheck2, FileText, FileType, Pencil, PenLine, Plus, Settings, ShieldCheck, Trash2, Upload } from "lucide-react";
+import { Building2, ListChecks, CalendarDays, Check, ChevronRight, Download, Eye, FileCheck2, FileText, FileType, Pencil, PenLine, Plus, Settings, ShieldCheck, Trash2, Upload } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { calcularPreco } from "../../../shared/negocio";
 import { podeEditar } from "../../../shared/permissoes";
@@ -27,6 +27,57 @@ const ModalAssinar = lazy(() => import("../../assinatura/ModalAssinar").then((m)
 
 type Assinatura = { titulo: string; nome: string; carregar: () => Promise<Uint8Array> };
 type Linha = RascunhoProposta["itens"][string];
+
+/** Seção da proposta que abre e fecha. Lembra o que ficou aberto neste navegador. */
+function Secao({
+  id,
+  titulo,
+  icone,
+  resumo,
+  extra,
+  children,
+}: {
+  id: string;
+  titulo: string;
+  icone?: React.ReactNode;
+  resumo?: React.ReactNode;
+  extra?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const chave = `montzion:proposta:${id}`;
+  const [aberta, setAberta] = useState(() => {
+    try {
+      return localStorage.getItem(chave) === "1";
+    } catch {
+      return false;
+    }
+  });
+  function alternar() {
+    setAberta((a) => {
+      try {
+        localStorage.setItem(chave, a ? "0" : "1");
+      } catch {
+        /* sem armazenamento: só não lembra */
+      }
+      return !a;
+    });
+  }
+  return (
+    <section className={`cartao secao-recolhivel ${aberta ? "aberta" : ""}`}>
+      <div className="secao-topo">
+        <button type="button" className="secao-alternar" onClick={alternar} aria-expanded={aberta}>
+          <ChevronRight className="secao-seta" aria-hidden="true" />
+          <h2>
+            {icone} {titulo}
+          </h2>
+          {!aberta && resumo && <span className="secao-resumo">{resumo}</span>}
+        </button>
+        {extra && <div className="secao-extra">{extra}</div>}
+      </div>
+      {aberta && <div className="secao-corpo">{children}</div>}
+    </section>
+  );
+}
 
 const hojeIso = () => {
   const d = new Date(Date.now() - 3 * 3600_000);
@@ -277,17 +328,19 @@ export function AbaProposta({
   return (
     <>
       {/* 0. Dados da licitação que entram na proposta */}
-      <section className="cartao">
-        <div className="cartao-titulo">
-          <h2>
-            <FileText size={17} /> Dados da licitação na proposta
-          </h2>
-          {aoEditarDados && (
+      <Secao
+        id="licitacao"
+        titulo="Dados da licitação na proposta"
+        icone={<FileText size={17} />}
+        resumo={faltando > 0 ? <span className="texto-amarelo">{faltando} dado(s) sem preencher</span> : [licitacao.orgao, licitacao.numero && `Nº ${licitacao.numero}`].filter(Boolean).join(" · ")}
+        extra={
+          aoEditarDados && (
             <button className="botao secundario pequeno" onClick={aoEditarDados}>
               <Pencil /> Editar dados
             </button>
-          )}
-        </div>
+          )
+        }
+      >
         <div className="dados-proposta">
           {dadosLicitacao.map(([rotulo, valor]) => (
             <div key={rotulo}>
@@ -305,14 +358,19 @@ export function AbaProposta({
             {faltando} dado(s) sem preencher: ficam em branco na proposta.
           </p>
         )}
-      </section>
+      </Secao>
 
       {/* 1. Empresa e pagamento */}
-      <section className="cartao">
-        <div className="cartao-titulo">
-          <h2>
-            <Building2 size={17} /> Empresa e pagamento
-          </h2>
+      <Secao
+        id="empresa"
+        titulo="Empresa e pagamento"
+        icone={<Building2 size={17} />}
+        resumo={
+          empresaAtual
+            ? [empresaAtual.nome, contas.find((c) => c.id === r.conta_id)?.banco].filter(Boolean).join(" · ")
+            : <span className="texto-amarelo">Escolha a empresa</span>
+        }
+        extra={
           <span className={`salvo-rascunho ${salvo}`}>
             {salvo === "salvando" ? "Salvando…" : salvo === "salvo" ? (
               <>
@@ -320,7 +378,8 @@ export function AbaProposta({
               </>
             ) : null}
           </span>
-        </div>
+        }
+      >
         {empresas.length === 0 ? (
           <Vazio icone={<Building2 />} titulo="Nenhuma empresa cadastrada">
             {admin ? (
@@ -364,11 +423,15 @@ export function AbaProposta({
             <Settings size={14} /> Empresas, bancos e declarações
           </a>
         )}
-      </section>
+      </Secao>
 
       {/* 2. Dados da proposta */}
-      <section className="cartao">
-        <h2>Dados da proposta</h2>
+      <Secao
+        id="dados"
+        titulo="Dados da proposta"
+        icone={<CalendarDays size={17} />}
+        resumo={[r.numero && `Nº ${r.numero}`, r.validade_dias && `validade ${r.validade_dias} dias`, r.prazo_entrega && `entrega ${r.prazo_entrega}`].filter(Boolean).join(" · ")}
+      >
         <div className="grade-3">
           <Campo rotulo="Nº da contratação" name="contratacao" value={r.contratacao} onChange={(e) => mudar({ contratacao: e.target.value })} />
           <Campo rotulo="Nº da proposta" name="numero" value={r.numero} onChange={(e) => mudar({ numero: e.target.value })} placeholder="Ex.: 065/2026" />
@@ -382,14 +445,26 @@ export function AbaProposta({
         <div style={{ marginTop: 14 }}>
           <CampoArea rotulo="Observações" rows={2} value={r.observacoes} onChange={(e) => mudar({ observacoes: e.target.value })} />
         </div>
-      </section>
+      </Secao>
 
       {/* 3. Itens */}
-      <section className="cartao">
-        <div className="cartao-titulo">
-          <h2>Itens da proposta</h2>
-          <span className="texto-fraco pequeno">Preço sugerido = preço de venda da cotação mais barata</span>
-        </div>
+      <Secao
+        id="itens"
+        titulo="Itens da proposta"
+        icone={<ListChecks size={17} />}
+        resumo={
+          semPreco.length > 0 ? (
+            <span className="texto-amarelo">
+              {escolhidos.length} item(ns) · falta valor em {semPreco.length}
+            </span>
+          ) : (
+            `${escolhidos.length} item(ns) · ${formatarMoeda(total)}`
+          )
+        }
+      >
+        <p className="texto-fraco pequeno" style={{ margin: "0 0 10px" }}>
+          Preço sugerido = preço de venda da cotação mais barata.
+        </p>
         {participando.length === 0 ? (
           <Vazio icone={<FileText />} titulo="Nenhum item para participar" />
         ) : (
@@ -436,18 +511,15 @@ export function AbaProposta({
             Falta o valor de {semPreco.length} item(ns): {semPreco.map((i) => i.numero).join(", ")}.
           </p>
         )}
-      </section>
+      </Secao>
 
       {/* 4. Declarações */}
-      <section className="cartao">
-        <div className="cartao-titulo">
-          <h2>
-            <FileCheck2 size={17} /> Declarações e condições
-          </h2>
-          <span className="texto-fraco pequeno">
-            {r.declaracoes.filter((id) => declaracoes.some((d) => d.id === id)).length + r.extras.length} na proposta
-          </span>
-        </div>
+      <Secao
+        id="declaracoes"
+        titulo="Declarações e condições"
+        icone={<FileCheck2 size={17} />}
+        resumo={`${r.declaracoes.filter((id) => declaracoes.some((d) => d.id === id)).length + r.extras.length} na proposta${r.extras.length ? ` (${r.extras.length} só desta licitação)` : ""}`}
+      >
         {[
           { titulo: "Condições", itens: condicoes },
           { titulo: "Declarações", itens: declaracoesLista },
@@ -504,7 +576,7 @@ export function AbaProposta({
             <Plus /> Declaração só desta licitação
           </button>
         </div>
-      </section>
+      </Secao>
 
       {/* 5. Gerar */}
       <section className="cartao">
@@ -587,8 +659,7 @@ export function AbaProposta({
       )}
 
       {anteriores.length > 0 && (
-        <section className="cartao">
-          <h2>Propostas geradas</h2>
+        <Secao id="geradas" titulo="Propostas geradas" icone={<Download size={17} />} resumo={`${anteriores.length} arquivo(s)${anteriores.some((a) => a.assinado_em) ? ` · ${anteriores.filter((a) => a.assinado_em).length} assinada(s)` : ""}`}>
           <div className="lista-arquivos">
             {anteriores.map((a) => (
               <div key={a.id} className="linha-arquivo">
@@ -612,7 +683,7 @@ export function AbaProposta({
               </div>
             ))}
           </div>
-        </section>
+        </Secao>
       )}
     </>
   );

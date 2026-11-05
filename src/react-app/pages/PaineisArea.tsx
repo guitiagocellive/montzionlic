@@ -2,6 +2,7 @@ import { ArrowUpRight, CalendarClock, ChartColumnBig, Eye, EyeOff, PackageMinus,
 import { useEffect, useState } from "react";
 import { diasAte, ETAPAS_EXECUCAO, ETAPAS_LICITACAO } from "../../shared/negocio";
 import { api, mensagemDeErro } from "../api";
+import { Avatar } from "../components/Avatar";
 import { taxa } from "../components/Periodo";
 import { avisar, Carregando } from "../components/Ui";
 import { diaMes, formatarData, formatarMoeda, textoPrazo } from "../formato";
@@ -16,7 +17,7 @@ interface DadosLicitacoes {
   semOrcamento: { id: number; numero: string | null; orgao: string | null; data_sessao: string }[];
   resultadoAno: { ganhas: number | null; perdidas: number | null };
   recentes: { id: number; numero: string | null; orgao: string | null; etapa: string; data_resultado: string | null; motivo_perda: string | null }[];
-  porResponsavel: { id: number | null; nome: string; cor: string | null; total: number }[];
+  porResponsavel: { id: number | null; nome: string; cor: string | null; foto: string | null; total: number }[];
   boaColocacao: { id: number; numero: string | null; orgao: string | null; colocacao: number | null; situacao_disputa: string | null; data_reabertura: string | null; hora_reabertura: string | null; acompanhar: number }[];
 }
 
@@ -215,7 +216,10 @@ export function PainelLicitacoes() {
           ) : (
             d.porResponsavel.map((r) => (
               <div key={r.id ?? 0} className="linha-motivo">
-                <span>{r.nome}</span>
+                <span className="responsavel-resumo">
+                  {r.id ? <Avatar nome={r.nome} cor={r.cor} foto={r.foto} pequeno /> : null}
+                  {r.nome}
+                </span>
                 <div className="barra-progresso">
                   <span style={{ width: `${(r.total / maxResp) * 100}%`, background: r.cor ?? "var(--acento)" }} />
                 </div>

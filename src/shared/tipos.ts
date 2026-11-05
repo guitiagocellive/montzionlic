@@ -351,6 +351,9 @@ export interface ExecucaoResumo {
   uasg: string | null;
   modalidade: string | null;
   nicho: string | null;
+  responsavel_nome: string | null;
+  responsavel_cor: string | null;
+  responsavel_foto: string | null;
   total_itens: number;
   valor_total: number;
 }
