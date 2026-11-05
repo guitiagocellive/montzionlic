@@ -96,6 +96,7 @@ export interface CertificadoInfo {
 
 export interface Documento {
   id: number;
+  empresa_id: number | null;
   nome: string;
   categoria: string;
   emissao: string | null;

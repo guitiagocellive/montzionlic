@@ -189,21 +189,53 @@ export function diasAte(iso: string, hojeIso: string): number {
 // Documentação, resultado da disputa
 // ---------------------------------------------------------
 
-export const CATEGORIAS_DOCUMENTO = [
-  "CND Federal (Receita/PGFN)",
-  "CRF – FGTS",
-  "CNDT – Trabalhista",
-  "Certidão Estadual",
-  "Certidão Municipal",
-  "Certidão de Falência",
-  "SICAF",
-  "Contrato social",
-  "Balanço patrimonial",
-  "Atestado de capacidade técnica",
-  "Alvará / Licença",
-  "Procuração",
-  "Outro",
-];
+// Documentos de habilitação, agrupados como na Lei 14.133/2021 (art. 62 a 69).
+export const HABILITACOES = [
+  {
+    chave: "juridica",
+    nome: "Habilitação jurídica",
+    lei: "art. 66",
+    categorias: ["Contrato social", "Documentos dos sócios", "Requerimento de empresário / CCMEI", "Procuração"],
+  },
+  {
+    chave: "fiscal",
+    nome: "Habilitação fiscal, social e trabalhista",
+    lei: "art. 68",
+    categorias: [
+      "Cartão CNPJ",
+      "Inscrição estadual / municipal",
+      "CND Federal (Receita/PGFN)",
+      "Certidão Estadual",
+      "Certidão Municipal",
+      "CRF – FGTS",
+      "CNDT – Trabalhista",
+    ],
+  },
+  {
+    chave: "economica",
+    nome: "Habilitação econômico-financeira",
+    lei: "art. 69",
+    categorias: ["Balanço patrimonial", "Demonstrações contábeis (DRE)", "Certidão de Falência"],
+  },
+  {
+    chave: "tecnica",
+    nome: "Qualificação técnica",
+    lei: "art. 67",
+    categorias: ["Atestado de capacidade técnica", "Registro em conselho profissional", "Alvará / Licença"],
+  },
+  {
+    chave: "outros",
+    nome: "Cadastros, declarações e outros",
+    lei: "",
+    categorias: ["SICAF", "Declarações", "Outro"],
+  },
+] as const;
+
+export const CATEGORIAS_DOCUMENTO: string[] = HABILITACOES.flatMap((h) => [...h.categorias]);
+
+export function habilitacaoDaCategoria(categoria: string) {
+  return HABILITACOES.find((h) => (h.categorias as readonly string[]).includes(categoria)) ?? HABILITACOES[HABILITACOES.length - 1];
+}
 
 export const RESULTADOS_ITEM = [
   { chave: "ganho", nome: "Ganhamos" },

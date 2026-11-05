@@ -4167,6 +4167,60 @@ a.kpi:hover {
   }
 }
 
+/* ---------- Documentação por habilitação ---------- */
+
+.secoes-habilitacao {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 6px;
+}
+
+.secao-habilitacao {
+  padding: 16px;
+  border-radius: var(--raio, 18px);
+  border: 1px solid var(--borda);
+  background: color-mix(in srgb, var(--superficie) 70%, transparent);
+}
+
+.secao-habilitacao-topo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.secao-habilitacao-topo > div:nth-child(2) {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.secao-habilitacao-topo h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.numero-habilitacao {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: var(--acento-suave);
+  color: var(--acento-texto);
+  font-weight: 700;
+  font-size: 0.86rem;
+}
+
+.secao-vazia {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px dashed var(--borda);
+}
+
 @media (max-width: 1180px) {
   .kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));

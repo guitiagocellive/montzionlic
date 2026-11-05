@@ -21,7 +21,7 @@ interface LinhaDocumento {
 
 rotasDocumentos.get("/", async (c) => {
   const { results } = await c.env.DB.prepare(
-    `SELECT d.id, d.nome, d.categoria, d.emissao, d.validade, d.observacoes, d.arquivo_nome, d.arquivo_tipo,
+    `SELECT d.id, d.empresa_id, d.nome, d.categoria, d.emissao, d.validade, d.observacoes, d.arquivo_nome, d.arquivo_tipo,
             d.arquivo_tamanho, d.atualizado_em, u.nome AS atualizado_por_nome
        FROM documentos d LEFT JOIN usuarios u ON u.id = d.atualizado_por
       ORDER BY d.validade IS NULL, d.validade, d.nome COLLATE NOCASE`,
@@ -36,11 +36,14 @@ function lerFormulario(form: FormData) {
   const emissao = String(form.get("emissao") ?? "");
   const validade = String(form.get("validade") ?? "");
   const observacoes = texto(form.get("observacoes")).slice(0, 2000) || null;
+  const empresaBruta = String(form.get("empresa_id") ?? "");
+  const empresaId = empresaBruta ? Number(empresaBruta) : null;
+  if (empresaId !== null && (!Number.isInteger(empresaId) || empresaId <= 0)) return { erro: "Empresa inválida." };
   if (!nome) return { erro: "Informe o nome do documento." };
   if (!CATEGORIAS_DOCUMENTO.includes(categoria)) return { erro: "Categoria inválida." };
   if (emissao && !DATA.test(emissao)) return { erro: "Data de emissão inválida." };
   if (validade && !DATA.test(validade)) return { erro: "Data de validade inválida." };
-  return { nome: nome.slice(0, 200), categoria, emissao: emissao || null, validade: validade || null, observacoes };
+  return { nome: nome.slice(0, 200), categoria, emissao: emissao || null, validade: validade || null, observacoes, empresaId };
 }
 
 async function guardarArquivo(env: Env, form: FormData) {
@@ -65,10 +68,10 @@ rotasDocumentos.post("/", async (c) => {
     return c.json({ erro: (err as Error).message }, 400);
   }
   const documento = await c.env.DB.prepare(
-    `INSERT INTO documentos (nome, categoria, emissao, validade, observacoes, arquivo_chave, arquivo_nome, arquivo_tipo, arquivo_tamanho, atualizado_por)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+    `INSERT INTO documentos (empresa_id, nome, categoria, emissao, validade, observacoes, arquivo_chave, arquivo_nome, arquivo_tipo, arquivo_tamanho, atualizado_por)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
   )
-    .bind(dados.nome, dados.categoria, dados.emissao, dados.validade, dados.observacoes, arquivo?.chave ?? null, arquivo?.nome ?? null, arquivo?.tipo ?? null, arquivo?.tamanho ?? null, c.get("usuario").id)
+    .bind(dados.empresaId, dados.nome, dados.categoria, dados.emissao, dados.validade, dados.observacoes, arquivo?.chave ?? null, arquivo?.nome ?? null, arquivo?.tipo ?? null, arquivo?.tamanho ?? null, c.get("usuario").id)
     .first();
   return c.json({ documento }, 201);
 });
@@ -90,13 +93,13 @@ rotasDocumentos.post("/:id", async (c) => {
     return c.json({ erro: (err as Error).message }, 400);
   }
   await c.env.DB.prepare(
-    `UPDATE documentos SET nome = ?, categoria = ?, emissao = ?, validade = ?, observacoes = ?,
+    `UPDATE documentos SET empresa_id = ?, nome = ?, categoria = ?, emissao = ?, validade = ?, observacoes = ?,
             arquivo_chave = COALESCE(?, arquivo_chave), arquivo_nome = COALESCE(?, arquivo_nome),
             arquivo_tipo = COALESCE(?, arquivo_tipo), arquivo_tamanho = COALESCE(?, arquivo_tamanho),
             atualizado_por = ?, atualizado_em = datetime('now')
       WHERE id = ?`,
   )
-    .bind(dados.nome, dados.categoria, dados.emissao, dados.validade, dados.observacoes, arquivo?.chave ?? null, arquivo?.nome ?? null, arquivo?.tipo ?? null, arquivo?.tamanho ?? null, c.get("usuario").id, id)
+    .bind(dados.empresaId, dados.nome, dados.categoria, dados.emissao, dados.validade, dados.observacoes, arquivo?.chave ?? null, arquivo?.nome ?? null, arquivo?.tipo ?? null, arquivo?.tamanho ?? null, c.get("usuario").id, id)
     .run();
   if (arquivo && atual.arquivo_chave) await c.env.ARQUIVOS.delete(atual.arquivo_chave);
   return c.json({ ok: true });
