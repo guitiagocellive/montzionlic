@@ -89,6 +89,11 @@ Não existe cadastro público: só um administrador adiciona pessoas.
 **Seção 2 — Pós-ganho**
 - Ao mover uma licitação para **Ganhas**, o card aparece sozinho no quadro de **Empenhos e entregas**,
   já com os itens e o produto mais barato cotado.
+- **Itens do empenho:** "Adicionar itens ganhos" lista só os itens ganhos da licitação e mostra o que já foi
+  empenhado em outros empenhos (vários empenhos por licitação, comum em registro de preço).
+- **Empenho de licitação de antes da plataforma:** em "Novo empenho", escolha "Licitação de antes da plataforma",
+  preencha órgão, número, UASG, objeto e o empenho; a licitação é criada já como Ganha e os itens são preenchidos
+  à mão.
 - Etapas: Aguardando empenho → Empenho recebido → Material comprado → Aguardando entrega →
   Entrega realizada → Solicitar atestado → Concluído.
 - Prazo de entrega calculado em dias corridos ou úteis; itens ganhos com lucro; dados de faturamento;
@@ -98,12 +103,15 @@ Não existe cadastro público: só um administrador adiciona pessoas.
   sozinho e o sistema não deixa empenhar acima do saldo. Alerta quando o saldo passa de 80% do registrado.
 
 **Ficha da licitação**
-- No topo, um **resumo** (sessão ou reabertura com contagem, portal, valor estimado, itens) e o **próximo passo**
-  da etapa com botões: "Vamos participar" / "Não vamos participar", "Ir para Orçamento", "Ficamos bem colocados",
-  "Ganhamos" / "Perdemos" (pede o motivo).
+- Duas colunas: à esquerda os **dados principais** (sessão ou reabertura, órgão, UASG, registro de preço,
+  modalidade, portal, valor, responsável, objeto — editar abre numa janela) e a contagem dos itens; à direita o
+  próximo passo e as abas Itens, Resultado, Orçamento, Proposta, Arquivos e IA.
+- **Resultado por item:** ganho, acompanhando, perdido ou cancelado. Em "Ganhamos" (ou ao arrastar para Ganhas)
+  abre "Quais itens ganhamos?": só os itens ganhos vão para o empenho, já com o valor final.
+- **Próximo passo** da etapa com botões: "Vamos participar" / "Não vamos participar", "Ir para Orçamento",
+  "Ficamos bem colocados", "Ganhamos" / "Perdemos" (pede o motivo).
 - Em **Boa colocação**: acompanhar ou não, colocação, situação da disputa e **reabertura da sessão** (data e
   hora) — a reabertura entra no calendário e gera alerta.
-- Aba Dados enxuta: o essencial na frente e o resto em "Mais detalhes".
 
 **Financeiro** (permissão própria: Equipe e acessos → Financeiro)
 - Vendido (empenhado), impostos, custo dos produtos, frete e despesas, **lucro líquido** e margem no período.

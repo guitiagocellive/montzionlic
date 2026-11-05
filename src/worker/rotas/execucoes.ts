@@ -2,9 +2,10 @@ import { Hono } from "hono";
 import { ETAPAS_EXECUCAO, nomeEtapa, somarPrazo, type TipoPrazo } from "../../shared/negocio";
 import { comandoEvento } from "../atividades";
 import { hojeBrasilia } from "../configuracoes";
+import { lerConfiguracoes } from "../configuracoes";
 import { type Ambiente, exigirAdmin, exigirLogin, exigirModulo } from "../auth";
 import { buscar, comandoAtualizar, comExtras, inserir } from "../banco";
-import { type Esquema, idDaRota, lerCampos, lerJson, temErro } from "../validacao";
+import { type Esquema, idDaRota, lerCampos, lerJson, temErro, texto } from "../validacao";
 
 // Seção 2: pós-ganho. Cada card é um empenho de uma licitação ganha.
 export const rotasExecucoes = new Hono<Ambiente>();
@@ -75,7 +76,33 @@ rotasExecucoes.get("/", async (c) => {
 rotasExecucoes.post("/", async (c) => {
   const corpo = await lerJson(c);
   if (!corpo) return c.json({ erro: "Requisição inválida." }, 400);
-  const licitacaoId = idDaRota(String(corpo.licitacao_id ?? ""));
+  let licitacaoId = idDaRota(String(corpo.licitacao_id ?? ""));
+  // Empenho de uma licitação ganha antes da plataforma: cria a licitação já como "Ganha".
+  const nova = corpo.nova_licitacao as Record<string, unknown> | undefined;
+  if (!licitacaoId && nova && typeof nova === "object") {
+    const orgao = texto(nova.orgao).slice(0, 300);
+    if (!orgao) return c.json({ erro: "Informe o órgão da licitação." }, 400);
+    const pos = await c.env.DB.prepare("SELECT COALESCE(MAX(posicao), 0) + 1 AS p FROM licitacoes WHERE etapa = 'ganha'").first<{ p: number }>();
+    const config = await lerConfiguracoes(c.env.DB);
+    const criada = await c.env.DB.prepare(
+      `INSERT INTO licitacoes (etapa, posicao, numero, uasg, orgao, modalidade, objeto, registro_preco, lucro_percentual, imposto_percentual, criado_por, observacoes)
+       VALUES ('ganha', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Cadastrada pelo Pós-ganho (licitação de antes da plataforma).') RETURNING id`,
+    )
+      .bind(
+        pos?.p ?? 1,
+        texto(nova.numero).slice(0, 100) || null,
+        texto(nova.uasg).slice(0, 50) || null,
+        orgao,
+        texto(nova.modalidade).slice(0, 100) || null,
+        (typeof nova.objeto === "string" ? nova.objeto.trim() : "").slice(0, 4000) || null,
+        nova.registro_preco === true ? 1 : 0,
+        config.margem_padrao,
+        config.imposto_padrao,
+        c.get("usuario").id,
+      )
+      .first<{ id: number }>();
+    licitacaoId = criada?.id ?? null;
+  }
   if (!licitacaoId) return c.json({ erro: "Escolha a licitação." }, 400);
   const lic = await buscar<{ registro_preco: number }>(c.env.DB, "licitacoes", licitacaoId);
   if (!lic) return c.json({ erro: "Licitação não encontrada." }, 404);
@@ -100,7 +127,9 @@ rotasExecucoes.post("/", async (c) => {
       posicao: (max?.p ?? 0) + 1,
     }),
   );
-  return c.json({ execucao }, 201);
+  const limite = calcularLimite(execucao);
+  if (limite) await c.env.DB.prepare("UPDATE execucoes SET data_limite = ? WHERE id = ?").bind(limite, execucao.id).run();
+  return c.json({ execucao: { ...execucao, data_limite: limite ?? null } }, 201);
 });
 
 rotasExecucoes.get("/:id", async (c) => {
