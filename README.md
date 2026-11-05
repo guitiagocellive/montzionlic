@@ -22,8 +22,10 @@ Não existe cadastro público: só um administrador adiciona pessoas.
 
 ## Layout
 
-- **Menu horizontal (balão no topo):** escolhe a área — Visão geral, Licitações, Pós-ganho, Documentação.
-- **Menu lateral (cápsula):** as funções da área escolhida. No celular, vira uma cápsula fixa embaixo.
+- **Menu horizontal (balão no topo):** escolhe a área — Visão geral, Licitações, Pós-ganho, Financeiro,
+  Documentação. No celular, a barra rola de lado.
+- **Menu lateral (cápsula):** as funções da área escolhida, incluindo o **painel daquela área** (Licitações e
+  Pós-ganho). No celular, vira uma cápsula fixa embaixo.
 - **Topo:** tema claro/escuro, sino de notificações, configurações (engrenagem) e menu da conta.
 
 ## Configurações (engrenagem)
@@ -95,9 +97,24 @@ Não existe cadastro público: só um administrador adiciona pessoas.
 - **Saldo das atas automático:** no empenho, escolha a ata e o item da ata; o saldo é descontado
   sozinho e o sistema não deixa empenhar acima do saldo. Alerta quando o saldo passa de 80% do registrado.
 
+**Ficha da licitação**
+- No topo, um **resumo** (sessão ou reabertura com contagem, portal, valor estimado, itens) e o **próximo passo**
+  da etapa com botões: "Vamos participar" / "Não vamos participar", "Ir para Orçamento", "Ficamos bem colocados",
+  "Ganhamos" / "Perdemos" (pede o motivo).
+- Em **Boa colocação**: acompanhar ou não, colocação, situação da disputa e **reabertura da sessão** (data e
+  hora) — a reabertura entra no calendário e gera alerta.
+- Aba Dados enxuta: o essencial na frente e o resto em "Mais detalhes".
+
+**Financeiro** (permissão própria: Equipe e acessos → Financeiro)
+- Vendido (empenhado), impostos, custo dos produtos, frete e despesas, **lucro líquido** e margem no período.
+- Situação dos recebimentos: ganho aguardando empenho, **a faturar**, **a receber** e recebido no período.
+- Por mês, por órgão e tabela de empenhos com lucro de cada um; exportação em CSV.
+- No empenho (aba Faturamento): nota fiscal, data da nota, data do pagamento, valor recebido, frete e despesas.
+
 **Documentação e relatórios**
-- **Documentos da empresa:** certidões, contrato social, balanço, atestados — com validade, arquivo e
-  alerta antes de vencer (antecedência em Configurações → Alertas).
+- **Documentos de habilitação:** separados como na Lei 14.133/2021 (jurídica, fiscal/social/trabalhista,
+  econômico-financeira, técnica e outros), por empresa, com validade, arquivo e alerta antes de vencer.
+  **Baixar tudo (zip)** ou por seção, com uma pasta por habilitação e os vencidos marcados no nome.
 - **Relatórios:** taxa de sucesso, resultados por mês, motivos de perda, concorrentes que mais ganham,
   desempenho por órgão, nicho e modalidade, empenhado e lucro no período; exportação em CSV.
 

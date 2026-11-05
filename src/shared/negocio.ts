@@ -36,6 +36,20 @@ export const ETAPAS_ANTES_DA_ENTREGA = [
   "aguardando_entrega",
 ];
 
+/** Situação da disputa depois da sessão (etapa "Boa colocação"). */
+export const SITUACOES_DISPUTA = [
+  "Aguardando convocação",
+  "Proposta e anexos enviados",
+  "Em análise da proposta",
+  "Em análise da documentação",
+  "Em diligência",
+  "Aceita / habilitada",
+  "Recurso / contrarrazão",
+  "Sessão suspensa",
+  "Aguardando homologação",
+  "Homologada",
+];
+
 export const ETAPAS_LICITACAO_ATIVAS = ["estudar", "fazer", "orcamento", "boa_colocacao"];
 
 export const MODALIDADES = [

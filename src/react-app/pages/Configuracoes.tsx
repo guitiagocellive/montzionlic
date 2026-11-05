@@ -1091,6 +1091,7 @@ const ACESSO_PADRAO_MEMBRO: Permissoes = {
   posganho: "ver",
   atas: "ver",
   documentacao: "ver",
+  financeiro: "nenhum",
   assinatura: "nenhum",
 };
 

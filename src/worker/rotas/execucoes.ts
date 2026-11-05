@@ -25,6 +25,12 @@ const ESQUEMA_EXECUCAO: Esquema = {
   fat_telefone: "texto",
   observacoes: "textoLongo",
   ata_id: "id",
+  nota_fiscal: "texto",
+  data_nota: "data",
+  frete: "numero",
+  outras_despesas: "numero",
+  data_pagamento: "data",
+  valor_recebido: "numero",
 };
 
 const ESQUEMA_ITEM: Esquema = {

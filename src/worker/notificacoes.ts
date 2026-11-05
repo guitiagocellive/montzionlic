@@ -75,6 +75,29 @@ export async function calcularAlertas(
     }
   }
 
+  if (pode("licitacoes")) {
+    // Reabertura da sessão das licitações que estamos acompanhando.
+    const { results } = await db
+      .prepare(
+        `SELECT id, numero, orgao, modalidade, data_reabertura, hora_reabertura, colocacao FROM licitacoes
+          WHERE etapa = 'boa_colocacao' AND acompanhar = 1 AND data_reabertura BETWEEN ? AND ?
+          ORDER BY data_reabertura, hora_reabertura`,
+      )
+      .bind(hoje, hojeBrasilia(config.alerta_sessao_dias))
+      .all<{ id: number; numero: string | null; orgao: string | null; modalidade: string | null; data_reabertura: string; hora_reabertura: string | null; colocacao: number | null }>();
+    for (const l of results) {
+      const dias = diasAte(l.data_reabertura, hoje);
+      alertas.push({
+        tipo: "sessao",
+        gravidade: dias <= 1 ? "urgente" : "atencao",
+        titulo: `Reabertura da sessão ${quando(dias)}${l.hora_reabertura ? ` às ${l.hora_reabertura}` : ""}`,
+        detalhe: [`${l.modalidade ?? "Licitação"} ${l.numero ?? ""}`.trim(), l.orgao, l.colocacao ? `${l.colocacao}º lugar` : null].filter(Boolean).join(" · "),
+        data: l.data_reabertura,
+        link: `/licitacoes/${l.id}`,
+      });
+    }
+  }
+
   if (pode("posganho")) {
     const { results } = await db
       .prepare(

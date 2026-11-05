@@ -1,5 +1,5 @@
 import { LogOut, Moon, Settings, Sparkle, Sun, UserRound } from "lucide-react";
-import { type ReactNode, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { Usuario } from "../../shared/tipos";
 import { api } from "../api";
 import { areaDoCaminho, areasPermitidas, funcaoAtiva } from "../navegacao";
@@ -23,6 +23,16 @@ export function Layout({ usuario, caminho, aoSair, aoMudarUsuario, children }: P
   const emConfiguracoes = caminho.startsWith("/configuracoes");
   // Fora de uma área (ex.: configurações), o menu lateral mostra a Visão geral.
   const funcoes = (area ?? areas[0])?.funcoes ?? [];
+
+  // No celular a barra de áreas rola de lado: mantém a área atual à vista.
+  const abasRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const ativa = abasRef.current?.querySelector<HTMLElement>(".aba.ativa");
+    const barra = abasRef.current;
+    if (ativa && barra && barra.scrollWidth > barra.clientWidth) {
+      barra.scrollTo({ left: ativa.offsetLeft - (barra.clientWidth - ativa.offsetWidth) / 2, behavior: "smooth" });
+    }
+  }, [area?.chave]);
 
   const [menuAberto, setMenuAberto] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -59,7 +69,7 @@ export function Layout({ usuario, caminho, aoSair, aoMudarUsuario, children }: P
         <nav className="rail-nav">
           {funcoes.map((f) => {
             const Icone = f.icone;
-            const ativo = funcaoAtiva(caminho, f);
+            const ativo = funcaoAtiva(caminho, f, funcoes);
             return (
               <a key={f.caminho} className={`rail-item ${ativo ? "ativo" : ""}`} aria-label={f.rotulo} aria-current={ativo ? "page" : undefined} {...link(f.caminho)}>
                 <Icone aria-hidden="true" />
@@ -81,7 +91,7 @@ export function Layout({ usuario, caminho, aoSair, aoMudarUsuario, children }: P
             <span className="marca-nome">Montzion</span>
           </div>
 
-          <nav className="abas" aria-label="Áreas">
+          <nav className="abas" aria-label="Áreas" ref={abasRef}>
             {areas.map((a) => {
               const Icone = a.icone;
               return (

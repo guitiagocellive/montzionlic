@@ -1,6 +1,6 @@
 import { ArrowLeft, Calculator, ClipboardList, ExternalLink, FileText, FolderOpen, ListChecks, MessageSquare, Trash2, Trophy } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { ETAPAS_LICITACAO, ETAPAS_EXECUCAO, nomeEtapa } from "../../../shared/negocio";
+import { ETAPAS_LICITACAO, nomeEtapa } from "../../../shared/negocio";
 import { podeEditar, podeVer } from "../../../shared/permissoes";
 import type { Arquivo, Cotacao, ItemLicitacao, Licitacao, Usuario } from "../../../shared/tipos";
 import { api, mensagemDeErro } from "../../api";
@@ -14,6 +14,7 @@ import { AbaItens } from "./AbaItens";
 import { AbaOrcamento } from "./AbaOrcamento";
 import { AbaProposta } from "./AbaProposta";
 import { AbaResultado } from "./AbaResultado";
+import { PainelEtapa } from "./PainelEtapa";
 
 export interface FichaLicitacao {
   licitacao: Licitacao;
@@ -48,11 +49,11 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
     history.replaceState(null, "", `/licitacoes/${id}?aba=${chave}`);
   }
 
-  async function mudarEtapa(etapa: string) {
+  async function mudarEtapa(etapa: string, extra?: Record<string, unknown>) {
     try {
       const r = await api<{ execucaoCriada: number | null }>(`/licitacoes/${id}`, {
         metodo: "PATCH",
-        corpo: { etapa },
+        corpo: { etapa, ...extra },
       });
       avisar(
         r.execucaoCriada
@@ -177,18 +178,16 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
         </div>
       </div>
 
-      {ficha.execucoes.length > 0 && (
-        <div className="faixa-ganha entrar">
-          <Trophy aria-hidden="true" />
-          <span>Esta licitação está no Pós-ganho:</span>
-          {ficha.execucoes.map((e) => (
-            <a key={e.id} {...link(`/pos-ganho/${e.id}`)}>
-              {e.numero_empenho ? `Empenho ${e.numero_empenho}` : "Empenho sem número"} ·{" "}
-              {nomeEtapa(ETAPAS_EXECUCAO, e.etapa)}
-            </a>
-          ))}
-        </div>
-      )}
+      <PainelEtapa
+        licitacao={l}
+        participando={itens.filter((i) => i.participar).length}
+        semCotacao={itens.filter((i) => i.participar && !cotacoes.some((c) => c.item_id === i.id)).length}
+        execucoes={ficha.execucoes}
+        podeEditar={podeEditar(usuario.permissoes, "licitacoes")}
+        aoMudarEtapa={mudarEtapa}
+        aoIrPara={escolherAba}
+        aoSalvar={carregar}
+      />
 
       <Etapas passos={passos} atual={aba} aoEscolher={escolherAba} />
 

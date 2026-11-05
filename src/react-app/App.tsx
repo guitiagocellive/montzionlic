@@ -9,6 +9,8 @@ import { Calendario } from "./pages/Calendario";
 import { Configuracoes } from "./pages/Configuracoes";
 import { Convite } from "./pages/Convite";
 import { Documentacao } from "./pages/Documentacao";
+import { Financeiro } from "./pages/Financeiro";
+import { PainelLicitacoes, PainelPosGanho } from "./pages/PaineisArea";
 import { DetalheLicitacao } from "./pages/licitacoes/Detalhe";
 import { Fornecedores } from "./pages/licitacoes/Fornecedores";
 import { QuadroLicitacoes } from "./pages/licitacoes/Quadro";
@@ -52,6 +54,9 @@ function SemAcesso() {
 function Pagina({ caminho, usuario, aoMudarUsuario }: { caminho: string; usuario: Usuario; aoMudarUsuario: (u: Usuario) => void }) {
   const p = usuario.permissoes;
   let m: Record<string, string> | null;
+  const limpo = caminho.replace(/\/+$/, "");
+  if (limpo === "/licitacoes/painel") return podeVer(p, "licitacoes") ? <PainelLicitacoes /> : <SemAcesso />;
+  if (limpo === "/pos-ganho/painel") return podeVer(p, "posganho") ? <PainelPosGanho /> : <SemAcesso />;
   if ((m = combinar(caminho, "/licitacoes/:id")))
     return podeVer(p, "licitacoes") ? <DetalheLicitacao key={m.id} id={Number(m.id)} usuario={usuario} /> : <SemAcesso />;
   if ((m = combinar(caminho, "/pos-ganho/:id")))
@@ -76,6 +81,8 @@ function Pagina({ caminho, usuario, aoMudarUsuario }: { caminho: string; usuario
       return podeVer(p, "posganho") ? <QuadroExecucao usuario={usuario} /> : <SemAcesso />;
     case "/atas":
       return podeVer(p, "atas") ? <Atas usuario={usuario} /> : <SemAcesso />;
+    case "/financeiro":
+      return podeVer(p, "financeiro") ? <Financeiro /> : <SemAcesso />;
     case "/documentacao":
       return podeVer(p, "documentacao") ? <Documentacao usuario={usuario} /> : <SemAcesso />;
     default:

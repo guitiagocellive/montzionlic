@@ -3,7 +3,8 @@ import { type ReactNode, useEffect, useState } from "react";
 import { api, mensagemDeErro } from "../api";
 import { Campo } from "../components/Formulario";
 import { avisar, Carregando } from "../components/Ui";
-import { formatarMoeda, formatarNumero, hojeIso } from "../formato";
+import { formatarMoeda, formatarNumero } from "../formato";
+import { baixarCsv, nomeMes, periodo, taxa } from "../components/Periodo";
 
 interface Grupo {
   nome: string;
@@ -25,39 +26,6 @@ interface Dados {
   concorrentes: { nome: string; vitorias: number; diferenca_media: number | null }[];
   itens: { ganhos: number | null; perdidos: number | null; cancelados: number | null; valor_ganho: number };
   financeiro: { empenhos: number; empenhado: number; lucro: number; porMes: { mes: string; empenhado: number }[] } | null;
-}
-
-const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
-const nomeMes = (m: string) => `${MESES[Number(m.slice(5, 7)) - 1]}/${m.slice(2, 4)}`;
-
-function periodo(tipo: string): [string, string] {
-  const hoje = hojeIso();
-  const [a, m] = hoje.split("-").map(Number);
-  if (tipo === "mes") {
-    const ultimo = new Date(a, m, 0).getDate();
-    return [`${a}-${String(m).padStart(2, "0")}-01`, `${a}-${String(m).padStart(2, "0")}-${ultimo}`];
-  }
-  if (tipo === "trimestre") {
-    const d = new Date(a, m - 3, 1);
-    return [`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`, hoje];
-  }
-  if (tipo === "12meses") {
-    const d = new Date(a, m - 12, 1);
-    return [`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`, hoje];
-  }
-  return [`${a}-01-01`, `${a}-12-31`];
-}
-
-const taxa = (g: number, p: number) => (g + p > 0 ? `${Math.round((g / (g + p)) * 100)}%` : "—");
-
-function baixarCsv(nome: string, linhas: (string | number)[][]) {
-  const csv = linhas.map((l) => l.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(";")).join("\n");
-  const blob = new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = nome;
-  a.click();
-  URL.revokeObjectURL(a.href);
 }
 
 function TabelaGrupo({ titulo, icone, grupos, arquivo }: { titulo: string; icone: ReactNode; grupos: Grupo[]; arquivo: string }) {

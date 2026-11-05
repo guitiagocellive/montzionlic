@@ -11,6 +11,7 @@ import {
   type LucideIcon,
   PackageCheck,
   Truck,
+  Wallet,
 } from "lucide-react";
 import { type Modulo, podeVer, type Permissoes } from "../shared/permissoes";
 
@@ -48,6 +49,7 @@ export const AREAS: Area[] = [
     icone: Gavel,
     funcoes: [
       { caminho: "/licitacoes", rotulo: "Quadro de licitações", icone: KanbanSquare, modulo: "licitacoes" },
+      { caminho: "/licitacoes/painel", rotulo: "Painel de licitações", icone: LayoutDashboard, modulo: "licitacoes" },
       { caminho: "/fornecedores", rotulo: "Fornecedores", icone: Truck, modulo: "fornecedores" },
     ],
   },
@@ -57,8 +59,15 @@ export const AREAS: Area[] = [
     icone: PackageCheck,
     funcoes: [
       { caminho: "/pos-ganho", rotulo: "Empenhos e entregas", icone: PackageCheck, modulo: "posganho" },
+      { caminho: "/pos-ganho/painel", rotulo: "Painel de pós-ganho", icone: LayoutDashboard, modulo: "posganho" },
       { caminho: "/atas", rotulo: "Atas vigentes", icone: FileSignature, modulo: "atas" },
     ],
+  },
+  {
+    chave: "financeiro",
+    rotulo: "Financeiro",
+    icone: Wallet,
+    funcoes: [{ caminho: "/financeiro", rotulo: "Painel financeiro", icone: Wallet, modulo: "financeiro" }],
   },
   {
     chave: "documentacao",
@@ -78,8 +87,10 @@ export function areasPermitidas(p: Permissoes): Area[] {
 const corresponde = (caminho: string, destino: string) =>
   destino === "/" ? caminho === "/" : caminho === destino || caminho.startsWith(`${destino}/`);
 
-export function funcaoAtiva(caminho: string, f: Funcao) {
-  return corresponde(caminho, f.caminho);
+/** Função ativa: a que corresponde ao caminho de forma mais específica (ex.: /licitacoes/painel). */
+export function funcaoAtiva(caminho: string, f: Funcao, todas: Funcao[] = []) {
+  if (!corresponde(caminho, f.caminho)) return false;
+  return !todas.some((o) => o !== f && o.caminho.length > f.caminho.length && corresponde(caminho, o.caminho));
 }
 
 export function areaDoCaminho(caminho: string, areas: Area[]): Area | null {

@@ -68,17 +68,10 @@ export function AbaDados({ licitacao, aoSalvar }: { licitacao: Licitacao; aoSalv
   return (
     <form className="formulario" onSubmit={salvar}>
       <section className="cartao">
-        <h2>Identificação</h2>
+        <h2>Principal</h2>
         <div className="grade-3">
           <Campo rotulo="Número da licitação" placeholder="90012/2026" {...texto("numero")} />
-          <Campo rotulo="UASG / código do órgão" placeholder="160123" {...texto("uasg")} />
           <CampoSelect rotulo="Modalidade" opcoes={MODALIDADES} vazio="Selecione" {...texto("modalidade")} />
-        </div>
-        <Campo rotulo="Órgão" placeholder="Nome do órgão público" {...texto("orgao")} />
-        <CampoArea rotulo="Objeto" placeholder="O que está sendo comprado" rows={3} {...texto("objeto")} />
-        <div className="grade-3">
-          <Campo rotulo="Nicho" placeholder="Ex.: Informática, Limpeza, Médico" {...texto("nicho")} />
-          <Campo rotulo="Valor estimado (R$)" type="number" step="0.01" min="0" {...texto("valor_estimado")} />
           <CampoSelect
             rotulo="Responsável"
             vazio="Ninguém"
@@ -86,28 +79,11 @@ export function AbaDados({ licitacao, aoSalvar }: { licitacao: Licitacao; aoSalv
             {...texto("responsavel_id")}
           />
         </div>
-      </section>
-
-      <section className="cartao">
-        <h2>Sessão e portal</h2>
-        <div className="grade-3">
+        <Campo rotulo="Órgão" placeholder="Nome do órgão público" {...texto("orgao")} />
+        <CampoArea rotulo="Objeto" placeholder="O que está sendo comprado" rows={2} {...texto("objeto")} />
+        <div className="grade-4">
           <Campo rotulo="Data da sessão" type="date" {...texto("data_sessao")} />
           <Campo rotulo="Horário (Brasília)" type="time" {...texto("horario")} />
-          <div className="campo">
-            <label htmlFor="fase">
-              <span className="texto-suave pequeno">Fase</span>
-            </label>
-            <div className="entrada">
-              <input id="fase" list="lista-fases" placeholder="Ex.: Disputa de lances" {...texto("fase")} />
-            </div>
-            <datalist id="lista-fases">
-              {FASES.map((f) => (
-                <option key={f} value={f} />
-              ))}
-            </datalist>
-          </div>
-        </div>
-        <div className="grade-2">
           <div className="campo">
             <label htmlFor="portal">
               <span className="texto-suave pequeno">Portal</span>
@@ -123,17 +99,42 @@ export function AbaDados({ licitacao, aoSalvar }: { licitacao: Licitacao; aoSalv
           </div>
           <Campo rotulo="Link da licitação" type="url" placeholder="https://" {...texto("link")} />
         </div>
+      </section>
+
+      <details className="cartao mais-detalhes">
+        <summary>
+          <strong>Mais detalhes</strong>
+          <span className="texto-fraco pequeno">
+            {[v.uasg && `UASG ${v.uasg}`, v.nicho, v.valor_estimado && `R$ ${v.valor_estimado}`, v.fase, v.registro_preco && "SRP", v.observacoes && "com anotações"]
+              .filter(Boolean)
+              .join(" · ") || "UASG, nicho, valor estimado, fase, registro de preço e anotações"}
+          </span>
+        </summary>
+        <div className="grade-4">
+          <Campo rotulo="UASG / código do órgão" placeholder="160123" {...texto("uasg")} />
+          <Campo rotulo="Nicho" placeholder="Ex.: Informática" {...texto("nicho")} />
+          <Campo rotulo="Valor estimado (R$)" type="number" step="0.01" min="0" {...texto("valor_estimado")} />
+          <div className="campo">
+            <label htmlFor="fase">
+              <span className="texto-suave pequeno">Fase</span>
+            </label>
+            <div className="entrada">
+              <input id="fase" list="lista-fases" placeholder="Ex.: Disputa de lances" {...texto("fase")} />
+            </div>
+            <datalist id="lista-fases">
+              {FASES.map((f) => (
+                <option key={f} value={f} />
+              ))}
+            </datalist>
+          </div>
+        </div>
         <Interruptor
           rotulo="É registro de preço (SRP)"
           ligado={v.registro_preco}
           aoMudar={(ligado) => form.definir("registro_preco", ligado)}
         />
-      </section>
-
-      <section className="cartao">
-        <h2>Observações</h2>
-        <CampoArea rotulo="Anotações da equipe" rows={4} {...texto("observacoes")} />
-      </section>
+        <CampoArea rotulo="Anotações da equipe" rows={3} {...texto("observacoes")} />
+      </details>
 
       <div className={`barra-salvar ${form.sujo ? "visivel" : ""}`}>
         <span>Você tem alterações não salvas.</span>

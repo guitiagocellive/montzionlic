@@ -84,6 +84,12 @@ function valoresIniciais(e: Execucao) {
     fat_email: e.fat_email ?? "",
     fat_telefone: e.fat_telefone ?? "",
     observacoes: e.observacoes ?? "",
+    nota_fiscal: e.nota_fiscal ?? "",
+    data_nota: e.data_nota ?? "",
+    frete: e.frete == null ? "" : String(e.frete),
+    outras_despesas: e.outras_despesas == null ? "" : String(e.outras_despesas),
+    data_pagamento: e.data_pagamento ?? "",
+    valor_recebido: e.valor_recebido == null ? "" : String(e.valor_recebido),
   };
 }
 
@@ -143,7 +149,7 @@ export function DetalheExecucao({ id, usuario }: { id: number; usuario: Usuario 
   const passos = [
     { chave: "empenho", titulo: "Empenho e prazo", descricao: e.data_limite ? `Entrega até ${formatarData(e.data_limite)}` : "Número, data e prazo", icone: CalendarCheck, completo: !!(e.numero_empenho && e.data_limite) },
     { chave: "itens", titulo: "Itens ganhos", descricao: `${itens.length} item(ns) · ${formatarMoeda(valorTotal)}`, icone: Package, completo: itens.length > 0 && itens.every((i) => i.valor_unitario != null) },
-    { chave: "faturamento", titulo: "Faturamento", descricao: "Dados do órgão", icone: Building, completo: !!(e.fat_razao_social && e.fat_cnpj) },
+    { chave: "faturamento", titulo: "Faturamento", descricao: e.data_pagamento ? "Recebido" : e.nota_fiscal ? `NF ${e.nota_fiscal}` : "Nota fiscal e órgão", icone: Building, completo: !!(e.fat_razao_social && e.fat_cnpj) },
     { chave: "arquivos", titulo: "Arquivos e IA", descricao: `${arquivos.length} arquivo(s)`, icone: FolderOpen, completo: arquivos.some((a) => a.execucao_id) },
   ];
 
@@ -269,6 +275,9 @@ function FormEmpenho({
     e.preventDefault();
     const corpo: Record<string, unknown> = { ...form.alterados };
     if ("prazo_dias" in corpo) corpo.prazo_dias = prazo == null ? null : Math.round(prazo);
+    for (const campo of ["frete", "outras_despesas", "valor_recebido"]) {
+      if (campo in corpo) corpo[campo] = paraNumero(String(corpo[campo] ?? ""));
+    }
     setSalvando(true);
     try {
       await api(`/execucoes/${execucao.id}`, { metodo: "PATCH", corpo });
@@ -327,6 +336,21 @@ function FormEmpenho({
           </section>
         </>
       ) : (
+        <>
+        <section className="cartao">
+          <h2>Nota fiscal e recebimento</h2>
+          <p className="descricao">Alimenta o Financeiro: a faturar, a receber, recebido e o lucro de cada empenho.</p>
+          <div className="grade-3">
+            <Campo rotulo="Nº da nota fiscal" {...texto("nota_fiscal")} />
+            <Campo rotulo="Data da nota" type="date" {...texto("data_nota")} />
+            <Campo rotulo="Data do pagamento" type="date" {...texto("data_pagamento")} />
+          </div>
+          <div className="grade-3">
+            <Campo rotulo="Valor recebido (R$)" type="number" step="0.01" min="0" placeholder="Vazio = valor do empenho" {...texto("valor_recebido")} />
+            <Campo rotulo="Frete pago (R$)" type="number" step="0.01" min="0" {...texto("frete")} />
+            <Campo rotulo="Outras despesas (R$)" type="number" step="0.01" min="0" {...texto("outras_despesas")} />
+          </div>
+        </section>
         <section className="cartao">
           <h2>Dados de faturamento do órgão</h2>
           <div className="grade-2">
@@ -339,6 +363,7 @@ function FormEmpenho({
             <Campo rotulo="Telefone" {...texto("fat_telefone")} />
           </div>
         </section>
+        </>
       )}
 
       <div className={`barra-salvar ${form.sujo ? "visivel" : ""}`}>

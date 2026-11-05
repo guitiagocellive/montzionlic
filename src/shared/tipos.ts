@@ -254,6 +254,11 @@ export interface Licitacao {
   data_resultado: string | null;
   motivo_perda: string | null;
   observacao_resultado: string | null;
+  acompanhar: number;
+  colocacao: number | null;
+  situacao_disputa: string | null;
+  data_reabertura: string | null;
+  hora_reabertura: string | null;
   criado_em: string;
   atualizado_em: string;
 }
@@ -361,6 +366,12 @@ export interface Execucao {
   fat_telefone: string | null;
   observacoes: string | null;
   ata_id: number | null;
+  nota_fiscal: string | null;
+  data_nota: string | null;
+  frete: number | null;
+  outras_despesas: number | null;
+  data_pagamento: string | null;
+  valor_recebido: number | null;
 }
 
 export interface ItemExecucao {
