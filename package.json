@@ -10,7 +10,7 @@
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
     "deploy": "npm run build && npm run deploy:ci",
-    "deploy:ci": "wrangler d1 migrations apply DB --remote && wrangler deploy",
+    "deploy:ci": "(wrangler d1 migrations apply DB --remote || echo \"Banco ainda não existe: será criado no deploy.\") && wrangler deploy && wrangler d1 migrations apply DB --remote",
     "cf-typegen": "wrangler types src/worker/worker-configuration.d.ts"
   },
   "dependencies": {

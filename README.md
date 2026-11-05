@@ -92,27 +92,34 @@ Não existe cadastro público: só um administrador adiciona pessoas.
 
 ## Publicar na Cloudflare
 
-1. **Criar o banco D1:** no painel da Cloudflare, vá em *Storage & Databases → D1 → Create*,
-   com o nome `montzionlic-db`. Copie o **Database ID** e cole em `wrangler.jsonc`
-   no campo `database_id`.
-2. **Nome do Worker:** o campo `name` em `wrangler.jsonc` precisa ser igual ao nome do Worker
-   criado no painel (hoje está `montzionlic`).
-3. **Criar o armazenamento de arquivos (R2):** no painel, vá em *R2 Object Storage → Create bucket*,
-   com o nome `montzionlic-arquivos`. (O R2 tem plano grátis, mas a Cloudflare pede um cartão para ativar.)
-4. **IA:** não precisa criar nada — a IA (Workers AI) já vem com a conta.
-5. **Conectar o GitHub:** no Worker, vá em *Settings → Build → Connect* e escolha este repositório.
-   - Build command: `npm run build`
-   - Deploy command: `npm run deploy:ci` (aplica as migrações do banco e publica)
-6. **Ativar a assinatura digital:** no Worker, vá em *Settings → Variables and Secrets → Add*,
-   escolha o tipo **Secret**, nome `CHAVE_CERTIFICADO` e, como valor, um texto longo e aleatório
-   (por exemplo, gere com `openssl rand -base64 32`). Guarde esse valor só lá: se ele mudar, é preciso
-   cadastrar o certificado de novo. Depois, cadastre o certificado em *Configurações → Certificado digital*.
-7. **Plano do Worker:** recomendo o **Workers Paid** (US$ 5/mês). O plano grátis limita cada requisição a
-   10 ms de processamento, e gerar Word/PDF ou assinar leva de 50 a 100 ms — no grátis essas ações podem falhar.
-8. **Domínio:** no Worker, *Settings → Domains & Routes → Add → Custom domain*.
-9. **Logo após o primeiro deploy**, abra o site e crie o administrador na tela de primeiro acesso.
+Tudo pelo painel da Cloudflare, sem linha de comando:
 
-A partir daí, cada push na branch de produção publica sozinho.
+1. **Ativar o R2 (arquivos):** no menu, *R2 Object Storage* → ativar o plano grátis (a Cloudflare pede um
+   cartão, mas não cobra dentro do limite grátis). Não precisa criar o bucket: o deploy cria sozinho.
+2. **Criar o Worker a partir do GitHub:** *Workers & Pages → Create → Import a repository* → escolha
+   este repositório.
+   - Nome do projeto: `montzionlic` (precisa ser igual ao `name` do `wrangler.jsonc`)
+   - Build command: `npm run build`
+   - Deploy command: `npm run deploy:ci`
+   - Ramo (branch) de produção: o ramo principal do repositório
+   No primeiro deploy o banco D1 `montzionlic-db` e o bucket `montzionlic-arquivos` são criados sozinhos,
+   e as tabelas do banco são aplicadas.
+3. **Plano do Worker:** recomendo o **Workers Paid** (US$ 5/mês). O plano grátis limita cada requisição a
+   10 ms de processamento, e gerar Word/PDF ou assinar leva de 50 a 100 ms — no grátis essas ações podem falhar.
+4. **Ativar a assinatura digital:** no Worker, *Settings → Variables and Secrets → Add*, tipo **Secret**,
+   nome `CHAVE_CERTIFICADO` e, como valor, um texto longo e aleatório (40+ letras e números misturados).
+   Guarde esse valor só lá: se ele mudar, é preciso cadastrar o certificado de novo.
+5. **Domínio montzion.com.br:**
+   - Na Cloudflare: *Add a domain* → `montzion.com.br` → plano Free. Confira se os registros **MX** e **TXT**
+     do Google (e-mail) foram importados.
+   - No Registro.br: em *DNS → Alterar servidores DNS*, coloque os dois servidores que a Cloudflare mostrar.
+     A troca leva de alguns minutos a algumas horas.
+   - Quando o domínio aparecer como *Active* na Cloudflare: no Worker, *Settings → Domains & Routes → Add →
+     Custom domain* → `montzion.com.br` (e, se quiser, `www.montzion.com.br`). Se a Cloudflare avisar que já
+     existe um registro para o domínio (o site antigo), apague esse registro A e tente de novo.
+6. **Logo após o primeiro deploy**, abra o site e crie o administrador na tela de primeiro acesso.
+
+A partir daí, cada push no ramo de produção publica sozinho.
 
 ## Rodar no computador
 

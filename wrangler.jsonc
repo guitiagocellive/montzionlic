@@ -17,7 +17,7 @@
   "r2_buckets": [
     {
       "binding": "ARQUIVOS",
-      // Crie no painel: R2 Object Storage > Create bucket, com este nome.
+      // Criado sozinho no primeiro deploy (o R2 precisa estar ativado na conta).
       "bucket_name": "montzionlic-arquivos"
     }
   ],
@@ -25,8 +25,7 @@
     {
       "binding": "DB",
       "database_name": "montzionlic-db",
-      // Troque pelo ID do banco D1 criado no painel (Storage & Databases > D1).
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      // Sem ID: no primeiro deploy a Cloudflare cria o banco com este nome (ou usa o que já existir).
       "migrations_dir": "migrations"
     }
   ]
