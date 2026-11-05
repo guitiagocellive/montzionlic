@@ -18,6 +18,7 @@ import {
   somarPrazo,
   type TipoPrazo,
 } from "../../../shared/negocio";
+import { podeEditar } from "../../../shared/permissoes";
 import type { Arquivo, Execucao, ItemExecucao, Usuario } from "../../../shared/tipos";
 import { api, mensagemDeErro } from "../../api";
 import { AbaArquivos } from "../../components/AbaArquivos";
@@ -143,7 +144,12 @@ export function DetalheExecucao({ id, usuario }: { id: number; usuario: Usuario 
           </p>
         </div>
         <div className="ficha-acoes">
-          <select value={e.etapa} onChange={(ev) => mudarEtapa(ev.target.value)} aria-label="Mover para etapa">
+          <select
+            value={e.etapa}
+            onChange={(ev) => mudarEtapa(ev.target.value)}
+            aria-label="Mover para etapa"
+            disabled={!podeEditar(usuario.permissoes, "posganho")}
+          >
             {ETAPAS_EXECUCAO.map((x) => (
               <option key={x.chave} value={x.chave}>
                 {x.nome}

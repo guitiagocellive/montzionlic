@@ -1,7 +1,7 @@
 import type { Context, MiddlewareHandler } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { type Modulo, podeEditar, podeVer, resolverPermissoes } from "../shared/permissoes";
-import type { Tema, Usuario } from "../shared/tipos";
+import type { Tema, TemaClaro, TemaEscuro, Usuario } from "../shared/tipos";
 import { gerarToken, sha256 } from "./crypto";
 
 export type Ambiente = {
@@ -25,12 +25,14 @@ export interface LinhaUsuario {
   cargo: string | null;
   cor: string;
   tema: Tema;
+  tema_claro: TemaClaro;
+  tema_escuro: TemaEscuro;
   foto_chave: string | null;
   permissoes: string | null;
 }
 
 export const CAMPOS_USUARIO =
-  "id, nome, email, papel, ativo, trocar_senha, criado_em, cargo, cor, tema, foto_chave, permissoes";
+  "id, nome, email, papel, ativo, trocar_senha, criado_em, cargo, cor, tema, tema_claro, tema_escuro, foto_chave, permissoes";
 
 export function paraUsuario(l: LinhaUsuario): Usuario {
   return {
@@ -44,6 +46,8 @@ export function paraUsuario(l: LinhaUsuario): Usuario {
     cargo: l.cargo,
     cor: l.cor,
     tema: l.tema,
+    temaClaro: l.tema_claro,
+    temaEscuro: l.tema_escuro,
     // A chave muda a cada foto nova, então serve para evitar cache antigo.
     foto: l.foto_chave ? `/api/fotos/${l.id}?v=${l.foto_chave.slice(-8)}` : null,
     permissoes: resolverPermissoes(l.papel, l.permissoes),
@@ -89,7 +93,7 @@ export const exigirLogin: MiddlewareHandler<Ambiente> = async (c, next) => {
   const sessaoId = await sha256(token);
   const linha = await c.env.DB.prepare(
     `SELECT s.expira_em, u.id, u.nome, u.email, u.papel, u.ativo, u.trocar_senha, u.criado_em,
-            u.cargo, u.cor, u.tema, u.foto_chave, u.permissoes
+            u.cargo, u.cor, u.tema, u.tema_claro, u.tema_escuro, u.foto_chave, u.permissoes
        FROM sessoes s JOIN usuarios u ON u.id = s.usuario_id
       WHERE s.id = ?`,
   )

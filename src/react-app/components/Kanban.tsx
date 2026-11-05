@@ -16,6 +16,8 @@ interface Props<T extends CardBase> {
   aoMover: (card: T, etapa: string, posicao: number) => void;
   aoNovo?: (etapa: string) => void;
   rodapeColuna?: (etapa: string, cards: T[]) => ReactNode;
+  /** Sem arrastar (para quem só pode ver). */
+  somenteLeitura?: boolean;
 }
 
 /** Quadro em colunas com arrastar e soltar (estilo ClickUp). */
@@ -27,6 +29,7 @@ export function Kanban<T extends CardBase>({
   aoMover,
   aoNovo,
   rodapeColuna,
+  somenteLeitura = false,
 }: Props<T>) {
   const [arrastando, setArrastando] = useState<number | null>(null);
   const [alvo, setAlvo] = useState<{ etapa: string; indice: number } | null>(null);
@@ -113,7 +116,7 @@ export function Kanban<T extends CardBase>({
                   <article
                     data-card={card.id}
                     className={`card-kanban ${arrastando === card.id ? "arrastando" : ""}`}
-                    draggable
+                    draggable={!somenteLeitura}
                     tabIndex={0}
                     onDragStart={(e) => {
                       e.dataTransfer.effectAllowed = "move";

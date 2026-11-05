@@ -86,7 +86,7 @@ export function Painel({ usuario }: { usuario: Usuario }) {
           </h1>
         </div>
         {podeEditar(p, "licitacoes") && (
-          <a className="botao" {...link("/licitacoes")}>
+          <a className="botao" {...link("/licitacoes?nova=1")}>
             <Plus /> Nova licitação
           </a>
         )}

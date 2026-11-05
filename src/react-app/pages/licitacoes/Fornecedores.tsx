@@ -1,5 +1,6 @@
 import { BookOpen, Building2, Globe, Mail, MapPin, MessageCircle, Pencil, Phone, Plus, Search, Trash2, Truck, UserRound } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { podeEditar } from "../../../shared/permissoes";
 import type { Fornecedor, Usuario } from "../../../shared/tipos";
 import { api, mensagemDeErro } from "../../api";
 import { Alerta, Campo } from "../../components/Formulario";
@@ -22,6 +23,7 @@ function linkWhatsApp(telefone: string | null): string | null {
 }
 
 export function Fornecedores({ usuario }: { usuario: Usuario }) {
+  const editar = podeEditar(usuario.permissoes, "fornecedores");
   const [fornecedores, setFornecedores] = useState<Fornecedor[] | null>(null);
   const [busca, setBusca] = useState("");
   const [nicho, setNicho] = useState("");
@@ -79,9 +81,11 @@ export function Fornecedores({ usuario }: { usuario: Usuario }) {
           <h1>Fornecedores</h1>
           <p className="texto-suave">Contatos, sites e catálogos organizados por nicho.</p>
         </div>
-        <button className="botao" onClick={() => setEditando("novo")}>
-          <Plus aria-hidden="true" /> Novo fornecedor
-        </button>
+        {editar && (
+          <button className="botao" onClick={() => setEditando("novo")}>
+            <Plus aria-hidden="true" /> Novo fornecedor
+          </button>
+        )}
       </div>
 
       <div className="barra-filtros entrar" style={{ ["--i" as string]: 1 }}>
@@ -134,9 +138,11 @@ export function Fornecedores({ usuario }: { usuario: Usuario }) {
                     {f.nicho && <span className="chip">{f.nicho}</span>}
                   </div>
                   <div className="fornecedor-acoes">
-                    <button className="botao-icone" onClick={() => setEditando(f)} aria-label="Editar">
-                      <Pencil />
-                    </button>
+                    {editar && (
+                      <button className="botao-icone" onClick={() => setEditando(f)} aria-label="Editar">
+                        <Pencil />
+                      </button>
+                    )}
                     {usuario.papel === "admin" && (
                       <button className="botao-icone perigo" onClick={() => excluir(f)} aria-label="Excluir">
                         <Trash2 />

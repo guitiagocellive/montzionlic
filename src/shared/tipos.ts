@@ -5,6 +5,20 @@ import type { Permissoes } from "./permissoes";
 export type Papel = "admin" | "membro";
 export type Tema = "claro" | "escuro" | "sistema";
 
+/** Variações de cor. As claras valem no modo claro; as escuras, no escuro. */
+export const TEMAS_CLAROS = [
+  { chave: "ceu", nome: "Céu", descricao: "Azul com toque de pêssego", cores: ["#7dd3fc", "#fdba74", "#2563eb"] },
+  { chave: "lavanda", nome: "Lavanda", descricao: "Lilás, azul e rosa pastel", cores: ["#c4b5fd", "#f9a8d4", "#7c3aed"] },
+] as const;
+
+export const TEMAS_ESCUROS = [
+  { chave: "oceano", nome: "Oceano", descricao: "Azul profundo com ciano", cores: ["#0e7490", "#1d4ed8", "#22d3ee"] },
+  { chave: "grafite", nome: "Grafite", descricao: "Neutro e minimalista", cores: ["#27272a", "#3f3f46", "#8b5cf6"] },
+] as const;
+
+export type TemaClaro = (typeof TEMAS_CLAROS)[number]["chave"];
+export type TemaEscuro = (typeof TEMAS_ESCUROS)[number]["chave"];
+
 export interface Usuario {
   id: number;
   nome: string;
@@ -16,6 +30,8 @@ export interface Usuario {
   cargo: string | null;
   cor: string;
   tema: Tema;
+  temaClaro: TemaClaro;
+  temaEscuro: TemaEscuro;
   /** Endereço da foto de perfil, ou null. */
   foto: string | null;
   permissoes: Permissoes;

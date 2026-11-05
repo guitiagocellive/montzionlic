@@ -22,7 +22,15 @@ import {
   type Nivel,
   type Permissoes,
 } from "../../shared/permissoes";
-import type { Configuracoes as Config, Convite, Papel, Tema, Usuario } from "../../shared/tipos";
+import {
+  type Configuracoes as Config,
+  type Convite,
+  type Papel,
+  type Tema,
+  TEMAS_CLAROS,
+  TEMAS_ESCUROS,
+  type Usuario,
+} from "../../shared/tipos";
 import { api, enviarArquivo, mensagemDeErro } from "../api";
 import { Avatar } from "../components/Avatar";
 import { Alerta, Campo } from "../components/Formulario";
@@ -31,6 +39,7 @@ import { avisar, CampoSelect, Carregando, Interruptor, Modal } from "../componen
 import { formatarData } from "../formato";
 import { link } from "../rota";
 import { aplicarTema } from "../tema";
+import { Moon, MonitorSmartphone, Sun } from "lucide-react";
 
 interface Props {
   usuario: Usuario;
@@ -221,41 +230,89 @@ function Perfil({ usuario, aoMudarUsuario }: { usuario: Usuario; aoMudarUsuario:
 // ---------------- Aparência ----------------
 
 function Aparencia({ usuario, aoMudarUsuario }: { usuario: Usuario; aoMudarUsuario: (u: Usuario) => void }) {
-  const opcoes: { valor: Tema; rotulo: string }[] = [
-    { valor: "escuro", rotulo: "Escuro" },
-    { valor: "claro", rotulo: "Claro" },
-    { valor: "sistema", rotulo: "Igual ao sistema" },
+  const modos: { valor: Tema; rotulo: string; icone: typeof Sun }[] = [
+    { valor: "claro", rotulo: "Claro", icone: Sun },
+    { valor: "escuro", rotulo: "Escuro", icone: Moon },
+    { valor: "sistema", rotulo: "Automático", icone: MonitorSmartphone },
   ];
 
-  async function escolher(tema: Tema) {
-    aplicarTema(tema);
+  async function salvar(mudanca: { tema?: Tema; tema_claro?: string; tema_escuro?: string }) {
+    const pref = {
+      modo: mudanca.tema ?? usuario.tema,
+      claro: (mudanca.tema_claro ?? usuario.temaClaro) as Usuario["temaClaro"],
+      escuro: (mudanca.tema_escuro ?? usuario.temaEscuro) as Usuario["temaEscuro"],
+    };
+    // Ao escolher um tema claro/escuro, já mostra ele na tela.
+    if (mudanca.tema_claro && pref.modo !== "claro") pref.modo = "claro";
+    if (mudanca.tema_escuro && pref.modo !== "escuro") pref.modo = "escuro";
+    aplicarTema(pref);
     try {
-      const r = await api<{ usuario: Usuario }>("/conta/perfil", { metodo: "PATCH", corpo: { tema } });
+      const r = await api<{ usuario: Usuario }>("/conta/perfil", {
+        metodo: "PATCH",
+        corpo: { tema: pref.modo, tema_claro: pref.claro, tema_escuro: pref.escuro },
+      });
       aoMudarUsuario(r.usuario);
     } catch (err) {
       avisar(mensagemDeErro(err), "erro");
     }
   }
 
+  const CartaoTema = ({ t, ativo, aoEscolher }: { t: { chave: string; nome: string; descricao: string; cores: readonly string[] }; ativo: boolean; aoEscolher: () => void }) => (
+    <button className={`tema-opcao ${ativo ? "ativo" : ""}`} onClick={aoEscolher}>
+      <span
+        className="tema-previa"
+        style={{ background: `radial-gradient(circle at 15% 20%, ${t.cores[0]}, transparent 60%), radial-gradient(circle at 90% 10%, ${t.cores[1]}, transparent 55%), ${t.chave === "grafite" ? "#0a0a0c" : t.chave === "oceano" ? "#04121a" : "#f6f7fb"}` }}
+      >
+        <i style={{ background: "rgb(255 255 255 / 30%)", backdropFilter: "blur(6px)" }} />
+        <i style={{ background: "rgb(255 255 255 / 18%)" }} />
+        <b className="tema-ponto" style={{ background: t.cores[2] }} />
+      </span>
+      <span className="tema-texto">
+        <strong>
+          {t.nome} {ativo && <Check size={15} />}
+        </strong>
+        <small>{t.descricao}</small>
+      </span>
+    </button>
+  );
+
   return (
-    <section className="cartao">
-      <h2>Tema</h2>
-      <p className="descricao">Escolha como a plataforma aparece para você. Fica salvo na sua conta.</p>
-      <div className="temas">
-        {opcoes.map((o) => (
-          <button key={o.valor} className={`tema-opcao ${usuario.tema === o.valor ? "ativo" : ""}`} onClick={() => escolher(o.valor)}>
-            <span className={`tema-previa ${o.valor}`}>
-              <i />
-              <i />
-            </span>
-            <span style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              {o.rotulo}
-              {usuario.tema === o.valor && <Check size={16} />}
-            </span>
-          </button>
-        ))}
-      </div>
-    </section>
+    <>
+      <section className="cartao">
+        <h2>Modo</h2>
+        <p className="descricao">O botão de sol/lua no topo também alterna entre claro e escuro.</p>
+        <div className="segmentado grande">
+          {modos.map((m) => {
+            const Icone = m.icone;
+            return (
+              <button key={m.valor} className={usuario.tema === m.valor ? "ativo" : ""} onClick={() => salvar({ tema: m.valor })}>
+                <Icone size={15} /> {m.rotulo}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="cartao">
+        <h2>Tema claro</h2>
+        <p className="descricao">Usado quando o modo claro estiver ativo.</p>
+        <div className="temas">
+          {TEMAS_CLAROS.map((t) => (
+            <CartaoTema key={t.chave} t={t} ativo={usuario.temaClaro === t.chave} aoEscolher={() => salvar({ tema_claro: t.chave })} />
+          ))}
+        </div>
+      </section>
+
+      <section className="cartao">
+        <h2>Tema escuro</h2>
+        <p className="descricao">Usado quando o modo escuro estiver ativo.</p>
+        <div className="temas">
+          {TEMAS_ESCUROS.map((t) => (
+            <CartaoTema key={t.chave} t={t} ativo={usuario.temaEscuro === t.chave} aoEscolher={() => salvar({ tema_escuro: t.chave })} />
+          ))}
+        </div>
+      </section>
+    </>
   );
 }
 

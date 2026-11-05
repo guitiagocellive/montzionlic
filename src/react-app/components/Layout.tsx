@@ -4,7 +4,7 @@ import type { Usuario } from "../../shared/tipos";
 import { api } from "../api";
 import { areaDoCaminho, areasPermitidas, funcaoAtiva } from "../navegacao";
 import { link, navegar } from "../rota";
-import { aplicarTema, temaAtual } from "../tema";
+import { aplicarTema, modoVisivel, preferenciaAtual } from "../tema";
 import { Avatar } from "./Avatar";
 import { Notificacoes } from "./Notificacoes";
 import { useFecharAoClicarFora } from "./useFecharAoClicarFora";
@@ -30,8 +30,8 @@ export function Layout({ usuario, caminho, aoSair, aoMudarUsuario, children }: P
   const [, forcar] = useState(0);
 
   async function alternarTema() {
-    const novo = temaAtual() === "escuro" ? "claro" : "escuro";
-    aplicarTema(novo);
+    const novo = modoVisivel() === "escuro" ? "claro" : "escuro";
+    aplicarTema({ ...preferenciaAtual(), modo: novo });
     forcar((x) => x + 1);
     try {
       const r = await api<{ usuario: Usuario }>("/conta/perfil", { metodo: "PATCH", corpo: { tema: novo } });
@@ -95,7 +95,7 @@ export function Layout({ usuario, caminho, aoSair, aoMudarUsuario, children }: P
 
           <div className="topo-dir">
             <button className="botao-topo" onClick={alternarTema} aria-label="Alternar tema claro/escuro" title="Tema claro/escuro">
-              {temaAtual() === "escuro" ? <Sun /> : <Moon />}
+              {modoVisivel() === "escuro" ? <Sun /> : <Moon />}
             </button>
             <Notificacoes />
             <a className="botao-topo esconder-celular" {...link("/configuracoes")} aria-label="Configurações">

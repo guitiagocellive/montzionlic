@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { type Ambiente, CAMPOS_USUARIO, exigirLogin, type LinhaUsuario, paraUsuario } from "../auth";
+import { TEMAS_CLAROS, TEMAS_ESCUROS } from "../../shared/tipos";
 import { idDaRota, lerJson, texto } from "../validacao";
 
 // Perfil da própria pessoa: nome, cargo, cor, tema e foto.
@@ -42,6 +43,16 @@ rotasConta.patch("/perfil", async (c) => {
     if (!TEMAS.includes(corpo.tema as string)) return c.json({ erro: "Tema inválido." }, 400);
     sets.push("tema = ?");
     valores.push(corpo.tema);
+  }
+  if (corpo.tema_claro !== undefined) {
+    if (!TEMAS_CLAROS.some((t) => t.chave === corpo.tema_claro)) return c.json({ erro: "Tema claro inválido." }, 400);
+    sets.push("tema_claro = ?");
+    valores.push(corpo.tema_claro);
+  }
+  if (corpo.tema_escuro !== undefined) {
+    if (!TEMAS_ESCUROS.some((t) => t.chave === corpo.tema_escuro)) return c.json({ erro: "Tema escuro inválido." }, 400);
+    sets.push("tema_escuro = ?");
+    valores.push(corpo.tema_escuro);
   }
   if (sets.length === 0) return c.json({ erro: "Nada para alterar." }, 400);
 

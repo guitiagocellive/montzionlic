@@ -85,9 +85,22 @@
   box-sizing: border-box;
 }
 
-html,
-body {
+html {
   background: var(--fundo);
+}
+
+body {
+  background: transparent;
+}
+
+/* Fundo colorido (manchas suaves) que aparece através do vidro fosco */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--malha);
 }
 
 body {
@@ -470,7 +483,7 @@ a {
   right: 0;
   z-index: 60;
   border-radius: 16px;
-  background: var(--superficie);
+  background: var(--superficie-solida);
   box-shadow: var(--sombra-flutuante);
   animation: abrir-menu 0.18s var(--curva);
   overflow: hidden;
@@ -1001,7 +1014,7 @@ select {
 }
 
 select option {
-  background: var(--superficie);
+  background: var(--superficie-solida);
   color: var(--texto);
 }
 
@@ -1419,7 +1432,7 @@ select.seletor-pequeno {
   overflow-y: auto;
   padding: 24px;
   border-radius: 22px;
-  background: var(--superficie);
+  background: var(--superficie-solida);
   box-shadow: var(--sombra-flutuante);
   animation: abrir-menu 0.25s var(--curva);
 }
@@ -3966,4 +3979,338 @@ a.kpi:hover {
     animation-delay: 0ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+
+/* =========================================================
+   Temas (paletas) e vidro fosco
+   Padrões do modo escuro (Grafite) e claro; cada paleta ajusta as cores.
+   ========================================================= */
+
+[data-tema="escuro"] {
+  --superficie-solida: #141418;
+  --malha: none;
+  --vidro: var(--superficie);
+  --vidro-borda: var(--borda);
+  --vidro-brilho: rgb(255 255 255 / 5%);
+  --vidro-ativo: var(--contraste);
+  --vidro-ativo-texto: var(--contraste-texto);
+  --sombra-vidro: none;
+  --sombra-ativo: transparent;
+  --logo: var(--superficie-3);
+  --logo-texto: var(--texto);
+  --icone-barra: var(--texto-fraco);
+  --cartao: var(--superficie);
+  --cartao-borda: var(--borda);
+  --botao: var(--contraste);
+  --botao-texto: var(--contraste-texto);
+  --c1: #a78bfa;
+  --c2: #60a5fa;
+  --c3: #34d399;
+  --c4: #fb7185;
+}
+
+[data-tema="claro"] {
+  --superficie-solida: #ffffff;
+  --malha: none;
+  --vidro: var(--superficie);
+  --vidro-borda: var(--borda);
+  --vidro-brilho: rgb(255 255 255 / 80%);
+  --vidro-ativo: var(--contraste);
+  --vidro-ativo-texto: var(--contraste-texto);
+  --sombra-vidro: var(--sombra-cartao);
+  --sombra-ativo: transparent;
+  --logo: var(--superficie-3);
+  --logo-texto: var(--texto);
+  --icone-barra: var(--texto-fraco);
+  --cartao: var(--superficie);
+  --cartao-borda: var(--borda);
+  --botao: var(--contraste);
+  --botao-texto: var(--contraste-texto);
+  --c1: #7c3aed;
+  --c2: #2563eb;
+  --c3: #059669;
+  --c4: #e11d48;
+}
+
+/* ---------- Oceano (escuro) ---------- */
+[data-paleta="oceano"] {
+  --fundo: #04121a;
+  --superficie: rgb(255 255 255 / 4.5%);
+  --superficie-solida: #0b1d27;
+  --superficie-2: rgb(255 255 255 / 5%);
+  --superficie-3: rgb(255 255 255 / 8%);
+  --hover: rgb(255 255 255 / 8%);
+  --borda: rgb(255 255 255 / 8%);
+  --borda-forte: rgb(255 255 255 / 15%);
+  --texto: #eef6f9;
+  --texto-suave: #a9bec8;
+  --texto-fraco: #6f8894;
+  --contraste: #ffffff;
+  --contraste-texto: #04121a;
+  --acento: #06b6d4;
+  --acento-forte: #22d3ee;
+  --acento-suave: rgb(6 182 212 / 16%);
+  --acento-texto: #67e8f9;
+  --barra: rgb(255 255 255 / 8%);
+  --fundo-modal: rgb(2 8 12 / 60%);
+  --sombra-flutuante: 0 24px 60px -16px rgb(0 0 0 / 70%), 0 0 0 1px rgb(255 255 255 / 10%);
+  --malha:
+    radial-gradient(700px 500px at 5% 15%, rgb(6 182 212 / 34%), transparent 60%),
+    radial-gradient(700px 500px at 95% 5%, rgb(59 130 246 / 28%), transparent 60%),
+    radial-gradient(800px 600px at 60% 105%, rgb(20 184 166 / 22%), transparent 60%);
+  --vidro: rgb(255 255 255 / 7%);
+  --vidro-borda: rgb(255 255 255 / 14%);
+  --vidro-brilho: rgb(255 255 255 / 16%);
+  --vidro-ativo: rgb(255 255 255 / 94%);
+  --vidro-ativo-texto: #04121a;
+  --sombra-vidro: 0 18px 40px -18px rgb(0 0 0 / 55%);
+  --sombra-ativo: rgb(6 182 212 / 50%);
+  --logo: linear-gradient(135deg, #06b6d4, #3b82f6);
+  --logo-texto: #ffffff;
+  --icone-barra: rgb(255 255 255 / 72%);
+  --cartao: rgb(255 255 255 / 4%);
+  --cartao-borda: rgb(255 255 255 / 8%);
+  --c1: #22d3ee;
+  --c2: #38bdf8;
+  --c3: #2dd4bf;
+  --c4: #fb923c;
+}
+
+/* ---------- Céu (claro) ---------- */
+[data-paleta="ceu"] {
+  --fundo: #f2f6fb;
+  --superficie: rgb(255 255 255 / 64%);
+  --superficie-2: rgb(255 255 255 / 58%);
+  --superficie-3: rgb(17 24 39 / 5%);
+  --hover: rgb(255 255 255 / 75%);
+  --borda: rgb(17 24 39 / 8%);
+  --borda-forte: rgb(17 24 39 / 14%);
+  --texto: #111827;
+  --texto-suave: #4b5563;
+  --texto-fraco: #7b8494;
+  --contraste: #111827;
+  --contraste-texto: #ffffff;
+  --acento: #2563eb;
+  --acento-forte: #1d4ed8;
+  --acento-suave: rgb(37 99 235 / 11%);
+  --acento-texto: #1d4ed8;
+  --barra: rgb(17 24 39 / 7%);
+  --malha:
+    radial-gradient(700px 500px at 5% 15%, rgb(125 211 252 / 58%), transparent 60%),
+    radial-gradient(650px 520px at 95% 0%, rgb(253 186 116 / 52%), transparent 60%),
+    radial-gradient(800px 600px at 55% 110%, rgb(196 181 253 / 42%), transparent 60%);
+  --vidro: rgb(255 255 255 / 55%);
+  --vidro-borda: rgb(255 255 255 / 85%);
+  --vidro-brilho: rgb(255 255 255 / 95%);
+  --vidro-ativo: #2563eb;
+  --vidro-ativo-texto: #ffffff;
+  --sombra-vidro: 0 18px 40px -20px rgb(30 50 90 / 25%);
+  --sombra-ativo: rgb(37 99 235 / 40%);
+  --logo: linear-gradient(135deg, #2563eb, #06b6d4);
+  --logo-texto: #ffffff;
+  --icone-barra: #4b5563;
+  --cartao: rgb(255 255 255 / 64%);
+  --cartao-borda: rgb(255 255 255 / 90%);
+  --botao: #2563eb;
+  --botao-texto: #ffffff;
+  --c1: #2563eb;
+  --c2: #ea580c;
+  --c3: #0891b2;
+  --c4: #db2777;
+}
+
+/* ---------- Lavanda (claro) ---------- */
+[data-paleta="lavanda"] {
+  --fundo: #f3f1fb;
+  --superficie: rgb(255 255 255 / 64%);
+  --superficie-2: rgb(255 255 255 / 58%);
+  --superficie-3: rgb(21 19 31 / 5%);
+  --hover: rgb(255 255 255 / 75%);
+  --borda: rgb(21 19 31 / 8%);
+  --borda-forte: rgb(21 19 31 / 14%);
+  --texto: #15131f;
+  --texto-suave: #4e4a5e;
+  --texto-fraco: #7d7890;
+  --contraste: #15131f;
+  --contraste-texto: #ffffff;
+  --acento: #7c3aed;
+  --acento-forte: #6d28d9;
+  --acento-suave: rgb(124 58 237 / 11%);
+  --acento-texto: #6d28d9;
+  --barra: rgb(21 19 31 / 7%);
+  --malha:
+    radial-gradient(700px 500px at 5% 10%, rgb(167 139 250 / 52%), transparent 60%),
+    radial-gradient(650px 520px at 95% 0%, rgb(147 197 253 / 50%), transparent 60%),
+    radial-gradient(800px 600px at 60% 110%, rgb(249 168 212 / 46%), transparent 60%);
+  --vidro: rgb(255 255 255 / 55%);
+  --vidro-borda: rgb(255 255 255 / 85%);
+  --vidro-brilho: rgb(255 255 255 / 95%);
+  --vidro-ativo: #15131f;
+  --vidro-ativo-texto: #ffffff;
+  --sombra-vidro: 0 18px 40px -20px rgb(40 20 80 / 22%);
+  --sombra-ativo: rgb(21 19 31 / 30%);
+  --logo: linear-gradient(135deg, #7c3aed, #ec4899);
+  --logo-texto: #ffffff;
+  --icone-barra: #4e4a5e;
+  --cartao: rgb(255 255 255 / 64%);
+  --cartao-borda: rgb(255 255 255 / 90%);
+  --c1: #7c3aed;
+  --c2: #2563eb;
+  --c3: #059669;
+  --c4: #e11d48;
+}
+
+/* ---------- Vidro fosco nas barras ---------- */
+.rail,
+.abas,
+.botao-topo,
+.config-menu,
+.etapas {
+  background: var(--vidro);
+  border-color: var(--vidro-borda);
+  backdrop-filter: blur(22px) saturate(170%);
+  -webkit-backdrop-filter: blur(22px) saturate(170%);
+  box-shadow:
+    inset 0 1px 0 var(--vidro-brilho),
+    var(--sombra-vidro);
+}
+
+/* O topo desfoca o que passa por trás ao rolar, sumindo aos poucos embaixo. */
+.topo {
+  background: transparent;
+}
+
+.topo::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  mask-image: linear-gradient(#000 55%, transparent);
+  -webkit-mask-image: linear-gradient(#000 55%, transparent);
+  pointer-events: none;
+}
+
+.rail-item,
+.aba {
+  color: var(--icone-barra);
+}
+
+.rail-item.ativo,
+.aba.ativa,
+.config-menu a.ativo {
+  background: var(--vidro-ativo);
+  color: var(--vidro-ativo-texto);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 30%),
+    0 6px 18px -6px var(--sombra-ativo);
+}
+
+.rail-logo {
+  background: var(--logo);
+  color: var(--logo-texto);
+}
+
+.cartao,
+.kpi,
+.mini-indicador {
+  background: var(--cartao);
+  border-color: var(--cartao-borda);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+}
+
+.botao:not(.secundario):not(.link):not(.ia) {
+  background: var(--botao);
+  color: var(--botao-texto);
+}
+
+.barra-salvar .botao:not(.secundario) {
+  background: var(--contraste-texto);
+  color: var(--contraste);
+}
+
+.contador {
+  background: var(--acento);
+  border-color: transparent;
+}
+
+/* Cores nos ícones dos indicadores e no gráfico */
+.kpi:nth-child(1) .icone-redondo {
+  background: color-mix(in srgb, var(--c1) 18%, transparent);
+  color: var(--c1);
+}
+
+.kpi:nth-child(2) .icone-redondo {
+  background: color-mix(in srgb, var(--c2) 18%, transparent);
+  color: var(--c2);
+}
+
+.kpi:nth-child(3) .icone-redondo {
+  background: color-mix(in srgb, var(--c3) 18%, transparent);
+  color: var(--c3);
+}
+
+.kpi:nth-child(4) .icone-redondo {
+  background: color-mix(in srgb, var(--c4) 18%, transparent);
+  color: var(--c4);
+}
+
+.kpi.risco .icone-redondo {
+  background: var(--vermelho-fundo);
+  color: var(--vermelho);
+}
+
+.barra.destaque {
+  background: linear-gradient(180deg, var(--c1), var(--acento));
+  box-shadow: 0 10px 30px -10px var(--acento);
+}
+
+/* ---------- Escolha de tema (Aparência) ---------- */
+.segmentado.grande button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 16px;
+  font-size: 0.86rem;
+}
+
+.temas {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+.tema-previa {
+  position: relative;
+  overflow: hidden;
+}
+
+.tema-ponto {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgb(255 255 255 / 70%);
+}
+
+.tema-texto {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tema-texto strong {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tema-texto small {
+  font-weight: 400;
+  font-size: 0.8rem;
+  color: var(--texto-fraco);
 }

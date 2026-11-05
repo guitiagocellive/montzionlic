@@ -1,44 +1,51 @@
-import type { Tema } from "../shared/tipos";
+import type { Tema, TemaClaro, TemaEscuro } from "../shared/tipos";
 
-// Tema claro/escuro. "sistema" segue a configuração do computador/celular.
+// Modo (claro/escuro/sistema) + o tema escolhido para cada modo.
+// O resultado vai para <html data-tema="claro|escuro" data-paleta="ceu|lavanda|oceano|grafite">.
+
+export interface PreferenciaTema {
+  modo: Tema;
+  claro: TemaClaro;
+  escuro: TemaEscuro;
+}
 
 const consulta = () => window.matchMedia("(prefers-color-scheme: light)");
 
-export function temaSalvo(): Tema {
+function guardar(p: PreferenciaTema) {
   try {
-    const t = localStorage.getItem("tema");
-    return t === "claro" || t === "escuro" || t === "sistema" ? t : "escuro";
-  } catch {
-    return "escuro";
-  }
-}
-
-function resolver(tema: Tema): "claro" | "escuro" {
-  if (tema === "sistema") return consulta().matches ? "claro" : "escuro";
-  return tema;
-}
-
-let ouvinte: (() => void) | null = null;
-
-export function aplicarTema(tema: Tema) {
-  try {
-    localStorage.setItem("tema", tema);
+    localStorage.setItem("tema", p.modo);
+    localStorage.setItem("tema-claro", p.claro);
+    localStorage.setItem("tema-escuro", p.escuro);
   } catch {
     // sem armazenamento: só aplica
   }
+}
+
+let atual: PreferenciaTema = { modo: "escuro", claro: "ceu", escuro: "oceano" };
+let ouvinte: (() => void) | null = null;
+
+export function aplicarTema(p: PreferenciaTema) {
+  atual = p;
+  guardar(p);
+  const modo = p.modo === "sistema" ? (consulta().matches ? "claro" : "escuro") : p.modo;
   const html = document.documentElement;
-  const real = resolver(tema);
-  html.dataset.tema = real;
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", real === "claro" ? "#f4f4f6" : "#0a0a0c");
+  html.dataset.tema = modo;
+  html.dataset.paleta = modo === "claro" ? p.claro : p.escuro;
+  const cor = getComputedStyle(html).getPropertyValue("--fundo").trim();
+  if (cor) document.querySelector('meta[name="theme-color"]')?.setAttribute("content", cor);
 
   if (ouvinte) consulta().removeEventListener("change", ouvinte);
   ouvinte = null;
-  if (tema === "sistema") {
-    ouvinte = () => aplicarTema("sistema");
+  if (p.modo === "sistema") {
+    ouvinte = () => aplicarTema(atual);
     consulta().addEventListener("change", ouvinte);
   }
 }
 
-export function temaAtual(): "claro" | "escuro" {
+export function preferenciaAtual(): PreferenciaTema {
+  return atual;
+}
+
+export function modoVisivel(): "claro" | "escuro" {
   return document.documentElement.dataset.tema === "claro" ? "claro" : "escuro";
 }

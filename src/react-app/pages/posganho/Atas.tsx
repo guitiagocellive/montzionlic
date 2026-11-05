@@ -1,6 +1,7 @@
 import { CalendarRange, FileSignature, Pencil, Plus, Search, Timer, Trash2 } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { diasAte } from "../../../shared/negocio";
+import { podeEditar } from "../../../shared/permissoes";
 import type { Ata, AtaItem, LicitacaoResumo, Usuario } from "../../../shared/tipos";
 import { api, mensagemDeErro } from "../../api";
 import { Alerta, Campo } from "../../components/Formulario";
@@ -32,6 +33,7 @@ const ROTULOS: Record<Situacao, string> = {
 };
 
 export function Atas({ usuario }: { usuario: Usuario }) {
+  const editar = podeEditar(usuario.permissoes, "atas");
   const [atas, setAtas] = useState<Ata[] | null>(null);
   const [busca, setBusca] = useState("");
   const [filtro, setFiltro] = useState<"todas" | Situacao>("todas");
@@ -83,9 +85,11 @@ export function Atas({ usuario }: { usuario: Usuario }) {
           <h1>Atas vigentes</h1>
           <p className="texto-suave">Atas de registro de preço com vigência, prazo de entrega e produtos.</p>
         </div>
-        <button className="botao" onClick={() => setEditando("nova")}>
-          <Plus aria-hidden="true" /> Nova ata
-        </button>
+        {editar && (
+          <button className="botao" onClick={() => setEditando("nova")}>
+            <Plus aria-hidden="true" /> Nova ata
+          </button>
+        )}
       </div>
 
       <div className="barra-filtros entrar" style={{ ["--i" as string]: 1 }}>
@@ -188,9 +192,11 @@ export function Atas({ usuario }: { usuario: Usuario }) {
                     Valor registrado <strong>{formatarMoeda(total)}</strong>
                   </span>
                   <div>
-                    <button className="botao-icone" onClick={() => setEditando(ata)} aria-label="Editar ata">
-                      <Pencil />
-                    </button>
+                    {editar && (
+                      <button className="botao-icone" onClick={() => setEditando(ata)} aria-label="Editar ata">
+                        <Pencil />
+                      </button>
+                    )}
                     {usuario.papel === "admin" && (
                       <button className="botao-icone perigo" onClick={() => excluir(ata)} aria-label="Excluir ata">
                         <Trash2 />

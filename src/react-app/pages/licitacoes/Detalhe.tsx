@@ -1,6 +1,7 @@
 import { ArrowLeft, Calculator, ClipboardList, ExternalLink, FolderOpen, ListChecks, Trash2, Trophy } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { ETAPAS_LICITACAO, ETAPAS_EXECUCAO, nomeEtapa } from "../../../shared/negocio";
+import { podeEditar, podeVer } from "../../../shared/permissoes";
 import type { Arquivo, Cotacao, ItemLicitacao, Licitacao, Usuario } from "../../../shared/tipos";
 import { api, mensagemDeErro } from "../../api";
 import { AbaArquivos } from "../../components/AbaArquivos";
@@ -104,7 +105,7 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
       icone: Calculator,
       completo: cotacoes.length > 0,
     },
-  ];
+  ].filter((p) => p.chave !== "orcamento" || podeVer(usuario.permissoes, "orcamento"));
 
   return (
     <>
@@ -128,7 +129,12 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
           </p>
         </div>
         <div className="ficha-acoes">
-          <select value={l.etapa} onChange={(e) => mudarEtapa(e.target.value)} aria-label="Mover para etapa">
+          <select
+            value={l.etapa}
+            onChange={(e) => mudarEtapa(e.target.value)}
+            aria-label="Mover para etapa"
+            disabled={!podeEditar(usuario.permissoes, "licitacoes")}
+          >
             {ETAPAS_LICITACAO.map((e) => (
               <option key={e.chave} value={e.chave}>
                 {e.nome}

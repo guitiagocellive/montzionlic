@@ -4,16 +4,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex, nofollow" />
-    <meta name="theme-color" content="#0a0a0c" />
+    <meta name="theme-color" content="#04121a" />
     <script>
       // Aplica o tema salvo antes de desenhar a página (evita piscar).
-      try {
-        var t = localStorage.getItem("tema") || "escuro";
-        if (t === "sistema") t = matchMedia("(prefers-color-scheme: light)").matches ? "claro" : "escuro";
-        document.documentElement.dataset.tema = t;
-      } catch (e) {
-        document.documentElement.dataset.tema = "escuro";
-      }
+      (function () {
+        var h = document.documentElement;
+        try {
+          var t = localStorage.getItem("tema") || "escuro";
+          if (t === "sistema") t = matchMedia("(prefers-color-scheme: light)").matches ? "claro" : "escuro";
+          h.dataset.tema = t;
+          h.dataset.paleta = t === "claro" ? localStorage.getItem("tema-claro") || "ceu" : localStorage.getItem("tema-escuro") || "oceano";
+        } catch (e) {
+          h.dataset.tema = "escuro";
+          h.dataset.paleta = "oceano";
+        }
+      })();
     </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Montzion</title>

@@ -1,7 +1,8 @@
 import { CalendarClock, FileText, Gavel, ListChecks, Plus, Search, Tag } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { diasAte, ETAPAS_LICITACAO, MODALIDADES } from "../../../shared/negocio";
-import type { LicitacaoResumo } from "../../../shared/tipos";
+import { podeEditar } from "../../../shared/permissoes";
+import type { LicitacaoResumo, Usuario } from "../../../shared/tipos";
 import { api, mensagemDeErro } from "../../api";
 import { Avatar } from "../../components/Avatar";
 import { Alerta, Campo } from "../../components/Formulario";
@@ -10,11 +11,17 @@ import { avisar, Carregando, CampoSelect, Modal } from "../../components/Ui";
 import { formatarDataCurta, formatarMoeda, hojeIso, textoPrazo } from "../../formato";
 import { navegar } from "../../rota";
 
-export function QuadroLicitacoes() {
+export function QuadroLicitacoes({ usuario }: { usuario: Usuario }) {
+  const editar = podeEditar(usuario.permissoes, "licitacoes");
   const [licitacoes, setLicitacoes] = useState<LicitacaoResumo[] | null>(null);
   const [busca, setBusca] = useState("");
   const [nicho, setNicho] = useState("");
-  const [novaEm, setNovaEm] = useState<string | null>(null);
+  // ?nova=1 (vindo do painel) já abre o formulário.
+  const [novaEm, setNovaEm] = useState<string | null>(() => {
+    if (!new URLSearchParams(location.search).get("nova")) return null;
+    history.replaceState(null, "", "/licitacoes");
+    return editar ? "estudar" : null;
+  });
 
   async function carregar() {
     try {
@@ -68,11 +75,15 @@ export function QuadroLicitacoes() {
         <div>
           <span className="sobretitulo">Licitações</span>
           <h1>Quadro de licitações</h1>
-          <p className="texto-suave">Arraste os cards entre as etapas. Clique para abrir a ficha.</p>
+          <p className="texto-suave">
+            {editar ? "Arraste os cards entre as etapas. Clique para abrir a ficha." : "Você está no modo de visualização."}
+          </p>
         </div>
-        <button className="botao" onClick={() => setNovaEm("estudar")}>
-          <Plus aria-hidden="true" /> Nova licitação
-        </button>
+        {editar && (
+          <button className="botao" onClick={() => setNovaEm("estudar")}>
+            <Plus aria-hidden="true" /> Nova licitação
+          </button>
+        )}
       </div>
 
       <div className="barra-filtros entrar" style={{ ["--i" as string]: 1 }}>
@@ -102,7 +113,8 @@ export function QuadroLicitacoes() {
             cards={filtradas}
             aoAbrir={(c) => navegar(`/licitacoes/${c.id}`)}
             aoMover={mover}
-            aoNovo={(etapa) => setNovaEm(etapa)}
+            aoNovo={editar ? (etapa) => setNovaEm(etapa) : undefined}
+            somenteLeitura={!editar}
             rodapeColuna={(_, cards) => {
               const total = cards.reduce((s, c) => s + (c.valor_estimado ?? 0), 0);
               return total > 0 ? <div className="coluna-rodape">{formatarMoeda(total)} estimados</div> : null;

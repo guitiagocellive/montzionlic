@@ -1,7 +1,8 @@
 import { CalendarClock, Package, Plus, Search } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { diasAte, ETAPAS_ANTES_DA_ENTREGA, ETAPAS_EXECUCAO } from "../../../shared/negocio";
-import type { ExecucaoResumo, LicitacaoResumo } from "../../../shared/tipos";
+import { podeEditar } from "../../../shared/permissoes";
+import type { ExecucaoResumo, LicitacaoResumo, Usuario } from "../../../shared/tipos";
 import { api, mensagemDeErro } from "../../api";
 import { Alerta } from "../../components/Formulario";
 import { Kanban } from "../../components/Kanban";
@@ -9,7 +10,8 @@ import { avisar, CampoSelect, Carregando, Modal } from "../../components/Ui";
 import { formatarDataCurta, formatarMoeda, hojeIso, textoPrazo } from "../../formato";
 import { navegar } from "../../rota";
 
-export function QuadroExecucao() {
+export function QuadroExecucao({ usuario }: { usuario: Usuario }) {
+  const editar = podeEditar(usuario.permissoes, "posganho");
   const [execucoes, setExecucoes] = useState<ExecucaoResumo[] | null>(null);
   const [busca, setBusca] = useState("");
   const [novo, setNovo] = useState(false);
@@ -60,9 +62,11 @@ export function QuadroExecucao() {
             Licitações ganhas entram aqui sozinhas. Cada card é um empenho, do recebimento até o atestado.
           </p>
         </div>
-        <button className="botao" onClick={() => setNovo(true)}>
-          <Plus aria-hidden="true" /> Novo empenho
-        </button>
+        {editar && (
+          <button className="botao" onClick={() => setNovo(true)}>
+            <Plus aria-hidden="true" /> Novo empenho
+          </button>
+        )}
       </div>
 
       <div className="barra-filtros entrar" style={{ ["--i" as string]: 1 }}>
@@ -86,6 +90,7 @@ export function QuadroExecucao() {
             cards={filtradas}
             aoAbrir={(c) => navegar(`/pos-ganho/${c.id}`)}
             aoMover={mover}
+            somenteLeitura={!editar}
             rodapeColuna={(_, cards) => {
               const total = cards.reduce((s, c) => s + (c.valor_total ?? 0), 0);
               return total > 0 ? <div className="coluna-rodape">{formatarMoeda(total)}</div> : null;

@@ -66,11 +66,11 @@ function Pagina({ caminho, usuario, aoMudarUsuario }: { caminho: string; usuario
     case "/alertas":
       return <Alertas usuario={usuario} />;
     case "/licitacoes":
-      return podeVer(p, "licitacoes") ? <QuadroLicitacoes /> : <SemAcesso />;
+      return podeVer(p, "licitacoes") ? <QuadroLicitacoes usuario={usuario} /> : <SemAcesso />;
     case "/fornecedores":
       return podeVer(p, "fornecedores") ? <Fornecedores usuario={usuario} /> : <SemAcesso />;
     case "/pos-ganho":
-      return podeVer(p, "posganho") ? <QuadroExecucao /> : <SemAcesso />;
+      return podeVer(p, "posganho") ? <QuadroExecucao usuario={usuario} /> : <SemAcesso />;
     case "/atas":
       return podeVer(p, "atas") ? <Atas usuario={usuario} /> : <SemAcesso />;
     case "/documentacao":
@@ -85,7 +85,7 @@ function Conteudo() {
   const caminho = useCaminho();
 
   const entrar = useCallback((usuario: Usuario) => {
-    aplicarTema(usuario.tema);
+    aplicarTema({ modo: usuario.tema, claro: usuario.temaClaro, escuro: usuario.temaEscuro });
     setEstado({ tipo: "logado", usuario });
   }, []);
 

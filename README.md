@@ -28,7 +28,10 @@ Não existe cadastro público: só um administrador adiciona pessoas.
 
 ## Configurações (engrenagem)
 
-- **Meu perfil:** foto, nome, cargo e cor no time. **Aparência:** tema escuro, claro ou igual ao sistema.
+- **Meu perfil:** foto, nome, cargo e cor no time.
+- **Aparência:** modo claro, escuro ou automático; tema claro (Céu ou Lavanda) e tema escuro
+  (Oceano ou Grafite). Barras com efeito de vidro fosco. Novas paletas ficam em `estilos.css`
+  (`[data-paleta="..."]`) e na lista `TEMAS_CLAROS`/`TEMAS_ESCUROS` de `src/shared/tipos.ts`.
 - **Empresa e margens** (admin): margem de lucro e impostos padrão das licitações novas.
 - **Alertas** (admin): com quantos dias de antecedência avisar sessões, entregas e atas.
 - **Equipe e acessos** (admin): convite por link (uso único, com validade), perfil, cor e acesso por
@@ -102,4 +105,5 @@ Abra http://localhost:5173.
 | `npm run db:migrate:local` | Aplica as migrações no banco local |
 | `npm run db:migrate:remote` | Aplica as migrações no banco da Cloudflare |
 | `npm run deploy` | Build + migrações + publicação (pelo seu computador) |
+| `ESTADO=/pasta npm run dev` | Roda com um banco local separado (para testar do zero) |
 | `npm run cf-typegen` | Regenera os tipos depois de mudar o `wrangler.jsonc` |
