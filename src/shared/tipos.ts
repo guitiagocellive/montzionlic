@@ -119,6 +119,52 @@ export interface ContaBancaria {
   pix: string | null;
   titular: string | null;
   padrao: number;
+  /** Conta de uma empresa específica (vazio = qualquer empresa). */
+  empresa_id: number | null;
+}
+
+export interface Empresa {
+  id: number;
+  nome: string;
+  cnpj: string | null;
+  ie: string | null;
+  endereco: string | null;
+  cidade: string | null;
+  telefone: string | null;
+  email: string | null;
+  representante_nome: string | null;
+  representante_cpf: string | null;
+  representante_rg: string | null;
+  representante_cargo: string | null;
+  marca_dagua: number;
+  padrao: number;
+  tem_logo: number;
+}
+
+export interface Declaracao {
+  id: number;
+  tipo: "declaracao" | "condicao";
+  titulo: string;
+  texto: string;
+  padrao: number;
+  ordem: number;
+}
+
+/** O que foi preenchido na aba Proposta de uma licitação (fica salvo). */
+export interface RascunhoProposta {
+  empresa_id: number | null;
+  conta_id: number | null;
+  modelo_id: number | null;
+  contratacao: string;
+  numero: string;
+  data: string;
+  validade_dias: string;
+  prazo_entrega: string;
+  garantia: string;
+  observacoes: string;
+  declaracoes: number[];
+  extras: { titulo: string; texto: string }[];
+  itens: Record<string, { incluir: boolean; marca: string; valor: string; descricao: string }>;
 }
 
 export interface ModeloProposta {

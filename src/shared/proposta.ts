@@ -1,5 +1,4 @@
-import { reaisPorExtenso } from "./extenso";
-import type { Configuracoes } from "./tipos";
+import { numeroPorExtenso, reaisPorExtenso } from "./extenso";
 
 // Dados da proposta comercial (usados no Word e no PDF).
 // Preenche um modelo de proposta (.docx) com os dados da licitação.
@@ -21,9 +20,29 @@ function somarDias(iso: string, dias: number) {
   return d.toISOString().slice(0, 10);
 }
 
+export interface EmpresaProposta {
+  id: number;
+  nome: string;
+  cnpj: string | null;
+  ie: string | null;
+  endereco: string | null;
+  cidade: string | null;
+  telefone: string | null;
+  email: string | null;
+  representante_nome: string | null;
+  representante_cpf: string | null;
+  representante_rg: string | null;
+  representante_cargo: string | null;
+}
+
 export interface DadosProposta {
-  config: Configuracoes;
+  empresa: EmpresaProposta;
+  /** Data da proposta (AAAA-MM-DD). */
   hoje: string;
+  contratacao: string;
+  numeroProposta: string;
+  condicoes: string[];
+  declaracoes: { titulo: string; texto: string }[];
   licitacao: {
     numero: string | null;
     uasg: string | null;
@@ -62,6 +81,10 @@ export const CAMPOS_MODELO = [
   ["representante_nome", "Representante legal"],
   ["representante_cpf", "CPF do representante"],
   ["representante_cargo", "Cargo do representante"],
+  ["representante_rg", "RG do representante"],
+  ["contratacao", "Nº da contratação"],
+  ["numero_proposta", "Nº da proposta"],
+  ["validade_extenso", "Validade por extenso (ex.: sessenta)"],
   ["orgao", "Órgão"],
   ["uasg", "UASG"],
   ["numero_licitacao", "Número da licitação"],
@@ -110,18 +133,24 @@ export function montarDados(d: DadosProposta) {
     valor_total: moeda.format(i.valorUnitario * i.quantidade),
   }));
   const total = d.itens.reduce((s, i) => s + i.valorUnitario * i.quantidade, 0);
-  const c = d.config;
+  const e = d.empresa;
   return {
-    empresa_nome: c.empresa_nome,
-    empresa_cnpj: c.empresa_cnpj,
-    empresa_ie: c.empresa_ie,
-    empresa_endereco: c.empresa_endereco,
-    empresa_cidade: c.empresa_cidade,
-    empresa_telefone: c.empresa_telefone,
-    empresa_email: c.empresa_email,
-    representante_nome: c.representante_nome,
-    representante_cpf: c.representante_cpf,
-    representante_cargo: c.representante_cargo,
+    empresa_id: e.id,
+    empresa_nome: e.nome,
+    empresa_cnpj: e.cnpj ?? "",
+    empresa_ie: e.ie ?? "",
+    empresa_endereco: e.endereco ?? "",
+    empresa_cidade: e.cidade ?? "",
+    empresa_telefone: e.telefone ?? "",
+    empresa_email: e.email ?? "",
+    representante_nome: e.representante_nome ?? "",
+    representante_cpf: e.representante_cpf ?? "",
+    representante_rg: e.representante_rg ?? "",
+    representante_cargo: e.representante_cargo ?? "",
+    contratacao: d.contratacao,
+    numero_proposta: d.numeroProposta,
+    condicoes: d.condicoes.map((texto) => ({ texto })),
+    declaracoes: d.declaracoes,
     orgao: d.licitacao.orgao ?? "",
     uasg: d.licitacao.uasg ?? "",
     numero_licitacao: d.licitacao.numero ?? "",
@@ -133,6 +162,7 @@ export function montarDados(d: DadosProposta) {
     data_proposta: dataBr(d.hoje),
     data_extenso: dataExtenso(d.hoje),
     validade_dias: String(d.validadeDias),
+    validade_extenso: numeroPorExtenso(d.validadeDias),
     validade_data: dataBr(somarDias(d.hoje, d.validadeDias)),
     prazo_entrega: d.prazoEntrega,
     garantia: d.garantia,

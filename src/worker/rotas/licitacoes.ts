@@ -5,12 +5,12 @@ import { type Ambiente, exigirAdmin, exigirLogin, exigirModulo } from "../auth";
 import { notificar } from "../notificacoes";
 import { comandoEvento, registrarEvento } from "../atividades";
 import { hojeBrasilia, lerConfiguracoes } from "../configuracoes";
-import { DECLARACAO_PADRAO, montarDados } from "../../shared/proposta";
+import { type EmpresaProposta, montarDados } from "../../shared/proposta";
 import { comandoUsarPedido, pedidoValido } from "../pedidosAssinatura";
 import { nomeEtapa } from "../../shared/negocio";
 import { buscar, comandoAtualizar, comExtras, inserir } from "../banco";
 import { calcularPreco } from "../../shared/negocio";
-import { type Esquema, idDaRota, lerCampos, lerJson, temErro } from "../validacao";
+import { type Esquema, idDaRota, lerCampos, lerJson, temErro, texto } from "../validacao";
 
 export const rotasLicitacoes = new Hono<Ambiente>();
 rotasLicitacoes.use(exigirLogin);
@@ -539,16 +539,49 @@ rotasLicitacoes.post("/:id/proposta", async (c) => {
     });
   }
 
-  const config = await lerConfiguracoes(c.env.DB);
+  // Empresa que participa (ou a padrão)
+  const empresaId = idDaRota(String(corpo.empresa_id ?? ""));
+  const empresa = await c.env.DB.prepare(
+    `SELECT id, nome, cnpj, ie, endereco, cidade, telefone, email, representante_nome, representante_cpf, representante_rg,
+            representante_cargo, marca_dagua, (logo_chave IS NOT NULL) AS tem_logo
+       FROM empresas ${empresaId ? "WHERE id = ?" : "ORDER BY padrao DESC, id"} LIMIT 1`,
+  )
+    .bind(...(empresaId ? [empresaId] : []))
+    .first<EmpresaProposta & { marca_dagua: number; tem_logo: number }>();
+  if (!empresa) return c.json({ erro: "Cadastre a empresa em Configurações → Empresas." }, 400);
+
+  // Declarações e condições escolhidas (na ordem da biblioteca) + as extras desta licitação
+  const idsDeclaracoes = Array.isArray(corpo.declaracoes) ? corpo.declaracoes.map(Number).filter((n) => Number.isInteger(n) && n > 0).slice(0, 100) : [];
+  const escolhidas = idsDeclaracoes.length
+    ? (
+        await c.env.DB.prepare(
+          `SELECT tipo, titulo, texto FROM declaracoes WHERE id IN (${idsDeclaracoes.map(() => "?").join(",")}) ORDER BY ordem, id`,
+        )
+          .bind(...idsDeclaracoes)
+          .all<{ tipo: string; titulo: string; texto: string }>()
+      ).results
+    : [];
+  const extras = (Array.isArray(corpo.extras) ? corpo.extras : [])
+    .slice(0, 30)
+    .map((x) => x as Record<string, unknown>)
+    .map((x) => ({ titulo: texto(x.titulo).slice(0, 200), texto: (typeof x.texto === "string" ? x.texto.trim() : "").slice(0, 6000) }))
+    .filter((x) => x.texto);
+
+  const data = typeof corpo.data === "string" && /^\d{4}-\d{2}-\d{2}$/.test(corpo.data) ? corpo.data : hojeBrasilia();
+  const textoCurto = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
   const dados = montarDados({
-    config,
-    hoje: hojeBrasilia(),
+    empresa,
+    hoje: data,
+    contratacao: textoCurto(corpo.contratacao, 80),
+    numeroProposta: textoCurto(corpo.numero, 40),
+    condicoes: escolhidas.filter((d) => d.tipo === "condicao").map((d) => d.texto),
+    declaracoes: [...escolhidas.filter((d) => d.tipo === "declaracao").map((d) => ({ titulo: d.titulo, texto: d.texto })), ...extras],
     licitacao: lic,
     conta,
     validadeDias: validade,
-    prazoEntrega: typeof corpo.prazo_entrega === "string" ? corpo.prazo_entrega.trim().slice(0, 300) : "",
-    garantia: typeof corpo.garantia === "string" ? corpo.garantia.trim().slice(0, 300) : "",
-    observacoes: typeof corpo.observacoes === "string" ? corpo.observacoes.trim().slice(0, 4000) : "",
+    prazoEntrega: textoCurto(corpo.prazo_entrega, 300),
+    garantia: textoCurto(corpo.garantia, 300),
+    observacoes: textoCurto(corpo.observacoes, 4000),
     itens,
   });
   const nome = `Proposta ${lic.numero ?? ""} ${lic.orgao ?? ""}`.replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim().slice(0, 110);
@@ -557,8 +590,54 @@ rotasLicitacoes.post("/:id/proposta", async (c) => {
     dados,
     nome,
     modelo: modelo ? { id: modelo.id, nome: modelo.nome } : null,
-    pdf: { declaracao: config.proposta_declaracao || DECLARACAO_PADRAO, tem_logo: !!config.empresa_logo_chave },
+    pdf: { tem_logo: !!empresa.tem_logo, marca_dagua: !!empresa.marca_dagua, empresa_id: empresa.id },
   });
+});
+
+// Rascunho da proposta desta licitação (o que foi preenchido na aba Proposta).
+rotasLicitacoes.get("/:id/proposta/rascunho", async (c) => {
+  const id = idDaRota(c.req.param("id"));
+  if (!id) return c.json({ erro: "Licitação inválida." }, 400);
+  if (!podeVer(c.get("usuario").permissoes, "orcamento")) return c.json({ erro: "Você não tem acesso a preços." }, 403);
+  const linha = await c.env.DB.prepare("SELECT dados, atualizado_em FROM propostas_licitacao WHERE licitacao_id = ?")
+    .bind(id)
+    .first<{ dados: string; atualizado_em: string }>();
+  const ano = hojeBrasilia().slice(0, 4);
+  const feitas = await c.env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM propostas_licitacao WHERE substr(atualizado_em, 1, 4) = ? AND licitacao_id <> ?",
+  )
+    .bind(ano, id)
+    .first<{ n: number }>();
+  let rascunho: unknown = null;
+  try {
+    rascunho = linha ? JSON.parse(linha.dados) : null;
+  } catch {
+    rascunho = null;
+  }
+  return c.json({
+    rascunho,
+    atualizado_em: linha?.atualizado_em ?? null,
+    sugestao_numero: `${String((feitas?.n ?? 0) + 1).padStart(3, "0")}/${ano}`,
+  });
+});
+
+rotasLicitacoes.put("/:id/proposta/rascunho", async (c) => {
+  const id = idDaRota(c.req.param("id"));
+  if (!id) return c.json({ erro: "Licitação inválida." }, 400);
+  const usuario = c.get("usuario");
+  if (!podeVer(usuario.permissoes, "orcamento")) return c.json({ erro: "Você não tem acesso a preços." }, 403);
+  const corpo = await lerJson(c);
+  if (!corpo || typeof corpo.rascunho !== "object" || corpo.rascunho === null) return c.json({ erro: "Requisição inválida." }, 400);
+  const dados = JSON.stringify(corpo.rascunho);
+  if (dados.length > 200_000) return c.json({ erro: "Rascunho grande demais." }, 400);
+  if (!(await buscar(c.env.DB, "licitacoes", id))) return c.json({ erro: "Licitação não encontrada." }, 404);
+  await c.env.DB.prepare(
+    `INSERT INTO propostas_licitacao (licitacao_id, dados, atualizado_por) VALUES (?, ?, ?)
+     ON CONFLICT(licitacao_id) DO UPDATE SET dados = excluded.dados, atualizado_por = excluded.atualizado_por, atualizado_em = datetime('now')`,
+  )
+    .bind(id, dados, usuario.id)
+    .run();
+  return c.json({ ok: true });
 });
 
 // Guarda a proposta (Word ou PDF, assinado ou não) montada no navegador.

@@ -7,7 +7,7 @@ export interface RespostaDados {
   dados: DadosMontados;
   nome: string;
   modelo: { id: number; nome: string } | null;
-  pdf: { declaracao: string; tem_logo: boolean };
+  pdf: { tem_logo: boolean; marca_dagua: boolean; empresa_id: number };
 }
 
 const TIPO_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -36,13 +36,13 @@ export async function montarPdf(r: RespostaDados): Promise<Uint8Array> {
   let logo: { bytes: Uint8Array; tipo: string } | null = null;
   if (r.pdf.tem_logo) {
     try {
-      const resposta = await baixar("/configuracoes/logo");
+      const resposta = await baixar(`/empresas/${r.pdf.empresa_id}/logo`);
       logo = { bytes: new Uint8Array(await resposta.arrayBuffer()), tipo: resposta.headers.get("content-type") ?? "image/png" };
     } catch {
       logo = null;
     }
   }
-  return gerarPropostaPdf(r.dados, { logo, declaracao: r.pdf.declaracao });
+  return gerarPropostaPdf(r.dados, { logo, marcaDagua: r.pdf.marca_dagua });
 }
 
 /** Guarda a proposta montada nos arquivos da licitação. */

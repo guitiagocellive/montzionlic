@@ -32,9 +32,12 @@ Não existe cadastro público: só um administrador adiciona pessoas.
 - **Aparência:** modo claro, escuro ou automático; tema claro (Céu ou Lavanda) e tema escuro
   (Oceano ou Grafite). Barras com efeito de vidro fosco. Novas paletas ficam em `estilos.css`
   (`[data-paleta="..."]`) e na lista `TEMAS_CLAROS`/`TEMAS_ESCUROS` de `src/shared/tipos.ts`.
-- **Empresa e margens** (admin): margem de lucro e impostos padrão das licitações novas.
+- **Empresas** (admin): uma ou mais empresas participantes, cada uma com logo (e marca d'água opcional),
+  dados cadastrais e representante legal (nome, CPF, RG, cargo).
+- **Margens e prazos** (admin): margem de lucro, impostos e validade padrão das licitações novas.
 - **Alertas** (admin): com quantos dias de antecedência avisar sessões, entregas e atas.
-- **Propostas** (admin): modelos do Word, contas bancárias, logo e declaração da proposta em PDF.
+- **Propostas** (admin): biblioteca de declarações e condições (já vem com as declarações usuais; as marcadas
+  entram em toda proposta nova), contas bancárias (de uma empresa ou de todas) e modelos do Word.
 - **Certificado digital** (admin): cadastro do certificado A1 (.pfx/.p12 + senha), validade e troca.
   O .pfx é aberto no navegador: a senha não é enviada nem guardada. A chave fica criptografada com o
   segredo `CHAVE_CERTIFICADO` do Worker e nunca volta para o navegador.
@@ -62,9 +65,13 @@ Não existe cadastro público: só um administrador adiciona pessoas.
 - **Fornecedores** por nicho, com WhatsApp, site e catálogo.
 - **Calendário** e **Painel** com números reais.
 
-- **Proposta comercial:** gera a proposta em Word a partir dos **seus modelos** (.docx) — escolha o modelo,
-  o banco para pagamento e a validade; órgão, itens, preços, total por extenso e dados da empresa entram
-  sozinhos. Campos no Word entre chaves, ex.: `{orgao}`; tabela de itens com `{#itens}` … `{/itens}`.
+- **Proposta comercial:** na aba Proposta de cada licitação você escolhe a **empresa participante**, o **banco**,
+  preenche nº da contratação, nº da proposta, data, validade, prazo de entrega e garantia, ajusta produto, marca e
+  valor de cada item, marca as **declarações** e acrescenta declarações **só daquela licitação**. Tudo fica salvo
+  sozinho naquela licitação. O PDF sai completo (logo em todas as páginas, dados da empresa, banco, representante,
+  itens, total por extenso, condições, declarações, local/data e assinatura). Também gera em Word com os **seus
+  modelos** (.docx): campos entre chaves, ex.: `{orgao}`; tabela de itens com `{#itens}` … `{/itens}`; declarações
+  com `{#declaracoes}{titulo} {texto}{/declaracoes}` e condições com `{#condicoes}{texto}{/condicoes}`.
   Modelo de exemplo em `public/modelos/modelo-proposta.docx`.
 - **Proposta em PDF e assinatura digital:** a plataforma monta a proposta em Word (seus modelos) ou em PDF
   (com logo, itens, total por extenso, condições e declaração). Também dá para enviar um PDF pronto (por exemplo,

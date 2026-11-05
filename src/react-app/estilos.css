@@ -949,6 +949,7 @@ a {
 
 .entrada input,
 .linha input,
+input.titulo-extra,
 select,
 textarea {
   width: 100%;
@@ -979,6 +980,7 @@ textarea {
 }
 
 .entrada input::placeholder,
+input.titulo-extra::placeholder,
 textarea::placeholder {
   color: var(--texto-fraco);
 }
@@ -992,6 +994,7 @@ textarea:hover {
 
 .entrada input:focus,
 .linha input:focus,
+input.titulo-extra:focus,
 select:focus,
 textarea:focus {
   outline: none;
@@ -3974,6 +3977,194 @@ a.kpi:hover {
 
 .cartao-pdf-pronto h2 svg {
   color: var(--verde);
+}
+
+/* ---------- Proposta: empresas, declarações e rascunho ---------- */
+
+.salvo-rascunho {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.76rem;
+  color: var(--texto-fraco);
+  min-height: 1em;
+}
+
+.salvo-rascunho.salvo {
+  color: var(--verde);
+}
+
+.linha-proposta .descricao-item {
+  width: 100%;
+  min-height: 40px;
+  padding: 6px 9px;
+  font-size: 0.84rem;
+  resize: vertical;
+}
+
+.grupo-declaracoes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 0;
+  border-top: 1px solid var(--borda);
+}
+
+.grupo-declaracoes:first-of-type {
+  border-top: 0;
+  padding-top: 4px;
+}
+
+.grupo-declaracoes > .botao {
+  align-self: flex-start;
+  margin-top: 4px;
+}
+
+.grupo-declaracoes-topo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 2px;
+}
+
+.grupo-declaracoes-topo strong {
+  margin-right: auto;
+}
+
+.opcao-declaracao {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--borda);
+  background: var(--superficie-2);
+  font-size: 0.84rem;
+  cursor: pointer;
+  color: var(--texto-suave);
+}
+
+.opcao-declaracao.marcada {
+  color: var(--texto);
+  border-color: color-mix(in srgb, var(--acento) 40%, var(--borda));
+  background: var(--acento-suave);
+}
+
+.opcao-declaracao input {
+  margin-top: 2px;
+  accent-color: var(--acento);
+  flex-shrink: 0;
+}
+
+.declaracao-extra {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px dashed var(--borda);
+}
+
+.declaracao-extra-topo {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.declaracao-extra .titulo-extra {
+  flex: 1;
+  font-weight: 600;
+}
+
+.declaracao-extra textarea,
+.declaracao-extra .titulo-extra {
+  width: 100%;
+}
+
+.subtitulo-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 2px;
+  font-size: 0.9rem;
+}
+
+.lista-empresas,
+.lista-declaracoes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.linha-empresa,
+.linha-declaracao {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--borda);
+  background: var(--superficie-2);
+}
+
+.empresa-logo {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: #fff;
+  color: #9ca3af;
+  overflow: hidden;
+}
+
+.empresa-logo img {
+  max-width: 90%;
+  max-height: 85%;
+  object-fit: contain;
+}
+
+.empresa-texto,
+.declaracao-texto {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.declaracao-texto span {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.linha-declaracao.desligada {
+  opacity: 0.6;
+}
+
+.declaracao-ordem {
+  display: flex;
+  flex-direction: column;
+}
+
+.declaracao-ordem .botao-icone {
+  width: 24px;
+  height: 22px;
+}
+
+@media (max-width: 640px) {
+  .linha-empresa,
+  .linha-declaracao {
+    flex-wrap: wrap;
+  }
+
+  .linha-declaracao .linha-botoes {
+    width: 100%;
+    justify-content: flex-end;
+  }
 }
 
 @media (max-width: 1180px) {

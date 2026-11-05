@@ -12,6 +12,7 @@ import { rotasDocumentos } from "./rotas/documentos";
 import { rotasPropostas } from "./rotas/propostas";
 import { rotasRelatorios } from "./rotas/relatorios";
 import { rotasCertificado } from "./rotas/certificado";
+import { rotasEmpresas } from "./rotas/empresas";
 import { rotasConfiguracoes } from "./rotas/configuracoes";
 import { rotasConta, rotasFotos } from "./rotas/conta";
 import { rotasConvitePublico, rotasConvites } from "./rotas/convites";
@@ -49,6 +50,7 @@ app.route("/documentos", rotasDocumentos);
 app.route("/propostas", rotasPropostas);
 app.route("/relatorios", rotasRelatorios);
 app.route("/certificado", rotasCertificado);
+app.route("/empresas", rotasEmpresas);
 app.route("/", rotasPainel);
 app.route("/", rotasNotificacoes);
 

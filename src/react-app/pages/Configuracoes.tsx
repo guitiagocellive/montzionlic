@@ -7,6 +7,7 @@ import {
   Download,
   FileText,
   Landmark,
+  Percent,
   Plus,
   Star,
   Upload,
@@ -17,7 +18,6 @@ import {
   Shield,
   ShieldCheck,
   ShieldAlert,
-  ImageIcon,
   Trash2,
   UserPlus,
   UserRound,
@@ -42,7 +42,7 @@ import {
   type Usuario,
 } from "../../shared/tipos";
 import { api, enviarArquivo, mensagemDeErro } from "../api";
-import type { ContaBancaria, ModeloProposta } from "../../shared/tipos";
+import type { ContaBancaria, Empresa, ModeloProposta } from "../../shared/tipos";
 import { Avatar } from "../components/Avatar";
 import { Alerta, Campo } from "../components/Formulario";
 import { FormTrocarSenha } from "../components/FormTrocarSenha";
@@ -50,6 +50,8 @@ import { avisar, CampoSelect, Carregando, Interruptor, Modal } from "../componen
 import { formatarData } from "../formato";
 import { link } from "../rota";
 import { aplicarTema } from "../tema";
+import { DeclaracoesConfig } from "./configuracoes/Declaracoes";
+import { EmpresasConfig } from "./configuracoes/Empresas";
 import { Moon, MonitorSmartphone, Sun } from "lucide-react";
 
 interface Props {
@@ -66,7 +68,8 @@ export function Configuracoes({ usuario, secao, aoMudarUsuario }: Props) {
     { chave: "seguranca", rotulo: "Segurança", icone: KeyRound },
     ...(admin
       ? [
-          { chave: "empresa", rotulo: "Empresa e margens", icone: Building2 },
+          { chave: "empresas", rotulo: "Empresas", icone: Building2 },
+          { chave: "empresa", rotulo: "Margens e prazos", icone: Percent },
           { chave: "propostas", rotulo: "Propostas", icone: FileText },
           { chave: "certificado", rotulo: "Certificado digital", icone: ShieldCheck },
           { chave: "alertas", rotulo: "Alertas", icone: BellRing },
@@ -111,9 +114,10 @@ export function Configuracoes({ usuario, secao, aoMudarUsuario }: Props) {
             </section>
           )}
           {atual === "empresa" && <Empresa />}
+          {atual === "empresas" && <EmpresasConfig />}
           {atual === "propostas" && (
             <>
-              <PropostaPdfConfig />
+              <DeclaracoesConfig />
               <PropostasConfig />
             </>
           )}
@@ -368,16 +372,6 @@ function Empresa() {
         e.preventDefault();
         const f = new FormData(e.currentTarget);
         salvar({
-          empresa_nome: String(f.get("empresa_nome")),
-          empresa_cnpj: String(f.get("empresa_cnpj")),
-          empresa_ie: String(f.get("empresa_ie")),
-          empresa_endereco: String(f.get("empresa_endereco")),
-          empresa_cidade: String(f.get("empresa_cidade")),
-          empresa_telefone: String(f.get("empresa_telefone")),
-          empresa_email: String(f.get("empresa_email")),
-          representante_nome: String(f.get("representante_nome")),
-          representante_cpf: String(f.get("representante_cpf")),
-          representante_cargo: String(f.get("representante_cargo")),
           margem_padrao: Number(f.get("margem_padrao")),
           imposto_padrao: Number(f.get("imposto_padrao")),
           validade_proposta_padrao: Number(f.get("validade_proposta_padrao")),
@@ -385,34 +379,14 @@ function Empresa() {
       }}
     >
       <section className="cartao">
-        <h2>Dados da empresa</h2>
-        <p className="descricao">Vão automaticamente para as propostas comerciais e aparecem nos convites.</p>
-        <div className="grade-3">
-          <Campo rotulo="Razão social" name="empresa_nome" defaultValue={config.empresa_nome} />
-          <Campo rotulo="CNPJ" name="empresa_cnpj" defaultValue={config.empresa_cnpj} />
-          <Campo rotulo="Inscrição estadual" name="empresa_ie" defaultValue={config.empresa_ie} />
-        </div>
-        <div className="grade-3" style={{ marginTop: 14 }}>
-          <Campo rotulo="Endereço" name="empresa_endereco" defaultValue={config.empresa_endereco} />
-          <Campo rotulo="Cidade / UF" name="empresa_cidade" defaultValue={config.empresa_cidade} placeholder="Ex.: Campinas/SP" />
-          <Campo rotulo="Telefone" name="empresa_telefone" defaultValue={config.empresa_telefone} />
-        </div>
-        <div className="grade-3" style={{ marginTop: 14 }}>
-          <Campo rotulo="E-mail" name="empresa_email" type="email" defaultValue={config.empresa_email} />
-        </div>
-      </section>
-      <section className="cartao">
-        <h2>Representante legal</h2>
-        <p className="descricao">Quem assina as propostas.</p>
-        <div className="grade-3">
-          <Campo rotulo="Nome" name="representante_nome" defaultValue={config.representante_nome} />
-          <Campo rotulo="CPF" name="representante_cpf" defaultValue={config.representante_cpf} />
-          <Campo rotulo="Cargo" name="representante_cargo" defaultValue={config.representante_cargo} placeholder="Ex.: Sócio-administrador" />
-        </div>
-      </section>
-      <section className="cartao">
         <h2>Pré-definições do orçamento e da proposta</h2>
-        <p className="descricao">Usadas em toda licitação nova. Cada licitação ainda pode ter os seus próprios valores.</p>
+        <p className="descricao">
+          Usadas em toda licitação nova. Cada licitação ainda pode ter os seus próprios valores. Os dados das empresas ficam em{" "}
+          <a className="link-suave" {...link("/configuracoes/empresas")}>
+            Empresas
+          </a>
+          .
+        </p>
         <div className="grade-3">
           <Campo rotulo="Margem de lucro padrão (%)" name="margem_padrao" type="number" step="0.1" min="0" max="95" defaultValue={config.margem_padrao} />
           <Campo rotulo="Impostos sobre a venda (%)" name="imposto_padrao" type="number" step="0.01" min="0" max="95" defaultValue={config.imposto_padrao} />
@@ -461,102 +435,6 @@ function AlertasConfig() {
         </div>
       </section>
     </form>
-  );
-}
-
-// ---------------- Proposta em PDF: logo e declaração (admin) ----------------
-
-function PropostaPdfConfig() {
-  const { config, salvar } = useConfig();
-  const [versaoLogo, setVersaoLogo] = useState(0);
-  const [temLogo, setTemLogo] = useState<boolean | null>(null);
-  const entrada = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (config) setTemLogo(!!config.empresa_logo_chave);
-  }, [config]);
-
-  async function enviarLogo(arquivo: File) {
-    try {
-      const dados = new FormData();
-      dados.set("logo", arquivo);
-      await enviarArquivo("/configuracoes/logo", dados);
-      setTemLogo(true);
-      setVersaoLogo((v) => v + 1);
-      avisar("Logo atualizado.");
-    } catch (err) {
-      avisar(mensagemDeErro(err), "erro");
-    }
-  }
-
-  async function removerLogo() {
-    if (!confirm("Remover o logo da proposta?")) return;
-    try {
-      await api("/configuracoes/logo", { metodo: "DELETE" });
-      setTemLogo(false);
-    } catch (err) {
-      avisar(mensagemDeErro(err), "erro");
-    }
-  }
-
-  if (!config) return <Carregando />;
-  return (
-    <section className="cartao">
-      <h2>Proposta em PDF</h2>
-      <p className="descricao">
-        O PDF é montado pela própria plataforma (sem modelo do Word), com os dados da empresa, os itens e o total por extenso.
-        Pode sair assinado com o certificado digital.
-      </p>
-      <div className="logo-proposta">
-        <div className="logo-previa">
-          {temLogo ? <img src={`/api/configuracoes/logo?v=${versaoLogo}`} alt="Logo da empresa" /> : <ImageIcon aria-hidden="true" />}
-        </div>
-        <div>
-          <strong>Logo no cabeçalho</strong>
-          <p className="texto-fraco pequeno" style={{ margin: "2px 0 10px" }}>
-            PNG ou JPG, até 1,5 MB. Fundo branco ou transparente fica melhor.
-          </p>
-          <div className="linha-botoes">
-            <button type="button" className="botao secundario pequeno" onClick={() => entrada.current?.click()}>
-              <Upload /> {temLogo ? "Trocar logo" : "Enviar logo"}
-            </button>
-            {temLogo && (
-              <button type="button" className="botao secundario pequeno perigo" onClick={removerLogo}>
-                <Trash2 /> Remover
-              </button>
-            )}
-          </div>
-          <input
-            ref={entrada}
-            type="file"
-            accept="image/png,image/jpeg"
-            hidden
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) enviarLogo(f);
-              e.target.value = "";
-            }}
-          />
-        </div>
-      </div>
-      <form
-        className="formulario"
-        style={{ marginTop: 16 }}
-        onSubmit={(e) => {
-          e.preventDefault();
-          const f = new FormData(e.currentTarget);
-          salvar({ proposta_declaracao: String(f.get("proposta_declaracao") ?? "") });
-        }}
-      >
-        <label className="campo">
-          <span>Declaração no fim da proposta</span>
-          <textarea name="proposta_declaracao" rows={4} maxLength={3000} defaultValue={config.proposta_declaracao} />
-        </label>
-        <div>
-          <button className="botao">Salvar declaração</button>
-        </div>
-      </form>
-    </section>
   );
 }
 
@@ -726,6 +604,7 @@ function CertificadoConfig() {
 
 function PropostasConfig() {
   const [contas, setContas] = useState<ContaBancaria[] | null>(null);
+  const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [modelos, setModelos] = useState<ModeloProposta[]>([]);
   const [campos, setCampos] = useState<{ campos: [string, string][]; camposItem: [string, string][] } | null>(null);
   const [editandoConta, setEditandoConta] = useState<ContaBancaria | "nova" | null>(null);
@@ -734,11 +613,13 @@ function PropostasConfig() {
 
   async function carregar() {
     try {
-      const [c, m] = await Promise.all([
+      const [c, m, e] = await Promise.all([
         api<{ contas: ContaBancaria[] }>("/propostas/contas"),
         api<{ modelos: ModeloProposta[] }>("/propostas/modelos"),
+        api<{ empresas: Empresa[] }>("/empresas"),
       ]);
       setContas(c.contas);
+      setEmpresas(e.empresas);
       setModelos(m.modelos);
     } catch (err) {
       avisar(mensagemDeErro(err), "erro");
@@ -902,7 +783,15 @@ function PropostasConfig() {
                     {c.padrao === 1 && <span className="etiqueta">padrão</span>}
                   </strong>
                   <span>
-                    {[c.banco, c.agencia && `ag. ${c.agencia}`, c.conta && `${c.tipo ?? "conta"} ${c.conta}`, c.pix && `PIX ${c.pix}`].filter(Boolean).join(" · ")}
+                    {[
+                      c.banco,
+                      c.agencia && `ag. ${c.agencia}`,
+                      c.conta && `${c.tipo ?? "conta"} ${c.conta}`,
+                      c.pix && `PIX ${c.pix}`,
+                      c.empresa_id && empresas.find((e) => e.id === c.empresa_id)?.nome,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </span>
                 </div>
                 <div className="membro-acoes">
@@ -927,6 +816,7 @@ function PropostasConfig() {
       {editandoConta && (
         <ModalConta
           conta={editandoConta === "nova" ? null : editandoConta}
+          empresas={empresas}
           aoFechar={() => setEditandoConta(null)}
           aoSalvar={() => {
             setEditandoConta(null);
@@ -938,7 +828,17 @@ function PropostasConfig() {
   );
 }
 
-function ModalConta({ conta, aoFechar, aoSalvar }: { conta: ContaBancaria | null; aoFechar: () => void; aoSalvar: () => void }) {
+function ModalConta({
+  conta,
+  empresas,
+  aoFechar,
+  aoSalvar,
+}: {
+  conta: ContaBancaria | null;
+  empresas: Empresa[];
+  aoFechar: () => void;
+  aoSalvar: () => void;
+}) {
   const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
   async function enviar(e: FormEvent<HTMLFormElement>) {
@@ -969,6 +869,15 @@ function ModalConta({ conta, aoFechar, aoSalvar }: { conta: ContaBancaria | null
           <Campo rotulo="Agência" name="agencia" defaultValue={conta?.agencia ?? ""} />
           <Campo rotulo="Conta" name="conta" defaultValue={conta?.conta ?? ""} />
         </div>
+        {empresas.length > 0 && (
+          <CampoSelect
+            rotulo="Empresa"
+            name="empresa_id"
+            defaultValue={conta?.empresa_id ? String(conta.empresa_id) : ""}
+            vazio="Qualquer empresa"
+            opcoes={empresas.map((e) => ({ valor: String(e.id), texto: e.nome }))}
+          />
+        )}
         <div className="grade-3">
           <CampoSelect rotulo="Tipo" name="tipo" defaultValue={conta?.tipo ?? "Corrente"} opcoes={["Corrente", "Poupança", "Pagamento"]} />
           <Campo rotulo="Chave PIX" name="pix" defaultValue={conta?.pix ?? ""} />

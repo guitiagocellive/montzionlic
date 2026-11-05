@@ -18,6 +18,7 @@ const ESQUEMA_CONTA: Esquema = {
   pix: "texto",
   titular: "texto",
   padrao: "bool",
+  empresa_id: "id",
 };
 
 rotasPropostas.get("/campos", (c) => c.json({ campos: CAMPOS_MODELO, camposItem: CAMPOS_ITEM }));
@@ -27,7 +28,7 @@ rotasPropostas.get("/contas", async (c) => {
   return c.json({ contas: results });
 });
 
-async function marcarUnicaPadrao(db: D1Database, tabela: string, id: number, padrao: unknown) {
+export async function marcarUnicaPadrao(db: D1Database, tabela: string, id: number, padrao: unknown) {
   if (padrao === true || padrao === 1) {
     await db.prepare(`UPDATE ${tabela} SET padrao = CASE WHEN id = ? THEN 1 ELSE 0 END`).bind(id).run();
   }
@@ -139,5 +140,57 @@ rotasPropostas.delete("/modelos/:id", exigirAdmin, async (c) => {
   if (!modelo) return c.json({ erro: "Modelo não encontrado." }, 404);
   await c.env.ARQUIVOS.delete(modelo.chave);
   await c.env.DB.prepare("DELETE FROM modelos_proposta WHERE id = ?").bind(id).run();
+  return c.json({ ok: true });
+});
+
+// ---------- Declarações e condições da proposta ----------
+
+const ESQUEMA_DECLARACAO: Esquema = {
+  tipo: ["declaracao", "condicao"],
+  titulo: "texto",
+  texto: "textoLongo",
+  padrao: "bool",
+  ordem: "inteiro",
+};
+
+rotasPropostas.get("/declaracoes", async (c) => {
+  const { results } = await c.env.DB.prepare("SELECT id, tipo, titulo, texto, padrao, ordem FROM declaracoes ORDER BY tipo DESC, ordem, id").all();
+  return c.json({ declaracoes: results });
+});
+
+rotasPropostas.post("/declaracoes", exigirAdmin, async (c) => {
+  const corpo = await lerJson(c);
+  if (!corpo) return c.json({ erro: "Requisição inválida." }, 400);
+  if (!texto(corpo.titulo) || !texto(corpo.texto)) return c.json({ erro: "Informe o título e o texto." }, 400);
+  const campos = lerCampos(corpo, ESQUEMA_DECLARACAO);
+  if (temErro(campos)) return c.json(campos, 400);
+  if (!campos.colunas.includes("ordem")) {
+    const max = await c.env.DB.prepare("SELECT COALESCE(MAX(ordem), 0) + 1 AS n FROM declaracoes").first<{ n: number }>();
+    campos.colunas.push("ordem");
+    campos.valores.push(max?.n ?? 1);
+  }
+  const declaracao = await inserir<{ id: number }>(c.env.DB, "declaracoes", campos);
+  return c.json({ declaracao }, 201);
+});
+
+rotasPropostas.patch("/declaracoes/:id", exigirAdmin, async (c) => {
+  const id = idDaRota(c.req.param("id"));
+  if (!id) return c.json({ erro: "Declaração inválida." }, 400);
+  const corpo = await lerJson(c);
+  if (!corpo) return c.json({ erro: "Requisição inválida." }, 400);
+  if ((corpo.titulo !== undefined && !texto(corpo.titulo)) || (corpo.texto !== undefined && !texto(corpo.texto))) {
+    return c.json({ erro: "O título e o texto não podem ficar vazios." }, 400);
+  }
+  const campos = lerCampos(corpo, ESQUEMA_DECLARACAO);
+  if (temErro(campos)) return c.json(campos, 400);
+  const comando = comandoAtualizar(c.env.DB, "declaracoes", id, campos, false);
+  if (comando) await comando.run();
+  return c.json({ declaracao: await buscar(c.env.DB, "declaracoes", id) });
+});
+
+rotasPropostas.delete("/declaracoes/:id", exigirAdmin, async (c) => {
+  const id = idDaRota(c.req.param("id"));
+  if (!id) return c.json({ erro: "Declaração inválida." }, 400);
+  await c.env.DB.prepare("DELETE FROM declaracoes WHERE id = ?").bind(id).run();
   return c.json({ ok: true });
 });

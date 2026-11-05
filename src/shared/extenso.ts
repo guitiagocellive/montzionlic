@@ -73,3 +73,9 @@ export function reaisPorExtenso(valor: number): string {
   if (partes.length === 0) return "zero real";
   return partes.join(" e ");
 }
+
+/** Número inteiro por extenso (ex.: 60 → "sessenta"). */
+export function numeroPorExtenso(n: number): string {
+  if (!Number.isInteger(n) || n < 0) return "";
+  return inteiroPorExtenso(n);
+}
