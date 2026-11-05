@@ -1,4 +1,6 @@
+import { KeyRound, Mail, Power, RefreshCw, UserPlus, UserRound } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
+import { Avatar } from "../components/Avatar";
 import { type Papel, SENHA_MINIMA, type Usuario } from "../../shared/tipos";
 import { api, mensagemDeErro } from "../api";
 import { Alerta, Campo } from "../components/Formulario";
@@ -44,12 +46,13 @@ export function Equipe({ usuarioAtual }: { usuarioAtual: Usuario }) {
 
   return (
     <>
-      <div className="cabecalho-pagina">
+      <div className="cabecalho-pagina entrar">
         <div>
           <h1>Equipe</h1>
-          <p className="texto-suave">Quem tem acesso à plataforma.</p>
+          <p className="texto-suave">Quem tem acesso à plataforma e o que pode fazer.</p>
         </div>
         <button className="botao" onClick={() => setModal({ tipo: "novo" })}>
+          <UserPlus aria-hidden="true" />
           Adicionar pessoa
         </button>
       </div>
@@ -57,7 +60,7 @@ export function Equipe({ usuarioAtual }: { usuarioAtual: Usuario }) {
       <Alerta>{erro}</Alerta>
       <Alerta tipo="sucesso">{aviso}</Alerta>
 
-      <section className="cartao sem-padding">
+      <section className="cartao sem-padding entrar" style={{ ["--i" as string]: 1 }}>
         {usuarios === null ? (
           <p className="texto-suave padding">Carregando…</p>
         ) : (
@@ -77,10 +80,16 @@ export function Equipe({ usuarioAtual }: { usuarioAtual: Usuario }) {
                   return (
                     <tr key={u.id} className={u.ativo ? "" : "inativo"}>
                       <td>
-                        <div className="lateral-nome">
-                          {u.nome} {ehVoce && <span className="etiqueta">você</span>}
+                        <div className="pessoa">
+                          <Avatar nome={u.nome} />
+                          <div style={{ minWidth: 0 }}>
+                            <div className="pessoa-nome">
+                              {u.nome}
+                              {ehVoce && <span className="etiqueta">você</span>}
+                            </div>
+                            <div className="texto-fraco pequeno">{u.email}</div>
+                          </div>
                         </div>
-                        <div className="texto-suave pequeno">{u.email}</div>
                       </td>
                       <td>
                         <select
@@ -94,7 +103,9 @@ export function Equipe({ usuarioAtual }: { usuarioAtual: Usuario }) {
                         </select>
                       </td>
                       <td>
-                        <span className={`selo ${u.ativo ? "verde" : "cinza"}`}>
+                        <span
+                          className={`selo ${!u.ativo ? "cinza" : u.trocarSenha ? "amarelo" : "verde"}`}
+                        >
                           {u.ativo ? (u.trocarSenha ? "Aguardando 1º acesso" : "Ativo") : "Inativo"}
                         </span>
                       </td>
@@ -103,13 +114,15 @@ export function Equipe({ usuarioAtual }: { usuarioAtual: Usuario }) {
                           className="botao link"
                           onClick={() => setModal({ tipo: "senha", usuario: u })}
                         >
+                          <KeyRound aria-hidden="true" />
                           Redefinir senha
                         </button>
                         {!ehVoce && (
                           <button
-                            className="botao link"
+                            className={`botao link ${u.ativo ? "perigo" : ""}`}
                             onClick={() => alterar(u, { ativo: !u.ativo })}
                           >
+                            <Power aria-hidden="true" />
                             {u.ativo ? "Desativar" : "Reativar"}
                           </button>
                         )}
@@ -218,8 +231,8 @@ function ModalNovoUsuario({
     <ModalBase titulo="Adicionar pessoa" aoFechar={aoFechar}>
       <form onSubmit={enviar} className="formulario">
         <Alerta>{erro}</Alerta>
-        <Campo rotulo="Nome" name="nome" required autoFocus />
-        <Campo rotulo="E-mail" name="email" type="email" required />
+        <Campo rotulo="Nome" name="nome" icone={UserRound} required autoFocus />
+        <Campo rotulo="E-mail" name="email" type="email" icone={Mail} required />
         <label className="campo">
           <span>Perfil</span>
           <select name="papel" defaultValue="membro">
@@ -242,7 +255,8 @@ function ModalNovoUsuario({
               className="botao secundario"
               onClick={() => setSenha(gerarSenhaProvisoria())}
             >
-              Gerar outra
+              <RefreshCw aria-hidden="true" />
+              Gerar
             </button>
           </div>
           <small className="texto-suave">A pessoa vai trocar no primeiro acesso.</small>
@@ -301,6 +315,7 @@ function ModalRedefinirSenha({
           rotulo={ehVoce ? "Nova senha" : "Senha provisória"}
           name="senha"
           type={ehVoce ? "password" : "text"}
+          icone={KeyRound}
           value={senha}
           onChange={(e) => setSenha(e.target.value)}
           minLength={SENHA_MINIMA}

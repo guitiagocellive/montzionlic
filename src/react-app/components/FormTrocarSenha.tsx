@@ -1,3 +1,4 @@
+import { LockKeyhole } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { SENHA_MINIMA } from "../../shared/tipos";
 import { api, mensagemDeErro } from "../api";
@@ -41,6 +42,7 @@ export function FormTrocarSenha({ aoConcluir }: { aoConcluir?: () => void }) {
         rotulo="Senha atual"
         name="senhaAtual"
         type="password"
+        icone={LockKeyhole}
         autoComplete="current-password"
         required
       />
@@ -48,6 +50,7 @@ export function FormTrocarSenha({ aoConcluir }: { aoConcluir?: () => void }) {
         rotulo="Nova senha"
         name="novaSenha"
         type="password"
+        icone={LockKeyhole}
         autoComplete="new-password"
         minLength={SENHA_MINIMA}
         ajuda={`Mínimo de ${SENHA_MINIMA} caracteres.`}
@@ -57,6 +60,7 @@ export function FormTrocarSenha({ aoConcluir }: { aoConcluir?: () => void }) {
         rotulo="Confirme a nova senha"
         name="confirmacao"
         type="password"
+        icone={LockKeyhole}
         autoComplete="new-password"
         required
       />

@@ -1,3 +1,4 @@
+import { LockKeyhole, Mail, Rocket, UserRound } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { SENHA_MINIMA } from "../../shared/tipos";
 import { api, mensagemDeErro } from "../api";
@@ -34,12 +35,20 @@ export function PrimeiroAcesso({ aoConcluir }: { aoConcluir: () => void }) {
     >
       <form onSubmit={enviar} className="formulario">
         <Alerta>{erro}</Alerta>
-        <Campo rotulo="Seu nome" name="nome" autoComplete="name" required autoFocus />
-        <Campo rotulo="E-mail" name="email" type="email" autoComplete="email" required />
+        <Campo rotulo="Seu nome" name="nome" icone={UserRound} autoComplete="name" required autoFocus />
+        <Campo
+          rotulo="E-mail"
+          name="email"
+          type="email"
+          icone={Mail}
+          autoComplete="email"
+          required
+        />
         <Campo
           rotulo="Senha"
           name="senha"
           type="password"
+          icone={LockKeyhole}
           autoComplete="new-password"
           minLength={SENHA_MINIMA}
           ajuda={`Mínimo de ${SENHA_MINIMA} caracteres.`}
@@ -49,10 +58,12 @@ export function PrimeiroAcesso({ aoConcluir }: { aoConcluir: () => void }) {
           rotulo="Confirme a senha"
           name="confirmacao"
           type="password"
+          icone={LockKeyhole}
           autoComplete="new-password"
           required
         />
         <button className="botao" type="submit" disabled={enviando}>
+          {!enviando && <Rocket aria-hidden="true" />}
           {enviando ? "Criando…" : "Criar administrador"}
         </button>
       </form>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Usuario } from "../shared/tipos";
 import { api } from "./api";
+import { FundoAnimado } from "./components/Fundo";
 import { Layout } from "./components/Layout";
 import { Equipe } from "./pages/Equipe";
 import { Login } from "./pages/Login";
@@ -17,6 +18,15 @@ type Estado =
   | { tipo: "logado"; usuario: Usuario };
 
 export function App() {
+  return (
+    <>
+      <FundoAnimado />
+      <Conteudo />
+    </>
+  );
+}
+
+function Conteudo() {
   const [estado, setEstado] = useState<Estado>({ tipo: "carregando" });
   const caminho = useCaminho();
 
@@ -42,7 +52,14 @@ export function App() {
   }, [carregar]);
 
   if (estado.tipo === "carregando") {
-    return <div className="tela-central texto-suave">Carregando…</div>;
+    return (
+      <div className="tela-central">
+        <div className="carregando">
+          <div className="anel" />
+          Carregando…
+        </div>
+      </div>
+    );
   }
   if (estado.tipo === "configurar") return <PrimeiroAcesso aoConcluir={carregar} />;
   if (estado.tipo === "deslogado") return <Login aoEntrar={carregar} />;

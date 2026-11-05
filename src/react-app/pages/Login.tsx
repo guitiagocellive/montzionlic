@@ -1,3 +1,4 @@
+import { ArrowRight, LockKeyhole, Mail } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { api, mensagemDeErro } from "../api";
 import { Alerta, Campo, CartaoAcesso } from "../components/Formulario";
@@ -23,21 +24,33 @@ export function Login({ aoEntrar }: { aoEntrar: () => void }) {
   }
 
   return (
-    <CartaoAcesso titulo="Entrar" subtitulo="Acesse com seu e-mail e senha.">
+    <CartaoAcesso titulo="Bem-vindo de volta" subtitulo="Acesse a plataforma com seu e-mail e senha.">
       <form onSubmit={enviar} className="formulario">
         <Alerta>{erro}</Alerta>
-        <Campo rotulo="E-mail" name="email" type="email" autoComplete="email" required autoFocus />
+        <Campo
+          rotulo="E-mail"
+          name="email"
+          type="email"
+          icone={Mail}
+          placeholder="voce@empresa.com.br"
+          autoComplete="email"
+          required
+          autoFocus
+        />
         <Campo
           rotulo="Senha"
           name="senha"
           type="password"
+          icone={LockKeyhole}
+          placeholder="Sua senha"
           autoComplete="current-password"
           required
         />
         <button className="botao" type="submit" disabled={enviando}>
           {enviando ? "Entrando…" : "Entrar"}
+          {!enviando && <ArrowRight aria-hidden="true" />}
         </button>
-        <p className="texto-suave pequeno centralizado">
+        <p className="texto-fraco pequeno centralizado" style={{ margin: 0 }}>
           Esqueceu a senha? Peça a um administrador para redefinir.
         </p>
       </form>
