@@ -1,10 +1,10 @@
 import { Hono } from "hono";
-import { type Ambiente, exigirAdmin, exigirLogin } from "../auth";
+import { type Ambiente, exigirAdmin, exigirLogin, exigirModulo } from "../auth";
 import { buscar, comandoAtualizar, inserir } from "../banco";
 import { type Esquema, idDaRota, lerCampos, lerJson, temErro } from "../validacao";
 
 export const rotasFornecedores = new Hono<Ambiente>();
-rotasFornecedores.use(exigirLogin);
+rotasFornecedores.use(exigirLogin, exigirModulo("fornecedores"));
 
 const ESQUEMA: Esquema = {
   nome: "texto",

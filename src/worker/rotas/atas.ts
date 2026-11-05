@@ -1,11 +1,11 @@
 import { Hono } from "hono";
-import { type Ambiente, exigirAdmin, exigirLogin } from "../auth";
+import { type Ambiente, exigirAdmin, exigirLogin, exigirModulo } from "../auth";
 import { buscar, comandoAtualizar, inserir } from "../banco";
 import { type Esquema, idDaRota, lerCampos, lerJson, temErro } from "../validacao";
 
 // Atas de registro de preço vigentes.
 export const rotasAtas = new Hono<Ambiente>();
-rotasAtas.use(exigirLogin);
+rotasAtas.use(exigirLogin, exigirModulo("atas"));
 
 const ESQUEMA_ATA: Esquema = {
   nome: "texto",

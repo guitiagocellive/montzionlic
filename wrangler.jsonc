@@ -12,6 +12,8 @@
     "run_worker_first": ["/api/*"]
   },
   "ai": { "binding": "AI" },
+  // Verificação de hora em hora para os avisos de sessões, entregas e atas.
+  "triggers": { "crons": ["0 * * * *"] },
   "r2_buckets": [
     {
       "binding": "ARQUIVOS",

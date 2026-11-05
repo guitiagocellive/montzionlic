@@ -1,5 +1,7 @@
 import { Hono } from "hono";
 import { CATEGORIAS_ARQUIVO } from "../../shared/negocio";
+import { type Modulo, podeEditar, podeVer } from "../../shared/permissoes";
+import type { Usuario } from "../../shared/tipos";
 import { type Ambiente, exigirLogin } from "../auth";
 import { buscar } from "../banco";
 import { analisarDocumento, type TipoAnalise } from "../ia";
@@ -44,6 +46,12 @@ interface Arquivo {
   categoria: string | null;
 }
 
+/** Confere se a pessoa pode ver (ou editar) o arquivo, conforme onde ele está. */
+function semAcesso(usuario: Usuario, arquivo: { execucao_id: number | null }, editar: boolean) {
+  const modulo: Modulo = arquivo.execucao_id ? "posganho" : "licitacoes";
+  return editar ? !podeEditar(usuario.permissoes, modulo) : !podeVer(usuario.permissoes, modulo);
+}
+
 function nomeSeguro(nome: string) {
   return (
     nome
@@ -70,6 +78,9 @@ rotasArquivos.post("/", async (c) => {
   const licitacaoId = idDaRota(String(form.get("licitacao_id") ?? ""));
   const execucaoId = idDaRota(String(form.get("execucao_id") ?? ""));
   if (!licitacaoId && !execucaoId) return c.json({ erro: "Destino do arquivo inválido." }, 400);
+  if (semAcesso(c.get("usuario"), { execucao_id: execucaoId }, true)) {
+    return c.json({ erro: "Você não pode enviar arquivos aqui." }, 403);
+  }
   if (licitacaoId && !(await buscar(c.env.DB, "licitacoes", licitacaoId))) {
     return c.json({ erro: "Licitação não encontrada." }, 404);
   }
@@ -111,6 +122,7 @@ rotasArquivos.get("/:id", async (c) => {
   if (!id) return c.json({ erro: "Arquivo inválido." }, 400);
   const registro = await buscar<Arquivo>(c.env.DB, "arquivos", id);
   if (!registro) return c.json({ erro: "Arquivo não encontrado." }, 404);
+  if (semAcesso(c.get("usuario"), registro, false)) return c.json({ erro: "Você não tem acesso a este arquivo." }, 403);
   const objeto = await c.env.ARQUIVOS.get(registro.chave);
   if (!objeto) return c.json({ erro: "Arquivo não encontrado no armazenamento." }, 404);
 
@@ -132,6 +144,9 @@ rotasArquivos.get("/:id", async (c) => {
 rotasArquivos.patch("/:id", async (c) => {
   const id = idDaRota(c.req.param("id"));
   if (!id) return c.json({ erro: "Arquivo inválido." }, 400);
+  const dono = await c.env.DB.prepare("SELECT execucao_id FROM arquivos WHERE id = ?").bind(id).first<{ execucao_id: number | null }>();
+  if (!dono) return c.json({ erro: "Arquivo não encontrado." }, 404);
+  if (semAcesso(c.get("usuario"), dono, true)) return c.json({ erro: "Você não tem acesso a este arquivo." }, 403);
   const corpo = (await c.req.json().catch(() => null)) as { categoria?: string } | null;
   if (!corpo?.categoria || !CATEGORIAS_ARQUIVO.includes(corpo.categoria)) {
     return c.json({ erro: "Categoria inválida." }, 400);
@@ -147,6 +162,7 @@ rotasArquivos.delete("/:id", async (c) => {
   if (!id) return c.json({ erro: "Arquivo inválido." }, 400);
   const registro = await buscar<Arquivo>(c.env.DB, "arquivos", id);
   if (!registro) return c.json({ erro: "Arquivo não encontrado." }, 404);
+  if (semAcesso(c.get("usuario"), registro, true)) return c.json({ erro: "Você não tem acesso a este arquivo." }, 403);
   await c.env.ARQUIVOS.delete(registro.chave);
   await c.env.DB.prepare("DELETE FROM arquivos WHERE id = ?").bind(id).run();
   return c.json({ ok: true });
@@ -156,6 +172,9 @@ rotasArquivos.delete("/:id", async (c) => {
 rotasArquivos.get("/:id/analise", async (c) => {
   const id = idDaRota(c.req.param("id"));
   if (!id) return c.json({ erro: "Arquivo inválido." }, 400);
+  const dono = await c.env.DB.prepare("SELECT execucao_id FROM arquivos WHERE id = ?").bind(id).first<{ execucao_id: number | null }>();
+  if (!dono) return c.json({ erro: "Arquivo não encontrado." }, 404);
+  if (semAcesso(c.get("usuario"), dono, false)) return c.json({ erro: "Você não tem acesso a este arquivo." }, 403);
   const analise = await c.env.DB.prepare(
     "SELECT tipo, resultado, criado_em FROM analises_ia WHERE arquivo_id = ? ORDER BY id DESC LIMIT 1",
   )
@@ -173,6 +192,7 @@ rotasArquivos.post("/:id/analisar", async (c) => {
 
   const registro = await buscar<Arquivo>(c.env.DB, "arquivos", id);
   if (!registro) return c.json({ erro: "Arquivo não encontrado." }, 404);
+  if (semAcesso(c.get("usuario"), registro, true)) return c.json({ erro: "Você não tem acesso a este arquivo." }, 403);
   const tipoMime = registro.tipo_mime ?? "";
   if (!ANALISAVEIS.has(tipoMime)) {
     return c.json({ erro: "A IA lê PDF, imagens (PNG, JPG, WEBP), Word (.docx) e Excel (.xlsx)." }, 400);

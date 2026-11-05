@@ -7,6 +7,7 @@ import {
   exigirLogin,
   paraUsuario,
 } from "../auth";
+import { ACESSO_TOTAL, validarPermissoes } from "../../shared/permissoes";
 import { gerarHashSenha } from "../crypto";
 import {
   emailValido,
@@ -19,6 +20,8 @@ import {
 // Gestão do time. Todas as rotas exigem administrador.
 export const rotasUsuarios = new Hono<Ambiente>();
 rotasUsuarios.use(exigirLogin, exigirAdmin);
+
+const COR = /^#[0-9a-f]{6}$/i;
 
 function papelValido(valor: unknown): valor is "admin" | "membro" {
   return valor === "admin" || valor === "membro";
@@ -50,12 +53,17 @@ rotasUsuarios.post("/", async (c) => {
     .first();
   if (existe) return c.json({ erro: "Já existe um usuário com esse e-mail." }, 409);
 
+  const permissoes = papel === "admin" ? ACESSO_TOTAL : corpo.permissoes === undefined ? ACESSO_TOTAL : validarPermissoes(corpo.permissoes);
+  if (!permissoes) return c.json({ erro: "Permissões inválidas." }, 400);
+  const cor = typeof corpo.cor === "string" && COR.test(corpo.cor) ? corpo.cor.toLowerCase() : "#8b5cf6";
+  const cargo = texto(corpo.cargo).slice(0, 80) || null;
+
   const hash = await gerarHashSenha(corpo.senha as string);
   const linha = await c.env.DB.prepare(
-    `INSERT INTO usuarios (nome, email, senha_hash, papel, trocar_senha)
-     VALUES (?, ?, ?, ?, 1) RETURNING ${CAMPOS_USUARIO}`,
+    `INSERT INTO usuarios (nome, email, senha_hash, papel, trocar_senha, permissoes, cor, cargo)
+     VALUES (?, ?, ?, ?, 1, ?, ?, ?) RETURNING ${CAMPOS_USUARIO}`,
   )
-    .bind(nome, email, hash, papel)
+    .bind(nome, email, hash, papel, JSON.stringify(permissoes), cor, cargo)
     .first<LinhaUsuario>();
 
   return c.json({ usuario: paraUsuario(linha!) }, 201);
@@ -103,6 +111,26 @@ rotasUsuarios.patch("/:id", async (c) => {
     sets.push("ativo = ?");
     valores.push(corpo.ativo ? 1 : 0);
     if (!corpo.ativo) encerrarSessoes = true;
+  }
+
+  if (corpo.cargo !== undefined) {
+    const cargo = texto(corpo.cargo);
+    if (cargo.length > 80) return c.json({ erro: "Cargo longo demais." }, 400);
+    sets.push("cargo = ?");
+    valores.push(cargo || null);
+  }
+
+  if (corpo.cor !== undefined) {
+    if (typeof corpo.cor !== "string" || !COR.test(corpo.cor)) return c.json({ erro: "Cor inválida." }, 400);
+    sets.push("cor = ?");
+    valores.push(corpo.cor.toLowerCase());
+  }
+
+  if (corpo.permissoes !== undefined) {
+    const permissoes = validarPermissoes(corpo.permissoes);
+    if (!permissoes) return c.json({ erro: "Permissões inválidas." }, 400);
+    sets.push("permissoes = ?");
+    valores.push(JSON.stringify(permissoes));
   }
 
   if (corpo.novaSenha !== undefined) {

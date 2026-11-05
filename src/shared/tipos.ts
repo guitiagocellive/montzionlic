@@ -1,6 +1,9 @@
 // Tipos compartilhados entre o backend (Worker) e o frontend (React).
 
+import type { Permissoes } from "./permissoes";
+
 export type Papel = "admin" | "membro";
+export type Tema = "claro" | "escuro" | "sistema";
 
 export interface Usuario {
   id: number;
@@ -10,6 +13,54 @@ export interface Usuario {
   ativo: boolean;
   trocarSenha: boolean;
   criadoEm: string;
+  cargo: string | null;
+  cor: string;
+  tema: Tema;
+  /** Endereço da foto de perfil, ou null. */
+  foto: string | null;
+  permissoes: Permissoes;
+}
+
+export interface Notificacao {
+  id: number;
+  tipo: string;
+  titulo: string;
+  mensagem: string | null;
+  link: string | null;
+  lida: boolean;
+  criadoEm: number;
+}
+
+export interface Alerta {
+  tipo: "sessao" | "sessao_sem_orcamento" | "entrega_atrasada" | "entrega" | "ata";
+  gravidade: "urgente" | "atencao" | "info";
+  titulo: string;
+  detalhe: string;
+  data: string;
+  link: string;
+}
+
+export interface Configuracoes {
+  empresa_nome: string;
+  empresa_cnpj: string;
+  margem_padrao: number;
+  imposto_padrao: number;
+  alerta_sessao_dias: number;
+  alerta_entrega_dias: number;
+  alerta_ata_dias: number;
+}
+
+export interface Convite {
+  id: number;
+  email: string | null;
+  papel: Papel;
+  cargo: string | null;
+  cor: string | null;
+  permissoes: Permissoes;
+  expira_em: number;
+  usado_em: number | null;
+  usado_por_nome: string | null;
+  criado_em: string;
 }
 
 export const SENHA_MINIMA = 8;

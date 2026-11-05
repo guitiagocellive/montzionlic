@@ -3,16 +3,13 @@ import {
   ETAPAS_ANTES_DA_ENTREGA,
   ETAPAS_LICITACAO_ATIVAS,
 } from "../../shared/negocio";
+import { podeVer } from "../../shared/permissoes";
 import { type Ambiente, exigirLogin } from "../auth";
+import { hojeBrasilia } from "../configuracoes";
 
 export const rotasPainel = new Hono<Ambiente>();
 rotasPainel.use(exigirLogin);
 
-/** Data de hoje no horário de Brasília (AAAA-MM-DD). */
-export function hojeBrasilia(deslocamentoDias = 0): string {
-  const agora = new Date(Date.now() - 3 * 60 * 60 * 1000 + deslocamentoDias * 86_400_000);
-  return agora.toISOString().slice(0, 10);
-}
 
 const lista = (valores: string[]) => valores.map((v) => `'${v}'`).join(", ");
 
@@ -69,16 +66,20 @@ rotasPainel.get("/painel", async (c) => {
       ),
     ]);
 
+  // Cada bloco só aparece para quem tem acesso ao módulo correspondente.
+  const p = c.get("usuario").permissoes;
+  const lic = podeVer(p, "licitacoes");
+  const pos = podeVer(p, "posganho");
   return c.json({
     hoje,
-    licitacoesPorEtapa: porEtapa.results,
-    valorEmDisputa: (emDisputa.results[0] as { valor: number }).valor,
-    proximasSessoes: proximasSessoes.results,
-    execucoesPorEtapa: porExecucao.results,
-    entregasProximas: entregas.results,
-    valores: valores.results[0],
-    atas: atas.results[0],
-    licitacoesPorNicho: porNicho.results,
+    licitacoesPorEtapa: lic ? porEtapa.results : [],
+    valorEmDisputa: lic ? (emDisputa.results[0] as { valor: number }).valor : 0,
+    proximasSessoes: lic ? proximasSessoes.results : [],
+    execucoesPorEtapa: pos ? porExecucao.results : [],
+    entregasProximas: pos ? entregas.results : [],
+    valores: pos ? valores.results[0] : { vendido: 0, lucro: 0 },
+    atas: podeVer(p, "atas") ? atas.results[0] : { vigentes: 0, vencendo: 0 },
+    licitacoesPorNicho: lic ? porNicho.results : [],
   });
 });
 
@@ -111,7 +112,12 @@ rotasPainel.get("/calendario", async (c) => {
       )
       .bind(de, ate),
   ]);
-  return c.json({ sessoes: sessoes.results, entregas: entregas.results, atas: atas.results });
+  const p = c.get("usuario").permissoes;
+  return c.json({
+    sessoes: podeVer(p, "licitacoes") ? sessoes.results : [],
+    entregas: podeVer(p, "posganho") ? entregas.results : [],
+    atas: podeVer(p, "atas") ? atas.results : [],
+  });
 });
 
 // Lista simples do time (para escolher responsável).

@@ -5,7 +5,12 @@ import { secureHeaders } from "hono/secure-headers";
 import type { Ambiente } from "./auth";
 import { rotasArquivos } from "./rotas/arquivos";
 import { rotasAtas } from "./rotas/atas";
+import { gerarNotificacoes } from "./notificacoes";
 import { rotasAuth } from "./rotas/auth";
+import { rotasConfiguracoes } from "./rotas/configuracoes";
+import { rotasConta, rotasFotos } from "./rotas/conta";
+import { rotasConvitePublico, rotasConvites } from "./rotas/convites";
+import { rotasNotificacoes } from "./rotas/notificacoes";
 import { rotasExecucoes } from "./rotas/execucoes";
 import { rotasFornecedores } from "./rotas/fornecedores";
 import { rotasLicitacoes } from "./rotas/licitacoes";
@@ -23,6 +28,11 @@ app.use(async (c, next) => {
 });
 
 app.route("/auth", rotasAuth);
+app.route("/conta", rotasConta);
+app.route("/fotos", rotasFotos);
+app.route("/configuracoes", rotasConfiguracoes);
+app.route("/convites/publico", rotasConvitePublico);
+app.route("/convites", rotasConvites);
 app.route("/usuarios", rotasUsuarios);
 app.route("/licitacoes", rotasLicitacoes);
 app.route("/execucoes", rotasExecucoes);
@@ -30,6 +40,7 @@ app.route("/atas", rotasAtas);
 app.route("/fornecedores", rotasFornecedores);
 app.route("/arquivos", rotasArquivos);
 app.route("/", rotasPainel);
+app.route("/", rotasNotificacoes);
 
 app.notFound((c) => c.json({ erro: "Rota não encontrada." }, 404));
 app.onError((err, c) => {
@@ -40,4 +51,10 @@ app.onError((err, c) => {
   return c.json({ erro: "Erro interno. Tente novamente." }, 500);
 });
 
-export default app;
+export default {
+  fetch: app.fetch,
+  // Roda de hora em hora (wrangler.jsonc → triggers) para gerar os avisos do sino.
+  async scheduled(_evento, env, ctx) {
+    ctx.waitUntil(gerarNotificacoes(env.DB));
+  },
+} satisfies ExportedHandler<Env>;

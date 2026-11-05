@@ -1,12 +1,12 @@
 import { Hono } from "hono";
 import { ETAPAS_EXECUCAO, somarPrazo, type TipoPrazo } from "../../shared/negocio";
-import { type Ambiente, exigirAdmin, exigirLogin } from "../auth";
+import { type Ambiente, exigirAdmin, exigirLogin, exigirModulo } from "../auth";
 import { buscar, comandoAtualizar, comExtras, inserir } from "../banco";
 import { type Esquema, idDaRota, lerCampos, lerJson, temErro } from "../validacao";
 
 // Seção 2: pós-ganho. Cada card é um empenho de uma licitação ganha.
 export const rotasExecucoes = new Hono<Ambiente>();
-rotasExecucoes.use(exigirLogin);
+rotasExecucoes.use(exigirLogin, exigirModulo("posganho"));
 
 const ESQUEMA_EXECUCAO: Esquema = {
   etapa: ETAPAS_EXECUCAO.map((e) => e.chave),

@@ -1,6 +1,7 @@
 import type { Context, MiddlewareHandler } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import type { Usuario } from "../shared/tipos";
+import { type Modulo, podeEditar, podeVer, resolverPermissoes } from "../shared/permissoes";
+import type { Tema, Usuario } from "../shared/tipos";
 import { gerarToken, sha256 } from "./crypto";
 
 export type Ambiente = {
@@ -21,9 +22,15 @@ export interface LinhaUsuario {
   ativo: number;
   trocar_senha: number;
   criado_em: string;
+  cargo: string | null;
+  cor: string;
+  tema: Tema;
+  foto_chave: string | null;
+  permissoes: string | null;
 }
 
-export const CAMPOS_USUARIO = "id, nome, email, papel, ativo, trocar_senha, criado_em";
+export const CAMPOS_USUARIO =
+  "id, nome, email, papel, ativo, trocar_senha, criado_em, cargo, cor, tema, foto_chave, permissoes";
 
 export function paraUsuario(l: LinhaUsuario): Usuario {
   return {
@@ -34,6 +41,12 @@ export function paraUsuario(l: LinhaUsuario): Usuario {
     ativo: l.ativo === 1,
     trocarSenha: l.trocar_senha === 1,
     criadoEm: l.criado_em,
+    cargo: l.cargo,
+    cor: l.cor,
+    tema: l.tema,
+    // A chave muda a cada foto nova, então serve para evitar cache antigo.
+    foto: l.foto_chave ? `/api/fotos/${l.id}?v=${l.foto_chave.slice(-8)}` : null,
+    permissoes: resolverPermissoes(l.papel, l.permissoes),
   };
 }
 
@@ -75,7 +88,8 @@ export const exigirLogin: MiddlewareHandler<Ambiente> = async (c, next) => {
 
   const sessaoId = await sha256(token);
   const linha = await c.env.DB.prepare(
-    `SELECT s.expira_em, u.id, u.nome, u.email, u.papel, u.ativo, u.trocar_senha, u.criado_em
+    `SELECT s.expira_em, u.id, u.nome, u.email, u.papel, u.ativo, u.trocar_senha, u.criado_em,
+            u.cargo, u.cor, u.tema, u.foto_chave, u.permissoes
        FROM sessoes s JOIN usuarios u ON u.id = s.usuario_id
       WHERE s.id = ?`,
   )
@@ -110,3 +124,22 @@ export const exigirAdmin: MiddlewareHandler<Ambiente> = async (c, next) => {
   }
   await next();
 };
+
+/**
+ * Exige acesso ao módulo: leitura (GET) pede "ver"; mudanças pedem "editar".
+ * Use depois de `exigirLogin`.
+ */
+export function exigirModulo(modulo: Modulo | ((c: Context<Ambiente>) => Modulo)): MiddlewareHandler<Ambiente> {
+  return async (c, next) => {
+    const m = typeof modulo === "function" ? modulo(c) : modulo;
+    const p = c.get("usuario").permissoes;
+    const leitura = c.req.method === "GET" || c.req.method === "HEAD";
+    if (leitura ? !podeVer(p, m) : !podeEditar(p, m)) {
+      return c.json(
+        { erro: leitura ? "Você não tem acesso a esta área." : "Você só pode visualizar esta área." },
+        403,
+      );
+    }
+    await next();
+  };
+}

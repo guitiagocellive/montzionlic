@@ -1,12 +1,16 @@
 import { Hono } from "hono";
 import { ETAPAS_LICITACAO } from "../../shared/negocio";
-import { type Ambiente, exigirAdmin, exigirLogin } from "../auth";
+import { podeEditar, podeVer } from "../../shared/permissoes";
+import { type Ambiente, exigirAdmin, exigirLogin, exigirModulo } from "../auth";
+import { lerConfiguracoes } from "../configuracoes";
+import { notificar } from "../notificacoes";
 import { buscar, comandoAtualizar, comExtras, inserir } from "../banco";
 import { calcularPreco } from "../../shared/negocio";
 import { type Esquema, idDaRota, lerCampos, lerJson, temErro } from "../validacao";
 
 export const rotasLicitacoes = new Hono<Ambiente>();
 rotasLicitacoes.use(exigirLogin);
+rotasLicitacoes.use(exigirModulo((c) => (c.req.path.includes("/cotacoes") ? "orcamento" : "licitacoes")));
 
 const CHAVES_ETAPA = ETAPAS_LICITACAO.map((e) => e.chave);
 
@@ -168,6 +172,7 @@ rotasLicitacoes.post("/", async (c) => {
   )
     .bind(etapa)
     .first<{ p: number }>();
+  const config = await lerConfiguracoes(c.env.DB);
 
   const licitacao = await inserir<Licitacao>(
     c.env.DB,
@@ -176,6 +181,8 @@ rotasLicitacoes.post("/", async (c) => {
       etapa,
       posicao: (max?.p ?? 0) + 1,
       criado_por: c.get("usuario").id,
+      ...("lucro_percentual" in corpo ? {} : { lucro_percentual: config.margem_padrao }),
+      ...("imposto_percentual" in corpo ? {} : { imposto_percentual: config.imposto_padrao }),
     }),
   );
   if (etapa === "ganha") await aoGanhar(c.env.DB, licitacao.id);
@@ -209,10 +216,11 @@ rotasLicitacoes.get("/:id", async (c) => {
   ]);
 
   if (!licitacao.results[0]) return c.json({ erro: "Licitação não encontrada." }, 404);
+  const veOrcamento = podeVer(c.get("usuario").permissoes, "orcamento");
   return c.json({
     licitacao: licitacao.results[0],
     itens: itens.results,
-    cotacoes: cotacoes.results,
+    cotacoes: veOrcamento ? cotacoes.results : [],
     arquivos: arquivos.results,
     execucoes: execucoes.results,
   });
@@ -224,8 +232,16 @@ rotasLicitacoes.patch("/:id", async (c) => {
   const corpo = await lerJson(c);
   if (!corpo) return c.json({ erro: "Requisição inválida." }, 400);
 
-  const atual = await buscar<Licitacao>(c.env.DB, "licitacoes", id);
+  const atual = await buscar<Licitacao & { responsavel_id: number | null; numero: string | null; orgao: string | null }>(
+    c.env.DB,
+    "licitacoes",
+    id,
+  );
   if (!atual) return c.json({ erro: "Licitação não encontrada." }, 404);
+  const usuario = c.get("usuario");
+  if (("lucro_percentual" in corpo || "imposto_percentual" in corpo) && !podeEditar(usuario.permissoes, "orcamento")) {
+    return c.json({ erro: "Você não pode alterar margens e impostos." }, 403);
+  }
 
   const campos = lerCampos(corpo, ESQUEMA_LICITACAO);
   if (temErro(campos)) return c.json(campos, 400);
@@ -246,8 +262,34 @@ rotasLicitacoes.patch("/:id", async (c) => {
   await comando.run();
 
   let execucaoCriada: number | null = null;
+  const nome = `Licitação ${atual.numero ?? ""}`.trim() + (atual.orgao ? ` · ${atual.orgao}` : "");
   if (corpo.etapa === "ganha" && atual.etapa !== "ganha") {
     execucaoCriada = await aoGanhar(c.env.DB, id);
+    await notificar(
+      c.env.DB,
+      { modulo: "posganho", exceto: usuario.id },
+      {
+        tipo: "ganha",
+        titulo: "Licitação ganha! 🎉",
+        mensagem: `${nome} foi para o Pós-ganho.`,
+        link: execucaoCriada ? `/pos-ganho/${execucaoCriada}` : `/licitacoes/${id}`,
+        chave: `ganha:${id}`,
+      },
+    );
+  }
+  const novoResponsavel = corpo.responsavel_id == null || corpo.responsavel_id === "" ? null : Number(corpo.responsavel_id);
+  if ("responsavel_id" in corpo && novoResponsavel && novoResponsavel !== atual.responsavel_id && novoResponsavel !== usuario.id) {
+    await notificar(
+      c.env.DB,
+      { usuarioIds: [novoResponsavel] },
+      {
+        tipo: "responsavel",
+        titulo: "Você é o responsável por uma licitação",
+        mensagem: `${usuario.nome} atribuiu a ${nome} a você.`,
+        link: `/licitacoes/${id}`,
+        chave: `responsavel:${id}:${Date.now()}`,
+      },
+    );
   }
 
   const licitacao = await buscar(c.env.DB, "licitacoes", id);
