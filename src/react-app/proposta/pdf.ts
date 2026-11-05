@@ -1,8 +1,8 @@
-// Gera a proposta comercial em PDF (layout da plataforma), pronta para assinar.
+// Roda no navegador: gera a proposta comercial em PDF (layout da plataforma), pronta para assinar.
 import { PDFDocument, type PDFFont, type PDFPage, rgb, StandardFonts } from "pdf-lib";
-import type { montarDados } from "./proposta";
+import type { DadosMontados } from "../../shared/proposta";
 
-type Dados = ReturnType<typeof montarDados>;
+type Dados = DadosMontados;
 
 // As fontes padrão do PDF usam a codificação WinAnsi (português funciona).
 // Caracteres fora dela são trocados para não quebrar o documento.
@@ -280,6 +280,3 @@ export async function gerarPropostaPdf(d: Dados, extras: ExtrasPdf): Promise<Uin
 
   return pdf.save();
 }
-
-export const DECLARACAO_PADRAO =
-  "Declaramos que nos preços propostos estão incluídas todas as despesas com tributos, fretes, encargos sociais e demais custos diretos e indiretos necessários ao fornecimento, e que concordamos com todas as condições do edital.";

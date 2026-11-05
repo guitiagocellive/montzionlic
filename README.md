@@ -36,7 +36,8 @@ Não existe cadastro público: só um administrador adiciona pessoas.
 - **Alertas** (admin): com quantos dias de antecedência avisar sessões, entregas e atas.
 - **Propostas** (admin): modelos do Word, contas bancárias, logo e declaração da proposta em PDF.
 - **Certificado digital** (admin): cadastro do certificado A1 (.pfx/.p12 + senha), validade e troca.
-  A senha não fica guardada; a chave fica criptografada com o segredo `CHAVE_CERTIFICADO` do Worker.
+  O .pfx é aberto no navegador: a senha não é enviada nem guardada. A chave fica criptografada com o
+  segredo `CHAVE_CERTIFICADO` do Worker e nunca volta para o navegador.
   Quem pode assinar é definido em Equipe e acessos → **Assinatura digital** (Editar = pode assinar).
   O sistema avisa 30 dias antes do certificado vencer.
 - **Equipe e acessos** (admin): convite por link (uso único, com validade), perfil, cor e acesso por
@@ -65,10 +66,13 @@ Não existe cadastro público: só um administrador adiciona pessoas.
   o banco para pagamento e a validade; órgão, itens, preços, total por extenso e dados da empresa entram
   sozinhos. Campos no Word entre chaves, ex.: `{orgao}`; tabela de itens com `{#itens}` … `{/itens}`.
   Modelo de exemplo em `public/modelos/modelo-proposta.docx`.
-- **Proposta em PDF e assinatura digital:** a própria plataforma monta a proposta em PDF (com logo, itens, total
-  por extenso, condições e declaração) e, se quiser, já sai **assinada com o certificado A1 da empresa**
-  (padrão ICP-Brasil/PAdES, conferível em validar.iti.gov.br). O PDF ganha um carimbo "Assinado digitalmente" e,
-  na plataforma, o arquivo aparece com o selo. PDFs já enviados também podem ser assinados na aba Arquivos.
+- **Proposta em PDF e assinatura digital:** a plataforma monta a proposta em Word (seus modelos) ou em PDF
+  (com logo, itens, total por extenso, condições e declaração). Também dá para enviar um PDF pronto (por exemplo,
+  o Word que você ajustou e converteu). Na hora de assinar, abre a página do PDF e você **clica onde o carimbo
+  "Assinado digitalmente" deve ficar**. A assinatura usa o **certificado A1 da empresa** (padrão ICP-Brasil/PAdES,
+  conferível em validar.iti.gov.br) e o arquivo aparece com o selo na plataforma.
+  - **Funciona no plano grátis da Cloudflare:** montar o Word/PDF e preparar o PDF rodam no navegador; o servidor
+    só assina o resumo (hash) do PDF com a chave guardada, o que leva cerca de 2 ms.
 - **Resultado da disputa:** por item (ganho, perdido, cancelado), colocação, nosso lance, vencedor,
   valor vencedor e motivo da perda.
 - **Comentários e histórico** em cada licitação e empenho, com menção (@) que gera notificação.
@@ -104,8 +108,8 @@ Tudo pelo painel da Cloudflare, sem linha de comando:
    - Ramo (branch) de produção: o ramo principal do repositório
    No primeiro deploy o banco D1 `montzionlic-db` e o bucket `montzionlic-arquivos` são criados sozinhos,
    e as tabelas do banco são aplicadas.
-3. **Plano do Worker:** recomendo o **Workers Paid** (US$ 5/mês). O plano grátis limita cada requisição a
-   10 ms de processamento, e gerar Word/PDF ou assinar leva de 50 a 100 ms — no grátis essas ações podem falhar.
+3. **Plano do Worker:** o plano grátis atende. O trabalho pesado (montar propostas, preparar PDFs, ler o
+   certificado) roda no navegador de quem usa.
 4. **Ativar a assinatura digital:** no Worker, *Settings → Variables and Secrets → Add*, tipo **Secret**,
    nome `CHAVE_CERTIFICADO` e, como valor, um texto longo e aleatório (40+ letras e números misturados).
    Guarde esse valor só lá: se ele mudar, é preciso cadastrar o certificado de novo.

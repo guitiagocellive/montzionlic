@@ -587,10 +587,24 @@ function CertificadoConfig() {
     const senha = String(new FormData(e.currentTarget).get("senha") ?? "");
     setEnviando(true);
     try {
-      const dados = new FormData();
-      dados.set("arquivo", arquivo);
-      dados.set("senha", senha);
-      await enviarArquivo("/certificado", dados);
+      // O .pfx é aberto aqui no navegador: a senha não é enviada a lugar nenhum.
+      const { lerCertificadoA1 } = await import("../assinatura/certificado");
+      const lido = lerCertificadoA1(await arquivo.arrayBuffer(), senha);
+      const b64 = (bytes: Uint8Array) => {
+        let t = "";
+        for (const x of bytes) t += String.fromCharCode(x);
+        return btoa(t);
+      };
+      await api("/certificado", {
+        corpo: {
+          chave_pkcs8: b64(lido.chavePkcs8),
+          certificado: b64(lido.certificado),
+          cadeia: lido.cadeia.map(b64),
+          titular: lido.titular,
+          documento: lido.documento,
+          emissor: lido.emissor,
+        },
+      });
       formulario.current?.reset();
       setArquivo(null);
       setTrocando(false);
@@ -697,8 +711,8 @@ function CertificadoConfig() {
       <section className="cartao">
         <h2>Como a plataforma protege o certificado</h2>
         <ul className="lista-seguranca">
-          <li>A senha é usada só para abrir o arquivo na hora do cadastro e <strong>não fica guardada</strong>.</li>
-          <li>A chave do certificado fica criptografada (AES-256) com um segredo que só existe no servidor da Cloudflare.</li>
+          <li>A senha é usada só no seu navegador para abrir o arquivo: ela <strong>não é enviada nem guardada</strong>.</li>
+          <li>A chave do certificado fica criptografada (AES-256) com um segredo que só existe no servidor da Cloudflare, e nunca volta para o navegador: o servidor só assina o resumo do PDF.</li>
           <li>Só administradores cadastram ou trocam o certificado; só quem tem permissão de <strong>Assinatura digital → Editar</strong> assina.</li>
           <li>Toda assinatura fica registrada no histórico da licitação, com quem assinou e quando.</li>
           <li>A assinatura segue o padrão ICP-Brasil (PAdES) e pode ser conferida em validar.iti.gov.br.</li>
@@ -739,6 +753,10 @@ function PropostasConfig() {
   async function enviarModelo(arquivo: File | Blob, nome: string) {
     setEnviando(true);
     try {
+      // Confere os campos do modelo aqui no navegador antes de enviar.
+      const { validarModelo } = await import("../proposta/word");
+      const problema = validarModelo(await arquivo.arrayBuffer());
+      if (problema) throw new Error(problema);
       const dados = new FormData();
       dados.set("arquivo", arquivo, arquivo instanceof File ? arquivo.name : "modelo-proposta.docx");
       dados.set("nome", nome);

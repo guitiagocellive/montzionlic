@@ -3890,6 +3890,92 @@ a.kpi:hover {
   object-fit: contain;
 }
 
+/* Janela de assinatura: escolher onde fica o carimbo */
+.assinar-dica {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+
+.assinar-paginas {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: 0.86rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.assinar-caixa {
+  display: flex;
+  justify-content: center;
+  max-height: 62vh;
+  overflow: auto;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--superficie-3);
+}
+
+.assinar-pagina {
+  position: relative;
+  flex-shrink: 0;
+  cursor: crosshair;
+  background: #fff;
+  box-shadow: 0 6px 24px rgb(0 0 0 / 18%);
+}
+
+.assinar-pagina canvas {
+  display: block;
+}
+
+.assinar-selo {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 2px dashed #0d8054;
+  border-radius: 4px;
+  background: rgb(13 128 84 / 14%);
+  color: #0d8054;
+  font-size: 0.72rem;
+  font-weight: 700;
+  pointer-events: none;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.assinar-selo svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.cartao-pdf-pronto {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.cartao-pdf-pronto > div {
+  flex: 1 1 320px;
+}
+
+.cartao-pdf-pronto h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.cartao-pdf-pronto h2 svg {
+  color: var(--verde);
+}
+
 @media (max-width: 1180px) {
   .kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));

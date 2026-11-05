@@ -6,9 +6,7 @@ import { type Ambiente, exigirLogin } from "../auth";
 import { buscar } from "../banco";
 import { analisarDocumento, type TipoAnalise } from "../ia";
 import { registrarEvento } from "../atividades";
-import { assinarPdf } from "../assinatura";
-import { carregarCertificado } from "../certificado";
-import { lerConfiguracoes } from "../configuracoes";
+import { comandoUsarPedido, pedidoValido } from "../pedidosAssinatura";
 import { idDaRota } from "../validacao";
 
 export const rotasArquivos = new Hono<Ambiente>();
@@ -92,6 +90,15 @@ rotasArquivos.post("/", async (c) => {
     return c.json({ erro: "Empenho não encontrado." }, 404);
   }
 
+  // PDF assinado no navegador: precisa do pedido de assinatura feito ao servidor.
+  const pedidoId = String(form.get("pedido_assinatura") ?? "");
+  let titular: string | null = null;
+  if (pedidoId) {
+    if (arquivo.type !== "application/pdf") return c.json({ erro: "Só PDFs podem ser assinados." }, 400);
+    titular = await pedidoValido(c.env.DB, pedidoId, c.get("usuario").id);
+    if (!titular) return c.json({ erro: "Assinatura expirada ou inválida. Assine de novo." }, 400);
+  }
+
   const categoriaBruta = String(form.get("categoria") ?? "");
   const categoria = CATEGORIAS_ARQUIVO.includes(categoriaBruta) ? categoriaBruta : "Outro";
   const tipoMime = arquivo.type || "application/octet-stream";
@@ -103,8 +110,8 @@ rotasArquivos.post("/", async (c) => {
   });
 
   const registro = await c.env.DB.prepare(
-    `INSERT INTO arquivos (licitacao_id, execucao_id, chave, nome, tipo_mime, tamanho, categoria, enviado_por)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, nome, tipo_mime, tamanho, categoria, criado_em`,
+    `INSERT INTO arquivos (licitacao_id, execucao_id, chave, nome, tipo_mime, tamanho, categoria, enviado_por, assinado_em, assinado_por, assinatura_titular)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, nome, tipo_mime, tamanho, categoria, criado_em, assinado_em, assinatura_titular`,
   )
     .bind(
       execucaoId ? null : licitacaoId,
@@ -115,13 +122,19 @@ rotasArquivos.post("/", async (c) => {
       arquivo.size,
       categoria,
       c.get("usuario").id,
+      titular ? Date.now() : null,
+      titular ? c.get("usuario").id : null,
+      titular,
     )
-    .first();
+    .first<{ id: number }>();
+  if (titular && registro) await comandoUsarPedido(c.env.DB, pedidoId, registro.id).run();
   await registrarEvento(
     c.env.DB,
     execucaoId ? { execucao_id: execucaoId } : { licitacao_id: licitacaoId! },
     c.get("usuario").id,
-    `enviou o arquivo "${arquivo.name.slice(0, 120)}" (${categoria})`,
+    titular
+      ? `assinou digitalmente "${arquivo.name.slice(0, 120)}" (certificado de ${titular})`
+      : `enviou o arquivo "${arquivo.name.slice(0, 120)}" (${categoria})`,
   );
   return c.json({ arquivo: registro }, 201);
 });
@@ -234,63 +247,3 @@ rotasArquivos.post("/:id/analisar", async (c) => {
   }
 });
 
-function contemTexto(bytes: Uint8Array, texto: string) {
-  const alvo = Array.from(texto, (ch) => ch.charCodeAt(0));
-  externo: for (let i = 0; i <= bytes.length - alvo.length; i++) {
-    for (let j = 0; j < alvo.length; j++) if (bytes[i + j] !== alvo[j]) continue externo;
-    return true;
-  }
-  return false;
-}
-
-// Assina um PDF já enviado com o certificado da empresa. Cria um novo arquivo "(assinado)".
-rotasArquivos.post("/:id/assinar", async (c) => {
-  const id = idDaRota(c.req.param("id"));
-  if (!id) return c.json({ erro: "Arquivo inválido." }, 400);
-  const usuario = c.get("usuario");
-  if (!podeEditar(usuario.permissoes, "assinatura")) return c.json({ erro: "Você não tem permissão para assinar documentos." }, 403);
-  const registro = await buscar<Arquivo & { assinado_em: number | null }>(c.env.DB, "arquivos", id);
-  if (!registro) return c.json({ erro: "Arquivo não encontrado." }, 404);
-  if (semAcesso(usuario, registro, true)) return c.json({ erro: "Você não tem acesso a este arquivo." }, 403);
-  if (registro.tipo_mime !== "application/pdf") return c.json({ erro: "Só arquivos PDF podem ser assinados." }, 400);
-  if (registro.assinado_em) return c.json({ erro: "Este PDF já está assinado." }, 400);
-  const objeto = await c.env.ARQUIVOS.get(registro.chave);
-  if (!objeto) return c.json({ erro: "Arquivo não encontrado no armazenamento." }, 404);
-  const original = new Uint8Array(await objeto.arrayBuffer());
-  // Um PDF assinado fora da plataforma perderia a assinatura dele ao ser regravado.
-  if (contemTexto(original, "/ByteRange")) {
-    return c.json({ erro: "Este PDF já tem uma assinatura digital. Assinar de novo invalidaria a assinatura existente." }, 400);
-  }
-
-  let assinado: Uint8Array;
-  let material: Awaited<ReturnType<typeof carregarCertificado>>;
-  try {
-    material = await carregarCertificado(c.env);
-    const config = await lerConfiguracoes(c.env.DB);
-    assinado = await assinarPdf(original, material, {
-      motivo: registro.categoria ? `${registro.categoria} assinado(a) digitalmente` : "Documento assinado digitalmente",
-      local: config.empresa_cidade || "Brasil",
-      contato: config.empresa_email,
-    });
-  } catch (err) {
-    return c.json({ erro: (err as Error).message || "Não foi possível assinar o PDF." }, 400);
-  }
-
-  const pasta = registro.execucao_id ? `execucoes/${registro.execucao_id}` : `licitacoes/${registro.licitacao_id}`;
-  const chave = `${pasta}/${crypto.randomUUID()}-assinado.pdf`;
-  await c.env.ARQUIVOS.put(chave, assinado, { httpMetadata: { contentType: "application/pdf" } });
-  const nome = registro.nome.replace(/\.pdf$/i, "") + " (assinado).pdf";
-  const novo = await c.env.DB.prepare(
-    `INSERT INTO arquivos (licitacao_id, execucao_id, chave, nome, tipo_mime, tamanho, categoria, enviado_por, assinado_em, assinado_por, assinatura_titular)
-     VALUES (?, ?, ?, ?, 'application/pdf', ?, ?, ?, ?, ?, ?) RETURNING id, nome`,
-  )
-    .bind(registro.licitacao_id, registro.execucao_id, chave, nome, assinado.byteLength, registro.categoria, usuario.id, Date.now(), usuario.id, material.titular)
-    .first<{ id: number; nome: string }>();
-  await registrarEvento(
-    c.env.DB,
-    registro.execucao_id ? { execucao_id: registro.execucao_id } : { licitacao_id: registro.licitacao_id! },
-    usuario.id,
-    `assinou digitalmente "${registro.nome}"`,
-  );
-  return c.json({ arquivo: novo }, 201);
-});

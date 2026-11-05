@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { type Ambiente, exigirAdmin, exigirLogin } from "../auth";
 import { buscar, comandoAtualizar, inserir } from "../banco";
-import { CAMPOS_ITEM, CAMPOS_MODELO, validarModelo } from "../proposta";
+import { CAMPOS_ITEM, CAMPOS_MODELO } from "../../shared/proposta";
 import { type Esquema, idDaRota, lerCampos, lerJson, temErro, texto } from "../validacao";
 
 // Contas bancárias e modelos de proposta (Configurações). Todos leem; só admin altera.
@@ -82,8 +82,11 @@ rotasPropostas.post("/modelos", exigirAdmin, async (c) => {
   if (!/\.docx$/i.test(arquivo.name)) return c.json({ erro: "O modelo precisa ser um arquivo do Word (.docx)." }, 400);
   if (arquivo.size > 10 * 1024 * 1024) return c.json({ erro: "O modelo passa de 10 MB." }, 400);
   const dados = await arquivo.arrayBuffer();
-  const problema = validarModelo(dados);
-  if (problema) return c.json({ erro: problema }, 400);
+  // O conteúdo (campos entre chaves) é conferido no navegador; aqui só se confere que é um .docx (zip).
+  const inicio = new Uint8Array(dados, 0, Math.min(4, dados.byteLength));
+  if (inicio[0] !== 0x50 || inicio[1] !== 0x4b || inicio[2] !== 0x03 || inicio[3] !== 0x04) {
+    return c.json({ erro: "O arquivo não parece ser um documento do Word (.docx)." }, 400);
+  }
 
   const nome = texto(form.get("nome")).slice(0, 120) || arquivo.name.replace(/\.docx$/i, "");
   const chave = `modelos/${crypto.randomUUID()}.docx`;

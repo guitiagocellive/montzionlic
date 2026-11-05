@@ -1,8 +1,7 @@
-import Docxtemplater from "docxtemplater";
-import PizZip from "pizzip";
-import { reaisPorExtenso } from "../shared/extenso";
-import type { Configuracoes } from "../shared/tipos";
+import { reaisPorExtenso } from "./extenso";
+import type { Configuracoes } from "./tipos";
 
+// Dados da proposta comercial (usados no Word e no PDF).
 // Preenche um modelo de proposta (.docx) com os dados da licitação.
 // No Word, os campos são escritos entre chaves, ex.: {orgao}. A tabela de itens
 // usa {#itens} no começo da linha e {/itens} no fim.
@@ -152,35 +151,8 @@ export function montarDados(d: DadosProposta) {
   };
 }
 
-/** Confere se o arquivo é um .docx que dá para usar como modelo. */
-export function validarModelo(dados: ArrayBuffer): string | null {
-  try {
-    const zip = new PizZip(dados);
-    if (!zip.file("word/document.xml")) return "O arquivo não parece ser um documento do Word (.docx).";
-    new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
-    return null;
-  } catch (err) {
-    return mensagemDoModelo(err);
-  }
-}
 
-export function gerarDocumento(modelo: ArrayBuffer, dados: ReturnType<typeof montarDados>): Uint8Array {
-  const zip = new PizZip(modelo);
-  const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true, nullGetter: () => "" });
-  doc.render(dados);
-  return doc.getZip().generate({ type: "uint8array", compression: "DEFLATE" });
-}
+export type DadosMontados = ReturnType<typeof montarDados>;
 
-/** Traduz os erros do preenchimento para algo que dê para corrigir no Word. */
-export function mensagemDoModelo(err: unknown): string {
-  const e = err as { properties?: { errors?: { properties?: { explanation?: string; xtag?: string } }[] } };
-  const erros = e.properties?.errors ?? [];
-  if (erros.length > 0) {
-    const tags = erros
-      .map((x) => x.properties?.xtag)
-      .filter(Boolean)
-      .slice(0, 5);
-    return `O modelo tem campos com problema${tags.length ? ` (${tags.map((t) => `{${t}}`).join(", ")})` : ""}. Confira se cada campo abre e fecha chaves, e se a tabela tem {#itens} e {/itens}.`;
-  }
-  return "Não foi possível ler o modelo. Confira se é um .docx válido.";
-}
+export const DECLARACAO_PADRAO =
+  "Declaramos que nos preços propostos estão incluídas todas as despesas com tributos, fretes, encargos sociais e demais custos diretos e indiretos necessários ao fornecimento, e que concordamos com todas as condições do edital.";

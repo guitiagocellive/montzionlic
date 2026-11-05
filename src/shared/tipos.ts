@@ -88,6 +88,8 @@ export interface CertificadoInfo {
   dias_restantes?: number;
   enviado_por_nome?: string | null;
   criado_em?: string;
+  /** Tamanho aproximado (base64) dos certificados, para reservar espaço no PDF. */
+  tamanho_certificados?: number;
   /** false quando o segredo CHAVE_CERTIFICADO não foi configurado no Worker. */
   segredo_configurado: boolean;
 }
@@ -249,6 +251,7 @@ export interface Arquivo {
   criado_em: string;
   enviado_por_nome: string | null;
   analisado: number;
+  licitacao_id?: number | null;
   execucao_id?: number | null;
   assinado_em?: number | null;
   assinatura_titular?: string | null;

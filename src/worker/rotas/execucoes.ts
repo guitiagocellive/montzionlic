@@ -117,7 +117,7 @@ rotasExecucoes.get("/:id", async (c) => {
       "SELECT id, item_id, produto, marca, custo_unitario, frete FROM cotacoes WHERE licitacao_id = ?",
     ).bind(execucao.licitacao_id),
     c.env.DB.prepare(
-      `SELECT a.id, a.nome, a.tipo_mime, a.tamanho, a.categoria, a.criado_em, a.execucao_id,
+      `SELECT a.id, a.licitacao_id, a.nome, a.tipo_mime, a.tamanho, a.categoria, a.criado_em, a.execucao_id,
               u.nome AS enviado_por_nome,
               (SELECT COUNT(*) FROM analises_ia x WHERE x.arquivo_id = a.id) AS analisado,
               a.assinado_em, a.assinatura_titular, ua.nome AS assinado_por_nome

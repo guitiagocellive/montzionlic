@@ -12,13 +12,15 @@ import {
   Trash2,
   UploadCloud,
 } from "lucide-react";
-import { type DragEvent, useRef, useState } from "react";
+import { type DragEvent, lazy, Suspense, useRef, useState } from "react";
 import { CATEGORIAS_ARQUIVO } from "../../shared/negocio";
 import type { AnaliseIA, Arquivo } from "../../shared/tipos";
 import { api, enviarArquivo, mensagemDeErro } from "../api";
 import { formatarData, formatarTamanho } from "../formato";
 import { ResultadoIA } from "./ResultadoIA";
 import { avisar, Modal, SeloAssinado, Vazio } from "./Ui";
+
+const ModalAssinar = lazy(() => import("../assinatura/ModalAssinar").then((m) => ({ default: m.ModalAssinar })));
 
 const VISUALIZAVEIS = ["application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp", "text/plain"];
 const ANALISAVEIS = [
@@ -66,7 +68,7 @@ export function AbaArquivos({
   const [sobre, setSobre] = useState(false);
   const [vendo, setVendo] = useState<Arquivo | null>(null);
   const [analisando, setAnalisando] = useState<number | null>(null);
-  const [assinando, setAssinando] = useState<number | null>(null);
+  const [assinando, setAssinando] = useState<Arquivo | null>(null);
   const [analise, setAnalise] = useState<{ arquivo: Arquivo; dados: AnaliseIA } | null>(null);
   const entrada = useRef<HTMLInputElement>(null);
 
@@ -113,18 +115,24 @@ export function AbaArquivos({
     }
   }
 
-  async function assinar(a: Arquivo) {
-    if (!confirm(`Assinar "${a.nome}" com o certificado digital da empresa? Será criada uma cópia assinada.`)) return;
-    setAssinando(a.id);
-    try {
-      await api(`/arquivos/${a.id}/assinar`, { corpo: {} });
-      avisar("PDF assinado digitalmente. A cópia assinada está na lista.");
-      await aoMudar();
-    } catch (err) {
-      avisar(mensagemDeErro(err), "erro");
-    } finally {
-      setAssinando(null);
-    }
+  async function baixarBytes(a: Arquivo) {
+    const r = await fetch(`/api/arquivos/${a.id}?baixar=1`, { credentials: "same-origin" });
+    if (!r.ok) throw new Error("Não foi possível abrir o arquivo.");
+    return new Uint8Array(await r.arrayBuffer());
+  }
+
+  async function guardarAssinado(original: Arquivo, pdf: Uint8Array, pedido: string) {
+    const dados = new FormData();
+    const nome = original.nome.replace(/\.pdf$/i, "") + " (assinado).pdf";
+    dados.set("arquivo", new Blob([pdf.slice().buffer as ArrayBuffer], { type: "application/pdf" }), nome);
+    dados.set("categoria", original.categoria ?? "Outro");
+    dados.set("pedido_assinatura", pedido);
+    if (original.execucao_id) dados.set("execucao_id", String(original.execucao_id));
+    else dados.set("licitacao_id", String(original.licitacao_id));
+    await enviarArquivo("/arquivos", dados);
+    setAssinando(null);
+    avisar("PDF assinado digitalmente. A cópia assinada está na lista.");
+    await aoMudar();
   }
 
   async function analisar(a: Arquivo, refazer = false) {
@@ -201,16 +209,8 @@ export function AbaArquivos({
                 </button>
               )}
               {podeAssinar && a.tipo_mime === "application/pdf" && !a.assinado_em && (
-                <button className="botao secundario" onClick={() => assinar(a)} disabled={assinando !== null} title="Assinar com o certificado digital da empresa">
-                  {assinando === a.id ? (
-                    <>
-                      <span className="anel mini" /> Assinando…
-                    </>
-                  ) : (
-                    <>
-                      <PenLine aria-hidden="true" /> Assinar
-                    </>
-                  )}
+                <button className="botao secundario" onClick={() => setAssinando(a)} title="Assinar com o certificado digital da empresa">
+                  <PenLine aria-hidden="true" /> Assinar
                 </button>
               )}
               {visualizavel && (
@@ -324,6 +324,18 @@ export function AbaArquivos({
             </a>
           </div>
         </Modal>
+      )}
+
+      {assinando && (
+        <Suspense fallback={null}>
+          <ModalAssinar
+            titulo={`Assinar "${assinando.nome}"`}
+            carregar={() => baixarBytes(assinando)}
+            opcoes={{ motivo: assinando.categoria ? `${assinando.categoria} assinado(a) digitalmente` : "Documento assinado digitalmente" }}
+            aoAssinado={(pdf, pedido) => guardarAssinado(assinando, pdf, pedido)}
+            aoFechar={() => setAssinando(null)}
+          />
+        </Suspense>
       )}
 
       {analise && (

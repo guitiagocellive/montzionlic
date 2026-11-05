@@ -1,5 +1,5 @@
-import { Download, Eye, FileText, FileType, PenLine, Settings, ShieldCheck } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Download, Eye, FileText, FileType, PenLine, Settings, ShieldCheck, Upload } from "lucide-react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { calcularPreco } from "../../../shared/negocio";
 import { podeEditar } from "../../../shared/permissoes";
 import type { Arquivo, CertificadoInfo, Configuracoes, ContaBancaria, Cotacao, ItemLicitacao, Licitacao, ModeloProposta, Usuario } from "../../../shared/tipos";
@@ -8,6 +8,11 @@ import { Campo } from "../../components/Formulario";
 import { avisar, CampoArea, CampoSelect, Carregando, SeloAssinado, Vazio } from "../../components/Ui";
 import { formatarData, formatarMoeda, formatarNumero, paraNumero } from "../../formato";
 import { link } from "../../rota";
+import { enviarProposta, montarPdf, montarWord, type RespostaDados } from "../../proposta/gerar";
+
+const ModalAssinar = lazy(() => import("../../assinatura/ModalAssinar").then((m) => ({ default: m.ModalAssinar })));
+
+type Assinatura = { titulo: string; nome: string; carregar: () => Promise<Uint8Array> };
 
 type Linha = { incluir: boolean; marca: string; valor: string };
 
@@ -37,6 +42,9 @@ export function AbaProposta({
   const [gerando, setGerando] = useState<"" | "docx" | "pdf" | "assinado">("");
   const [certificado, setCertificado] = useState<CertificadoInfo | null>(null);
   const podeAssinar = podeEditar(usuario.permissoes, "assinatura");
+  const [assinando, setAssinando] = useState<Assinatura | null>(null);
+  const [cidade, setCidade] = useState("");
+  const entradaPdf = useRef<HTMLInputElement>(null);
   const participando = itens.filter((i) => i.participar);
 
   // Sugestão por item: a cotação mais barata (marca e preço de venda).
@@ -90,6 +98,7 @@ export function AbaProposta({
         setModeloId(String(m.modelos.find((x) => x.padrao)?.id ?? m.modelos[0]?.id ?? ""));
         setContaId(String(c.contas.find((x) => x.padrao)?.id ?? c.contas[0]?.id ?? ""));
         setValidade(String(cfg.configuracoes.validade_proposta_padrao ?? 60));
+        setCidade(cfg.configuracoes.empresa_cidade ?? "");
       },
       (err) => avisar(mensagemDeErro(err), "erro"),
     );
@@ -113,31 +122,63 @@ export function AbaProposta({
           ? "O certificado da empresa venceu."
           : "";
 
+  async function pedirDados(tipo: "docx" | "pdf" | "assinado") {
+    return api<RespostaDados>(`/licitacoes/${licitacao.id}/proposta`, {
+      corpo: {
+        modelo_id: tipo === "docx" ? Number(modeloId) : null,
+        conta_id: contaId ? Number(contaId) : null,
+        validade_dias: Number(validade),
+        prazo_entrega: prazo,
+        garantia,
+        observacoes,
+        itens: escolhidos.map((i) => ({ item_id: i.id, marca: linhas[i.id].marca, valor_unitario: paraNumero(linhas[i.id].valor) })),
+      },
+    });
+  }
+
   async function gerar(tipo: "docx" | "pdf" | "assinado") {
     setGerando(tipo);
     try {
-      const r = await api<{ arquivo: { id: number; nome: string } }>(`/licitacoes/${licitacao.id}/proposta`, {
-        corpo: {
-          formato: tipo === "docx" ? "docx" : "pdf",
-          assinar: tipo === "assinado",
-          modelo_id: tipo === "docx" ? Number(modeloId) : null,
-          conta_id: contaId ? Number(contaId) : null,
-          validade_dias: Number(validade),
-          prazo_entrega: prazo,
-          garantia,
-          observacoes,
-          itens: escolhidos.map((i) => ({ item_id: i.id, marca: linhas[i.id].marca, valor_unitario: paraNumero(linhas[i.id].valor) })),
-        },
-      });
-      if (tipo === "docx") window.location.href = `/api/arquivos/${r.arquivo.id}?baixar=1`;
-      else window.open(`/api/arquivos/${r.arquivo.id}`, "_blank", "noopener");
-      avisar(tipo === "assinado" ? "Proposta assinada digitalmente e salva nos arquivos." : "Proposta gerada e salva nos arquivos da licitação.");
-      await aoMudar();
+      const r = await pedirDados(tipo);
+      if (tipo === "docx") {
+        const bytes = await montarWord(r);
+        const { arquivo } = await enviarProposta(licitacao.id, bytes, "docx", { nome: r.nome, modelo: r.modelo?.nome });
+        window.location.href = `/api/arquivos/${arquivo.id}?baixar=1`;
+        avisar("Proposta em Word gerada e salva nos arquivos da licitação.");
+        await aoMudar();
+      } else if (tipo === "pdf") {
+        const bytes = await montarPdf(r);
+        const { arquivo } = await enviarProposta(licitacao.id, bytes, "pdf", { nome: r.nome });
+        window.open(`/api/arquivos/${arquivo.id}`, "_blank", "noopener");
+        avisar("Proposta em PDF gerada e salva nos arquivos da licitação.");
+        await aoMudar();
+      } else {
+        const bytes = await montarPdf(r);
+        setAssinando({ titulo: "Assinar a proposta", nome: r.nome, carregar: async () => bytes });
+      }
     } catch (err) {
       avisar(mensagemDeErro(err), "erro");
     } finally {
       setGerando("");
     }
+  }
+
+  function escolherPdfPronto(arquivo: File) {
+    if (arquivo.type !== "application/pdf" && !/\.pdf$/i.test(arquivo.name)) {
+      avisar("Escolha um arquivo PDF.", "erro");
+      return;
+    }
+    const nome = arquivo.name.replace(/\.pdf$/i, "").slice(0, 110);
+    setAssinando({ titulo: `Assinar "${arquivo.name}"`, nome, carregar: async () => new Uint8Array(await arquivo.arrayBuffer()) });
+  }
+
+  async function aoAssinado(pdf: Uint8Array, pedido: string) {
+    if (!assinando) return;
+    const { arquivo } = await enviarProposta(licitacao.id, pdf, "pdf", { nome: assinando.nome, pedido });
+    setAssinando(null);
+    window.open(`/api/arquivos/${arquivo.id}`, "_blank", "noopener");
+    avisar("Proposta assinada digitalmente e salva nos arquivos.");
+    await aoMudar();
   }
 
   if (modelos === null) return <Carregando />;
@@ -270,6 +311,46 @@ export function AbaProposta({
           )}
         </p>
       </section>
+
+      {podeAssinar && certificadoPronto && (
+        <section className="cartao cartao-pdf-pronto">
+          <div>
+            <h2>
+              <ShieldCheck size={17} /> Já tem a proposta pronta em PDF?
+            </h2>
+            <p className="texto-fraco pequeno" style={{ margin: "4px 0 0" }}>
+              Gere em Word, ajuste e converta para PDF do seu jeito. Depois envie aqui: você escolhe onde fica o carimbo e a
+              plataforma assina com o certificado da empresa.
+            </p>
+          </div>
+          <button className="botao acento" onClick={() => entradaPdf.current?.click()}>
+            <Upload /> Enviar PDF e assinar
+          </button>
+          <input
+            ref={entradaPdf}
+            type="file"
+            accept="application/pdf,.pdf"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) escolherPdfPronto(f);
+              e.target.value = "";
+            }}
+          />
+        </section>
+      )}
+
+      {assinando && (
+        <Suspense fallback={null}>
+          <ModalAssinar
+            titulo={assinando.titulo}
+            carregar={assinando.carregar}
+            opcoes={{ motivo: "Proposta comercial", local: cidade || "Brasil" }}
+            aoAssinado={aoAssinado}
+            aoFechar={() => setAssinando(null)}
+          />
+        </Suspense>
+      )}
 
       {anteriores.length > 0 && (
         <section className="cartao">
