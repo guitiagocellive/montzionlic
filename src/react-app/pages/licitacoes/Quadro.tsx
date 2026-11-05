@@ -166,7 +166,7 @@ function CardLicitacao({ l, hoje }: { l: LicitacaoResumo; hoje: string }) {
         </div>
         {l.responsavel_nome && (
           <span title={`Responsável: ${l.responsavel_nome}`}>
-            <Avatar nome={l.responsavel_nome} pequeno />
+            <Avatar nome={l.responsavel_nome} cor={l.responsavel_cor} foto={l.responsavel_foto} pequeno />
           </span>
         )}
       </div>

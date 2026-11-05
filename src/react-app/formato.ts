@@ -18,6 +18,14 @@ export function formatarData(iso: string | null | undefined): string {
   return `${d}/${m}/${a}`;
 }
 
+const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+/** AAAA-MM-DD → { dia: "06", mes: "nov" } */
+export function diaMes(iso: string) {
+  const [, m, d] = iso.split("-");
+  return { dia: d, mes: MESES[Number(m) - 1] ?? "" };
+}
+
 /** AAAA-MM-DD → "12 nov" */
 export function formatarDataCurta(iso: string): string {
   const [a, m, d] = iso.split("-").map(Number);

@@ -149,7 +149,9 @@ rotasLicitacoes.get("/", async (c) => {
   const { results } = await c.env.DB.prepare(
     `SELECT l.id, l.etapa, l.posicao, l.uasg, l.numero, l.orgao, l.objeto, l.modalidade,
             l.nicho, l.data_sessao, l.horario, l.portal, l.registro_preco, l.fase,
-            l.valor_estimado, l.responsavel_id, u.nome AS responsavel_nome, l.atualizado_em,
+            l.valor_estimado, l.responsavel_id, u.nome AS responsavel_nome, u.cor AS responsavel_cor,
+            CASE WHEN u.foto_chave IS NOT NULL THEN '/api/fotos/' || u.id || '?v=' || substr(u.foto_chave, -8) END AS responsavel_foto,
+            l.atualizado_em,
             (SELECT COUNT(*) FROM licitacao_itens i WHERE i.licitacao_id = l.id AND i.participar = 1) AS total_itens,
             (SELECT COUNT(*) FROM arquivos a WHERE a.licitacao_id = l.id) AS total_arquivos,
             (SELECT COUNT(*) FROM cotacoes ct WHERE ct.licitacao_id = l.id) AS total_cotacoes

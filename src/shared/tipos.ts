@@ -85,6 +85,8 @@ export interface LicitacaoResumo {
   valor_estimado: number | null;
   responsavel_id: number | null;
   responsavel_nome: string | null;
+  responsavel_cor: string | null;
+  responsavel_foto: string | null;
   total_itens: number;
   total_arquivos: number;
   total_cotacoes: number;

@@ -56,7 +56,7 @@ export function Alerta({
   );
 }
 
-/** Tela de acesso (login, primeiro acesso) com planeta brilhante ao fundo. */
+/** Tela de acesso (login, primeiro acesso, convite). */
 export function CartaoAcesso({
   titulo,
   subtitulo,
@@ -68,8 +68,6 @@ export function CartaoAcesso({
 }) {
   return (
     <div className="tela-central">
-      <div className="estrelas" aria-hidden="true" />
-      <div className="planeta" aria-hidden="true" />
       <div className="cartao-acesso entrar">
         <Marca />
         <h1>{titulo}</h1>

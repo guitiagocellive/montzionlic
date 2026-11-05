@@ -1,4 +1,5 @@
 import { CircleAlert, CircleCheck, X } from "lucide-react";
+import { createPortal } from "react-dom";
 import {
   type ReactNode,
   type SelectHTMLAttributes,
@@ -30,7 +31,8 @@ export function Modal({
     };
   }, [aoFechar]);
 
-  return (
+  // Renderiza direto no <body> para ficar sempre por cima do topo e do menu.
+  return createPortal(
     <div className="modal-fundo" onMouseDown={(e) => e.target === e.currentTarget && aoFechar()}>
       <div className={`modal ${largo ? "largo" : ""}`} role="dialog" aria-modal="true" aria-label={titulo}>
         <div className="modal-topo">
@@ -41,7 +43,8 @@ export function Modal({
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

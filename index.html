@@ -4,10 +4,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex, nofollow" />
-    <meta name="theme-color" content="#07060e" />
-    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0a0a0c" />
+    <script>
+      // Aplica o tema salvo antes de desenhar a página (evita piscar).
+      try {
+        var t = localStorage.getItem("tema") || "escuro";
+        if (t === "sistema") t = matchMedia("(prefers-color-scheme: light)").matches ? "claro" : "escuro";
+        document.documentElement.dataset.tema = t;
+      } catch (e) {
+        document.documentElement.dataset.tema = "escuro";
+      }
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>Montzion Licitações</title>
+    <title>Montzion</title>
   </head>
   <body>
     <div id="root"></div>

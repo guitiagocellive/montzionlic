@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
+import { podeVer } from "../shared/permissoes";
 import type { Usuario } from "../shared/tipos";
 import { api } from "./api";
-import { FundoAnimado } from "./components/Fundo";
 import { Layout } from "./components/Layout";
 import { Avisos } from "./components/Ui";
+import { Alertas } from "./pages/Alertas";
 import { Calendario } from "./pages/Calendario";
-import { Equipe } from "./pages/Equipe";
+import { Configuracoes } from "./pages/Configuracoes";
+import { Convite } from "./pages/Convite";
+import { Documentacao } from "./pages/Documentacao";
 import { DetalheLicitacao } from "./pages/licitacoes/Detalhe";
 import { Fornecedores } from "./pages/licitacoes/Fornecedores";
 import { QuadroLicitacoes } from "./pages/licitacoes/Quadro";
 import { Login } from "./pages/Login";
-import { MinhaConta } from "./pages/MinhaConta";
 import { Painel } from "./pages/Painel";
 import { Atas } from "./pages/posganho/Atas";
 import { DetalheExecucao } from "./pages/posganho/Detalhe";
@@ -18,6 +20,7 @@ import { QuadroExecucao } from "./pages/posganho/Quadro";
 import { PrimeiroAcesso } from "./pages/PrimeiroAcesso";
 import { TrocarSenhaObrigatoria } from "./pages/TrocarSenhaObrigatoria";
 import { combinar, useCaminho } from "./rota";
+import { aplicarTema } from "./tema";
 
 type Estado =
   | { tipo: "carregando" }
@@ -28,33 +31,50 @@ type Estado =
 export function App() {
   return (
     <>
-      <FundoAnimado />
       <Conteudo />
       <Avisos />
     </>
   );
 }
 
-function Pagina({ caminho, usuario }: { caminho: string; usuario: Usuario }) {
-  let p: Record<string, string> | null;
-  if ((p = combinar(caminho, "/licitacoes/:id"))) return <DetalheLicitacao key={p.id} id={Number(p.id)} usuario={usuario} />;
-  if ((p = combinar(caminho, "/pos-ganho/:id"))) return <DetalheExecucao key={p.id} id={Number(p.id)} usuario={usuario} />;
+function SemAcesso() {
+  return (
+    <section className="cartao">
+      <div className="em-breve">
+        <h2 style={{ margin: 0 }}>Sem acesso</h2>
+        <p className="texto-suave">Você não tem acesso a esta área. Peça a um administrador.</p>
+      </div>
+    </section>
+  );
+}
+
+function Pagina({ caminho, usuario, aoMudarUsuario }: { caminho: string; usuario: Usuario; aoMudarUsuario: (u: Usuario) => void }) {
+  const p = usuario.permissoes;
+  let m: Record<string, string> | null;
+  if ((m = combinar(caminho, "/licitacoes/:id")))
+    return podeVer(p, "licitacoes") ? <DetalheLicitacao key={m.id} id={Number(m.id)} usuario={usuario} /> : <SemAcesso />;
+  if ((m = combinar(caminho, "/pos-ganho/:id")))
+    return podeVer(p, "posganho") ? <DetalheExecucao key={m.id} id={Number(m.id)} usuario={usuario} /> : <SemAcesso />;
+  if (caminho.startsWith("/configuracoes")) {
+    const secao = caminho.split("/")[2] ?? "";
+    return <Configuracoes usuario={usuario} secao={secao} aoMudarUsuario={aoMudarUsuario} />;
+  }
 
   switch (caminho.replace(/\/+$/, "") || "/") {
     case "/calendario":
       return <Calendario />;
+    case "/alertas":
+      return <Alertas usuario={usuario} />;
     case "/licitacoes":
-      return <QuadroLicitacoes />;
+      return podeVer(p, "licitacoes") ? <QuadroLicitacoes /> : <SemAcesso />;
     case "/fornecedores":
-      return <Fornecedores usuario={usuario} />;
+      return podeVer(p, "fornecedores") ? <Fornecedores usuario={usuario} /> : <SemAcesso />;
     case "/pos-ganho":
-      return <QuadroExecucao />;
+      return podeVer(p, "posganho") ? <QuadroExecucao /> : <SemAcesso />;
     case "/atas":
-      return <Atas usuario={usuario} />;
-    case "/equipe":
-      return usuario.papel === "admin" ? <Equipe usuarioAtual={usuario} /> : <Painel usuario={usuario} />;
-    case "/conta":
-      return <MinhaConta usuario={usuario} />;
+      return podeVer(p, "atas") ? <Atas usuario={usuario} /> : <SemAcesso />;
+    case "/documentacao":
+      return podeVer(p, "documentacao") ? <Documentacao /> : <SemAcesso />;
     default:
       return <Painel usuario={usuario} />;
   }
@@ -64,10 +84,15 @@ function Conteudo() {
   const [estado, setEstado] = useState<Estado>({ tipo: "carregando" });
   const caminho = useCaminho();
 
+  const entrar = useCallback((usuario: Usuario) => {
+    aplicarTema(usuario.tema);
+    setEstado({ tipo: "logado", usuario });
+  }, []);
+
   const carregar = useCallback(async () => {
     try {
       const { usuario } = await api<{ usuario: Usuario }>("/auth/eu");
-      setEstado({ tipo: "logado", usuario });
+      entrar(usuario);
     } catch {
       try {
         const { precisaConfigurar } = await api<{ precisaConfigurar: boolean }>("/auth/setup");
@@ -76,7 +101,7 @@ function Conteudo() {
         setEstado({ tipo: "deslogado" });
       }
     }
-  }, []);
+  }, [entrar]);
 
   useEffect(() => {
     carregar();
@@ -85,12 +110,15 @@ function Conteudo() {
     return () => window.removeEventListener("sessao-expirada", aoExpirar);
   }, [carregar]);
 
+  // Link de convite funciona mesmo sem login.
+  const convite = combinar(caminho, "/convite/:token");
+  if (convite && estado.tipo !== "logado") return <Convite token={convite.token} aoEntrar={carregar} />;
+
   if (estado.tipo === "carregando") {
     return (
       <div className="tela-central">
         <div className="carregando">
           <div className="anel" />
-          Carregando…
         </div>
       </div>
     );
@@ -104,8 +132,8 @@ function Conteudo() {
   }
 
   return (
-    <Layout usuario={usuario} caminho={caminho} aoSair={() => setEstado({ tipo: "deslogado" })}>
-      <Pagina caminho={caminho} usuario={usuario} />
+    <Layout usuario={usuario} caminho={caminho} aoSair={() => setEstado({ tipo: "deslogado" })} aoMudarUsuario={entrar}>
+      <Pagina caminho={caminho} usuario={usuario} aoMudarUsuario={entrar} />
     </Layout>
   );
 }

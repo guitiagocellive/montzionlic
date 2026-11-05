@@ -20,6 +20,27 @@ Plataforma interna de gestão de licitações. Roda inteira na Cloudflare:
 
 Não existe cadastro público: só um administrador adiciona pessoas.
 
+## Layout
+
+- **Menu horizontal (balão no topo):** escolhe a área — Visão geral, Licitações, Pós-ganho, Documentação.
+- **Menu lateral (cápsula):** as funções da área escolhida. No celular, vira uma cápsula fixa embaixo.
+- **Topo:** tema claro/escuro, sino de notificações, configurações (engrenagem) e menu da conta.
+
+## Configurações (engrenagem)
+
+- **Meu perfil:** foto, nome, cargo e cor no time. **Aparência:** tema escuro, claro ou igual ao sistema.
+- **Empresa e margens** (admin): margem de lucro e impostos padrão das licitações novas.
+- **Alertas** (admin): com quantos dias de antecedência avisar sessões, entregas e atas.
+- **Equipe e acessos** (admin): convite por link (uso único, com validade), perfil, cor e acesso por
+  área (sem acesso / ver / editar). O servidor bloqueia o que a pessoa não pode ver ou editar.
+
+## Notificações e alertas
+
+- O sino mostra avisos de sessões próximas, sessões sem orçamento, entregas e atas vencendo,
+  licitação ganha, responsável atribuído e novo membro. Também pode avisar pelo navegador.
+- O servidor confere de hora em hora (cron do Worker) e também quando alguém abre o sino.
+- A tela **Alertas** mostra tudo o que precisa de atenção agora.
+
 ## Módulos
 
 **Seção 1 — Licitações (antes de ganhar)**
