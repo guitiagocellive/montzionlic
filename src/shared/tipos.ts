@@ -228,6 +228,13 @@ export interface LicitacaoResumo {
   total_itens: number;
   total_arquivos: number;
   total_cotacoes: number;
+  itens_ganhos: number;
+  itens_perdidos: number;
+  itens_acompanhando: number;
+  acompanhar: number;
+  colocacao: number | null;
+  data_reabertura: string | null;
+  hora_reabertura: string | null;
 }
 
 export interface Licitacao {
@@ -272,7 +279,7 @@ export interface ItemLicitacao {
   unidade: string | null;
   valor_referencia: number | null;
   participar: number;
-  resultado: "ganho" | "perdido" | "cancelado" | null;
+  resultado: "ganho" | "perdido" | "cancelado" | "acompanhando" | null;
   colocacao: number | null;
   nosso_lance: number | null;
   vencedor: string | null;

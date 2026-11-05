@@ -253,6 +253,7 @@ export function habilitacaoDaCategoria(categoria: string) {
 
 export const RESULTADOS_ITEM = [
   { chave: "ganho", nome: "Ganhamos" },
+  { chave: "acompanhando", nome: "Acompanhando" },
   { chave: "perdido", nome: "Perdemos" },
   { chave: "cancelado", nome: "Cancelado / fracassado" },
 ];

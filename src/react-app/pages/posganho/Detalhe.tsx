@@ -9,6 +9,7 @@ import {
   Package,
   Plus,
   Save,
+  Trophy,
   Trash2,
 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
@@ -27,7 +28,7 @@ import { AbaArquivos } from "../../components/AbaArquivos";
 import { PainelAtividade } from "../../components/Atividade";
 import { Etapas } from "../../components/Etapas";
 import { Campo } from "../../components/Formulario";
-import { avisar, CampoArea, CampoSelect, Carregando, Interruptor, Vazio } from "../../components/Ui";
+import { avisar, CampoArea, CampoSelect, Carregando, Interruptor, Modal, Vazio } from "../../components/Ui";
 import { useFormulario } from "../../components/useFormulario";
 import { formatarData, formatarMoeda, formatarNumero, hojeIso, paraNumero, textoPrazo } from "../../formato";
 import { link, navegar } from "../../rota";
@@ -46,7 +47,17 @@ interface Ficha {
     lucro_percentual: number;
   };
   itens: ItemExecucao[];
-  itensLicitacao: { id: number; numero: string | null; descricao: string | null; quantidade: number | null; unidade: string | null }[];
+  itensLicitacao: {
+    id: number;
+    numero: string | null;
+    descricao: string | null;
+    quantidade: number | null;
+    unidade: string | null;
+    resultado: string | null;
+    nosso_lance: number | null;
+    participar: number;
+    ja_empenhado: number;
+  }[];
   cotacoes: { id: number; item_id: number | null; produto: string | null; marca: string | null; custo_unitario: number | null; frete: number | null }[];
   arquivos: Arquivo[];
   atas: AtaDisponivel[];
@@ -404,6 +415,7 @@ function AbaItensGanhos({ ficha, aoSalvar }: { ficha: Ficha; aoSalvar: () => Pro
   const [ataId, setAtaId] = useState(ficha.execucao.ata_id ? String(ficha.execucao.ata_id) : "");
   const [sujo, setSujo] = useState(false);
   const [salvando, setSalvando] = useState(false);
+  const [escolhendo, setEscolhendo] = useState(false);
 
   useEffect(() => {
     setLinhas(ficha.itens.map(paraLinha));
@@ -503,22 +515,57 @@ function AbaItensGanhos({ ficha, aoSalvar }: { ficha: Ficha; aoSalvar: () => Pro
   let totalVenda = 0;
   let totalLucro = 0;
 
+  function adicionarGanhos(escolhidos: { id: number; quantidade: number }[]) {
+    const novas = escolhidos.map(({ id: itemId, quantidade }) => {
+      const item = ficha.itensLicitacao.find((x) => x.id === itemId)!;
+      const cot = ficha.cotacoes
+        .filter((c) => c.item_id === itemId)
+        .map((c) => ({ c, custo: (c.custo_unitario ?? 0) + (c.frete ?? 0) / Math.max(item.quantidade ?? 1, 1) }))
+        .sort((a, b) => a.custo - b.custo)[0];
+      return {
+        ata_item_id: "",
+        item_id: String(itemId),
+        item_numero: item.numero ?? "",
+        produto: cot ? [cot.c.produto, cot.c.marca].filter(Boolean).join(" — ") : (item.descricao ?? "").slice(0, 200),
+        quantidade: String(quantidade),
+        valor_unitario: item.nosso_lance == null ? "" : String(item.nosso_lance),
+        custo_unitario: cot ? cot.custo.toFixed(2) : "",
+      };
+    });
+    setLinhas((ls) => [...ls, ...novas]);
+    setSujo(true);
+    setEscolhendo(false);
+  }
+
   return (
     <>
+      {escolhendo && (
+        <ModalItensGanhos
+          itens={ficha.itensLicitacao}
+          jaNaLista={linhas.map((l) => l.item_id).filter(Boolean)}
+          aoFechar={() => setEscolhendo(false)}
+          aoAdicionar={adicionarGanhos}
+        />
+      )}
       <section className="cartao">
         <div className="cartao-titulo">
           <h2>
             <Package size={18} color="#f0abfc" aria-hidden="true" /> Itens ganhos
           </h2>
-          <button
-            className="botao secundario"
-            onClick={() => {
-              setLinhas((ls) => [...ls, { ata_item_id: "", item_id: "", item_numero: "", produto: "", quantidade: "", valor_unitario: "", custo_unitario: "" }]);
-              setSujo(true);
-            }}
-          >
-            <Plus aria-hidden="true" /> Adicionar item
-          </button>
+          <div className="linha-botoes">
+            <button
+              className="botao secundario"
+              onClick={() => {
+                setLinhas((ls) => [...ls, { ata_item_id: "", item_id: "", item_numero: "", produto: "", quantidade: "", valor_unitario: "", custo_unitario: "" }]);
+                setSujo(true);
+              }}
+            >
+              <Plus aria-hidden="true" /> Item avulso
+            </button>
+            <button className="botao acento" onClick={() => setEscolhendo(true)}>
+              <Trophy aria-hidden="true" /> Adicionar itens ganhos
+            </button>
+          </div>
         </div>
         <div className="seletor-ata">
           <span className="icone-redondo info">
@@ -573,8 +620,11 @@ function AbaItensGanhos({ ficha, aoSalvar }: { ficha: Ficha; aoSalvar: () => Pro
               totalLucro += lucro ?? 0;
               const cotacoesDoItem = ficha.cotacoes.filter((c) => String(c.item_id) === l.item_id);
               const saldo = saldoDaLinha(i);
+              const doEdital = ficha.itensLicitacao.find((x) => String(x.id) === l.item_id);
+              const naoGanho = !!doEdital && ficha.itensLicitacao.some((x) => x.resultado === "ganho") && doEdital.resultado !== "ganho";
               return (
                 <div key={i} className={`linha-ganho ${saldo != null && (paraNumero(l.quantidade) ?? 0) > saldo + 1e-9 ? "sem-saldo" : ""}`}>
+                  {naoGanho && <p className="texto-amarelo pequeno" style={{ margin: 0 }}>Este item não está marcado como ganho na licitação.</p>}
                   {ata && (
                     <div className="item-ata-linha">
                       <CampoSelect
@@ -600,10 +650,12 @@ function AbaItensGanhos({ ficha, aoSalvar }: { ficha: Ficha; aoSalvar: () => Pro
                       value={l.item_id}
                       onChange={(e) => escolherItem(i, e.target.value)}
                       vazio="Selecione"
-                      opcoes={ficha.itensLicitacao.map((x) => ({
-                        valor: String(x.id),
-                        texto: `${x.numero ?? "—"} · ${(x.descricao ?? "").slice(0, 60)}`,
-                      }))}
+                      opcoes={[...ficha.itensLicitacao]
+                        .sort((a, b) => Number(b.resultado === "ganho") - Number(a.resultado === "ganho"))
+                        .map((x) => ({
+                          valor: String(x.id),
+                          texto: `${x.resultado === "ganho" ? "✓ " : ""}${x.numero ?? "—"} · ${(x.descricao ?? "").slice(0, 60)}${x.resultado && x.resultado !== "ganho" ? ` (${x.resultado})` : ""}`,
+                        }))}
                     />
                     <CampoSelect
                       rotulo="Produto cotado"
@@ -676,5 +728,82 @@ function AbaItensGanhos({ ficha, aoSalvar }: { ficha: Ficha; aoSalvar: () => Pro
         </button>
       </div>
     </>
+  );
+}
+
+function ModalItensGanhos({
+  itens,
+  jaNaLista,
+  aoFechar,
+  aoAdicionar,
+}: {
+  itens: Ficha["itensLicitacao"];
+  jaNaLista: string[];
+  aoFechar: () => void;
+  aoAdicionar: (escolhidos: { id: number; quantidade: number }[]) => void;
+}) {
+  const temGanhos = itens.some((i) => i.resultado === "ganho");
+  const disponiveis = itens.filter((i) => (temGanhos ? i.resultado === "ganho" : i.participar) && !jaNaLista.includes(String(i.id)));
+  const [marcados, setMarcados] = useState<Record<number, { marcado: boolean; quantidade: string }>>(() =>
+    Object.fromEntries(disponiveis.map((i) => [i.id, { marcado: true, quantidade: String(Math.max(0, (i.quantidade ?? 0) - i.ja_empenhado)) }])),
+  );
+  const escolhidos = disponiveis.filter((i) => marcados[i.id]?.marcado && (paraNumero(marcados[i.id].quantidade) ?? 0) > 0);
+
+  return (
+    <Modal titulo="Adicionar itens ganhos" aoFechar={aoFechar} largo>
+      {!temGanhos && (
+        <p className="texto-amarelo pequeno" style={{ marginTop: 0 }}>
+          Nenhum item foi marcado como ganho na licitação. Mostrando todos os itens em que participamos — marque os ganhos na aba
+          Resultado da licitação.
+        </p>
+      )}
+      {disponiveis.length === 0 ? (
+        <Vazio icone={<Trophy />} titulo="Todos os itens ganhos já estão neste empenho" />
+      ) : (
+        <div className="lista-ganhamos">
+          {disponiveis.map((i) => {
+            const m = marcados[i.id];
+            const restante = Math.max(0, (i.quantidade ?? 0) - i.ja_empenhado);
+            return (
+              <label key={i.id} className={`linha-ganhamos ${m.marcado ? "ganho" : ""}`}>
+                <input type="checkbox" checked={m.marcado} onChange={(e) => setMarcados((x) => ({ ...x, [i.id]: { ...m, marcado: e.target.checked } }))} />
+                <span className="linha-ganhamos-descricao">
+                  {i.numero ? `Item ${i.numero} · ` : ""}
+                  {i.descricao || "Sem descrição"}
+                  <small className="texto-fraco">
+                    Ganho: {formatarNumero(i.quantidade)} {i.unidade}
+                    {i.ja_empenhado > 0 && ` · já empenhado em outros: ${formatarNumero(i.ja_empenhado)} · resta ${formatarNumero(restante)}`}
+                    {i.nosso_lance != null && ` · ${formatarMoeda(i.nosso_lance)} un.`}
+                  </small>
+                </span>
+                <span className="texto-fraco pequeno">Qtd neste empenho</span>
+                <div className="entrada valor-ganho">
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    value={m.quantidade}
+                    onChange={(e) => setMarcados((x) => ({ ...x, [i.id]: { ...m, quantidade: e.target.value } }))}
+                    aria-label="Quantidade neste empenho"
+                  />
+                </div>
+              </label>
+            );
+          })}
+        </div>
+      )}
+      <div className="botoes-modal">
+        <button className="botao secundario" onClick={aoFechar}>
+          Cancelar
+        </button>
+        <button
+          className="botao acento"
+          disabled={escolhidos.length === 0}
+          onClick={() => aoAdicionar(escolhidos.map((i) => ({ id: i.id, quantidade: paraNumero(marcados[i.id].quantidade) ?? 0 })))}
+        >
+          <Plus /> Adicionar {escolhidos.length} item(ns)
+        </button>
+      </div>
+    </Modal>
   );
 }

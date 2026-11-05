@@ -1,4 +1,4 @@
-import { Building2, Check, Download, Eye, FileCheck2, FileText, FileType, PenLine, Plus, Settings, ShieldCheck, Trash2, Upload } from "lucide-react";
+import { Building2, Check, Download, Eye, FileCheck2, FileText, FileType, Pencil, PenLine, Plus, Settings, ShieldCheck, Trash2, Upload } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { calcularPreco } from "../../../shared/negocio";
 import { podeEditar } from "../../../shared/permissoes";
@@ -40,6 +40,7 @@ export function AbaProposta({
   arquivos,
   usuario,
   aoMudar,
+  aoEditarDados,
 }: {
   licitacao: Licitacao;
   itens: ItemLicitacao[];
@@ -47,6 +48,8 @@ export function AbaProposta({
   arquivos: Arquivo[];
   usuario: Usuario;
   aoMudar: () => Promise<void> | void;
+  /** Abre a janela de edição dos dados da licitação. */
+  aoEditarDados?: () => void;
 }) {
   const admin = usuario.papel === "admin";
   const podeAssinar = podeEditar(usuario.permissoes, "assinatura");
@@ -261,8 +264,49 @@ export function AbaProposta({
     await aoMudar();
   }
 
+  const dadosLicitacao: [string, string | null][] = [
+    ["Órgão", licitacao.orgao],
+    ["UASG", licitacao.uasg],
+    ["Nº da licitação", licitacao.numero],
+    ["Modalidade", licitacao.modalidade],
+    ["Sessão", licitacao.data_sessao ? `${formatarData(licitacao.data_sessao)}${licitacao.horario ? ` às ${licitacao.horario}` : ""}` : null],
+    ["Portal", licitacao.portal],
+  ];
+  const faltando = dadosLicitacao.filter(([, v]) => !v).length + (licitacao.objeto ? 0 : 1);
+
   return (
     <>
+      {/* 0. Dados da licitação que entram na proposta */}
+      <section className="cartao">
+        <div className="cartao-titulo">
+          <h2>
+            <FileText size={17} /> Dados da licitação na proposta
+          </h2>
+          {aoEditarDados && (
+            <button className="botao secundario pequeno" onClick={aoEditarDados}>
+              <Pencil /> Editar dados
+            </button>
+          )}
+        </div>
+        <div className="dados-proposta">
+          {dadosLicitacao.map(([rotulo, valor]) => (
+            <div key={rotulo}>
+              <small>{rotulo}</small>
+              <span className={valor ? "" : "falta"}>{valor || "Falta preencher"}</span>
+            </div>
+          ))}
+          <div className="largo">
+            <small>Objeto</small>
+            <span className={licitacao.objeto ? "" : "falta"}>{licitacao.objeto || "Falta preencher"}</span>
+          </div>
+        </div>
+        {faltando > 0 && (
+          <p className="texto-amarelo pequeno" style={{ margin: "10px 0 0" }}>
+            {faltando} dado(s) sem preencher: ficam em branco na proposta.
+          </p>
+        )}
+      </section>
+
       {/* 1. Empresa e pagamento */}
       <section className="cartao">
         <div className="cartao-titulo">

@@ -55,7 +55,7 @@ const ESQUEMA_ITEM: Esquema = {
   unidade: "texto",
   valor_referencia: "numero",
   participar: "bool",
-  resultado: ["ganho", "perdido", "cancelado"],
+  resultado: ["ganho", "perdido", "cancelado", "acompanhando"],
   colocacao: "inteiro",
   nosso_lance: "numero",
   vencedor: "texto",
@@ -108,17 +108,22 @@ async function aoGanhar(db: D1Database, licitacaoId: number): Promise<number | n
     .bind(licitacaoId, (max?.p ?? 0) + 1, lic.registro_preco)
     .first<{ id: number }>();
 
-  // Para cada item em que participamos, usa a cotação mais barata como sugestão.
+  // Só os itens ganhos vão para o empenho (se nenhum foi marcado, vão todos em que participamos).
+  // O custo vem da cotação mais barata; o valor de venda é o lance final (ou o preço sugerido).
+  const temGanhos = await db
+    .prepare("SELECT 1 FROM licitacao_itens WHERE licitacao_id = ? AND resultado = 'ganho' LIMIT 1")
+    .bind(licitacaoId)
+    .first();
   const { results: itens } = await db
     .prepare(
-      `SELECT i.id, i.numero, i.quantidade,
+      `SELECT i.id, i.numero, i.quantidade, i.nosso_lance, i.descricao,
               c.produto, c.marca, c.custo_unitario, c.frete
          FROM licitacao_itens i
          LEFT JOIN cotacoes c ON c.id = (
            SELECT c2.id FROM cotacoes c2 WHERE c2.item_id = i.id
             ORDER BY (COALESCE(c2.custo_unitario, 0) + COALESCE(c2.frete, 0) / MAX(COALESCE(i.quantidade, 1), 1))
             LIMIT 1)
-        WHERE i.licitacao_id = ? AND i.participar = 1
+        WHERE i.licitacao_id = ? AND ${temGanhos ? "i.resultado = 'ganho'" : "i.participar = 1"}
         ORDER BY i.id`,
     )
     .bind(licitacaoId)
@@ -126,6 +131,8 @@ async function aoGanhar(db: D1Database, licitacaoId: number): Promise<number | n
       id: number;
       numero: string | null;
       quantidade: number | null;
+      nosso_lance: number | null;
+      descricao: string | null;
       produto: string | null;
       marca: string | null;
       custo_unitario: number | null;
@@ -142,11 +149,12 @@ async function aoGanhar(db: D1Database, licitacaoId: number): Promise<number | n
           impostoPercentual: lic.imposto_percentual,
           lucroPercentual: lic.lucro_percentual,
         });
-        const produto = [i.produto, i.marca].filter(Boolean).join(" — ") || null;
+        const produto = [i.produto, i.marca].filter(Boolean).join(" — ") || i.descricao?.slice(0, 200) || null;
+        const venda = i.nosso_lance ?? (i.custo_unitario == null ? null : Math.round(calculo.precoVenda * 100) / 100);
         return db
           .prepare(
-            `INSERT INTO execucao_itens (execucao_id, item_id, item_numero, produto, quantidade, custo_unitario)
-             VALUES (?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO execucao_itens (execucao_id, item_id, item_numero, produto, quantidade, valor_unitario, custo_unitario)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
           )
           .bind(
             execucao!.id,
@@ -154,6 +162,7 @@ async function aoGanhar(db: D1Database, licitacaoId: number): Promise<number | n
             i.numero,
             produto,
             i.quantidade,
+            venda,
             i.custo_unitario == null ? null : calculo.custoUnitarioComFrete,
           );
       }),
@@ -171,6 +180,10 @@ rotasLicitacoes.get("/", async (c) => {
             CASE WHEN u.foto_chave IS NOT NULL THEN '/api/fotos/' || u.id || '?v=' || substr(u.foto_chave, -8) END AS responsavel_foto,
             l.atualizado_em,
             (SELECT COUNT(*) FROM licitacao_itens i WHERE i.licitacao_id = l.id AND i.participar = 1) AS total_itens,
+            (SELECT COUNT(*) FROM licitacao_itens i WHERE i.licitacao_id = l.id AND i.resultado = 'ganho') AS itens_ganhos,
+            (SELECT COUNT(*) FROM licitacao_itens i WHERE i.licitacao_id = l.id AND i.resultado = 'perdido') AS itens_perdidos,
+            (SELECT COUNT(*) FROM licitacao_itens i WHERE i.licitacao_id = l.id AND i.resultado = 'acompanhando') AS itens_acompanhando,
+            l.acompanhar, l.colocacao, l.data_reabertura, l.hora_reabertura,
             (SELECT COUNT(*) FROM arquivos a WHERE a.licitacao_id = l.id) AS total_arquivos,
             (SELECT COUNT(*) FROM cotacoes ct WHERE ct.licitacao_id = l.id) AS total_cotacoes
        FROM licitacoes l

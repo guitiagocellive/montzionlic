@@ -1,10 +1,9 @@
-import { Ban, Bot, CalendarClock, Calculator, Check, ExternalLink, Eye, EyeOff, FileText, ListChecks, Medal, PackageCheck, Save, ThumbsDown, ThumbsUp, Trophy, Wallet } from "lucide-react";
+import { Ban, Bot, Calculator, Check, Eye, EyeOff, FileText, ListChecks, Medal, PackageCheck, Save, ThumbsDown, ThumbsUp, Trophy } from "lucide-react";
 import { useEffect, useState } from "react";
-import { diasAte, SITUACOES_DISPUTA } from "../../../shared/negocio";
+import { SITUACOES_DISPUTA } from "../../../shared/negocio";
 import type { Licitacao } from "../../../shared/tipos";
 import { api, mensagemDeErro } from "../../api";
 import { avisar } from "../../components/Ui";
-import { formatarData, formatarMoeda, hojeIso, textoPrazo } from "../../formato";
 import { link } from "../../rota";
 
 interface Props {
@@ -14,18 +13,14 @@ interface Props {
   execucoes: { id: number; numero_empenho: string | null }[];
   podeEditar: boolean;
   aoMudarEtapa: (etapa: string, extra?: Record<string, unknown>) => Promise<void>;
+  /** Abre a janela "Quais itens ganhamos?" */
+  aoGanhar: () => void;
   aoIrPara: (aba: string) => void;
   aoSalvar: () => Promise<void> | void;
 }
 
 /** Resumo da licitação e o "próximo passo" de acordo com a etapa. */
-export function PainelEtapa({ licitacao: l, semCotacao, participando, execucoes, podeEditar, aoMudarEtapa, aoIrPara, aoSalvar }: Props) {
-  const hoje = hojeIso();
-  const reaberta = l.data_reabertura && l.data_reabertura >= hoje;
-  const dataSessao = reaberta ? l.data_reabertura : l.data_sessao;
-  const horaSessao = reaberta ? l.hora_reabertura : l.horario;
-  const dias = dataSessao ? diasAte(dataSessao, hoje) : null;
-
+export function PainelEtapa({ licitacao: l, semCotacao, participando, execucoes, podeEditar, aoMudarEtapa, aoGanhar, aoIrPara, aoSalvar }: Props) {
   const acao = (rotulo: string, icone: React.ReactNode, onClick: () => void, classe = "secundario") => (
     <button className={`botao ${classe}`} onClick={onClick} disabled={!podeEditar && classe !== "link"}>
       {icone} {rotulo}
@@ -71,6 +66,7 @@ export function PainelEtapa({ licitacao: l, semCotacao, participando, execucoes,
         <>
           {acao("Gerar proposta", <FileText />, () => aoIrPara("proposta"), "link")}
           {acao("Perdemos", <ThumbsDown />, perdemos)}
+          {acao("Ganhamos itens", <Trophy />, aoGanhar)}
           {acao("Sessão feita: ficamos bem colocados", <Medal />, () => aoMudarEtapa("boa_colocacao"), "acento")}
         </>
       );
@@ -81,13 +77,13 @@ export function PainelEtapa({ licitacao: l, semCotacao, participando, execucoes,
       botoes = (
         <>
           {acao("Perdemos", <ThumbsDown />, perdemos)}
-          {acao("Ganhamos!", <Trophy />, () => aoMudarEtapa("ganha"), "acento")}
+          {acao("Ganhamos (escolher itens)", <Trophy />, aoGanhar, "acento")}
         </>
       );
       break;
     case "ganha":
       titulo = "Licitação ganha";
-      texto = "O empenho já está no Pós-ganho. Registre o resultado de cada item para os relatórios.";
+      texto = "O empenho já está no Pós-ganho, só com os itens ganhos. Itens em acompanhamento continuam na aba Resultado.";
       botoes = (
         <>
           {acao("Resultado por item", <Trophy />, () => aoIrPara("resultado"), "link")}
@@ -108,41 +104,6 @@ export function PainelEtapa({ licitacao: l, semCotacao, participando, execucoes,
 
   return (
     <section className={`painel-etapa entrar etapa-${l.etapa}`}>
-      <div className="resumo-ficha">
-        <span className={`resumo-item ${dias != null && dias >= 0 && dias <= 1 ? "urgente" : ""}`}>
-          <CalendarClock />
-          {dataSessao ? (
-            <>
-              {reaberta ? "Reabertura" : "Sessão"} {formatarData(dataSessao)}
-              {horaSessao ? ` às ${horaSessao}` : ""}
-              {dias != null && dias >= 0 && <strong>{textoPrazo(dias)}</strong>}
-            </>
-          ) : (
-            "Sessão sem data"
-          )}
-        </span>
-        {l.portal && (
-          <span className="resumo-item">
-            <ExternalLink />
-            {l.link ? (
-              <a href={l.link} target="_blank" rel="noreferrer noopener">
-                {l.portal}
-              </a>
-            ) : (
-              l.portal
-            )}
-          </span>
-        )}
-        {l.valor_estimado != null && (
-          <span className="resumo-item">
-            <Wallet /> {formatarMoeda(l.valor_estimado)} estimados
-          </span>
-        )}
-        <span className="resumo-item">
-          <ListChecks /> {participando} item(ns)
-        </span>
-      </div>
-
       <div className="proximo-passo">
         <div className="proximo-passo-texto">
           <span className="sobretitulo">Próximo passo</span>

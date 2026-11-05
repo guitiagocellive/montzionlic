@@ -1,4 +1,4 @@
-import { CalendarClock, FileText, Gavel, ListChecks, Plus, Search, Tag } from "lucide-react";
+import { CalendarClock, FileText, Gavel, ListChecks, Plus, Search } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { diasAte, ETAPAS_LICITACAO, MODALIDADES } from "../../../shared/negocio";
 import { podeEditar } from "../../../shared/permissoes";
@@ -53,6 +53,11 @@ export function QuadroLicitacoes({ usuario }: { usuario: Usuario }) {
   }, [licitacoes, busca, nicho]);
 
   async function mover(card: LicitacaoResumo, etapa: string, posicao: number) {
+    // Ganhou? Primeiro escolher quais itens foram ganhos (só eles vão para o empenho).
+    if (etapa === "ganha" && card.etapa !== "ganha" && card.total_itens > 1 && card.itens_ganhos === 0) {
+      navegar(`/licitacoes/${card.id}?ganhar=1`);
+      return;
+    }
     const anterior = licitacoes;
     setLicitacoes((ls) => ls!.map((l) => (l.id === card.id ? { ...l, etapa, posicao } : l)));
     try {
@@ -135,52 +140,69 @@ export function QuadroLicitacoes({ usuario }: { usuario: Usuario }) {
   );
 }
 
+const valorCurto = (v: number) =>
+  v >= 1_000_000 ? `R$ ${(v / 1_000_000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mi` : v >= 1000 ? `R$ ${Math.round(v / 1000)} mil` : formatarMoeda(v);
+
 function CardLicitacao({ l, hoje }: { l: LicitacaoResumo; hoje: string }) {
-  const dias = l.data_sessao ? diasAte(l.data_sessao, hoje) : null;
-  const classePrazo =
-    dias == null ? "" : dias < 0 ? "passou" : dias <= 1 ? "urgente" : dias <= 5 ? "proximo" : "";
   const ativa = !["perdida", "ganha"].includes(l.etapa);
+  const reaberta = ativa && !!l.data_reabertura && l.data_reabertura >= hoje;
+  const data = reaberta ? l.data_reabertura : l.data_sessao;
+  const hora = reaberta ? l.hora_reabertura : l.horario;
+  const dias = data ? diasAte(data, hoje) : null;
+  const classePrazo = dias == null ? "" : dias < 0 ? "passou" : dias <= 1 ? "urgente" : dias <= 5 ? "proximo" : "";
+  const temResultado = l.itens_ganhos + l.itens_perdidos + l.itens_acompanhando > 0;
 
   return (
     <>
-      <div className="card-etiquetas">
-        {l.modalidade && <span className="chip">{l.modalidade}</span>}
-        {l.registro_preco === 1 && <span className="chip destaque">SRP</span>}
-      </div>
-      <h4 className="card-titulo">{l.numero ? `Nº ${l.numero}` : "Sem número"}</h4>
-      <p className="card-orgao">{l.orgao || "Órgão não informado"}</p>
-      {l.objeto && <p className="card-objeto">{l.objeto}</p>}
-
-      {l.data_sessao && (
-        <div className={`card-sessao ${ativa ? classePrazo : ""}`}>
-          <CalendarClock aria-hidden="true" />
-          <span>
-            {formatarDataCurta(l.data_sessao)}
-            {l.horario && ` · ${l.horario}`}
-          </span>
-          {ativa && dias != null && <strong>{textoPrazo(dias)}</strong>}
-        </div>
-      )}
-
-      <div className="card-rodape">
-        <div className="card-contadores">
-          {l.nicho && (
-            <span title="Nicho">
-              <Tag aria-hidden="true" /> {l.nicho}
-            </span>
-          )}
-          <span title="Itens que vamos participar">
-            <ListChecks aria-hidden="true" /> {l.total_itens}
-          </span>
-          <span title="Arquivos">
-            <FileText aria-hidden="true" /> {l.total_arquivos}
-          </span>
-        </div>
+      <div className="card-topo">
+        <h4 className="card-titulo">{l.numero ? `Nº ${l.numero}` : "Sem número"}</h4>
         {l.responsavel_nome && (
           <span title={`Responsável: ${l.responsavel_nome}`}>
             <Avatar nome={l.responsavel_nome} cor={l.responsavel_cor} foto={l.responsavel_foto} pequeno />
           </span>
         )}
+      </div>
+      <p className="card-orgao">{l.orgao || "Órgão não informado"}</p>
+      <div className="card-etiquetas">
+        {l.modalidade && <span className="chip">{l.modalidade}</span>}
+        {l.uasg && <span className="chip">UASG {l.uasg}</span>}
+        {l.registro_preco === 1 && <span className="chip destaque">SRP</span>}
+        {l.etapa === "boa_colocacao" && l.colocacao && <span className="chip amarelo">{l.colocacao}º lugar</span>}
+        {l.etapa === "boa_colocacao" && !l.acompanhar && <span className="chip">Sem acompanhar</span>}
+      </div>
+
+      {data && (
+        <div className={`card-sessao ${ativa ? classePrazo : ""}`}>
+          <CalendarClock aria-hidden="true" />
+          <span>
+            {reaberta ? "Reabre " : ""}
+            {formatarDataCurta(data)}
+            {hora && ` · ${hora}`}
+          </span>
+          {ativa && dias != null && dias >= 0 && <strong>{textoPrazo(dias)}</strong>}
+        </div>
+      )}
+
+      {temResultado && (
+        <div className="card-resultado">
+          {l.itens_ganhos > 0 && <span className="verde">{l.itens_ganhos} ganho(s)</span>}
+          {l.itens_acompanhando > 0 && <span className="amarelo">{l.itens_acompanhando} acompanhando</span>}
+          {l.itens_perdidos > 0 && <span className="vermelho">{l.itens_perdidos} perdido(s)</span>}
+        </div>
+      )}
+
+      <div className="card-rodape">
+        <div className="card-contadores">
+          <span title="Itens em que vamos participar">
+            <ListChecks aria-hidden="true" /> {l.total_itens} itens
+          </span>
+          {l.total_arquivos > 0 && (
+            <span title="Arquivos">
+              <FileText aria-hidden="true" /> {l.total_arquivos}
+            </span>
+          )}
+        </div>
+        {l.valor_estimado != null && l.valor_estimado > 0 && <span className="card-valor">{valorCurto(l.valor_estimado)}</span>}
       </div>
     </>
   );

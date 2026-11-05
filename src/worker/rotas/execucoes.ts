@@ -117,8 +117,11 @@ rotasExecucoes.get("/:id", async (c) => {
     ).bind(execucao.licitacao_id),
     c.env.DB.prepare("SELECT * FROM execucao_itens WHERE execucao_id = ? ORDER BY id").bind(id),
     c.env.DB.prepare(
-      "SELECT id, numero, descricao, quantidade, unidade FROM licitacao_itens WHERE licitacao_id = ? ORDER BY CAST(numero AS INTEGER), numero, id",
-    ).bind(execucao.licitacao_id),
+      `SELECT i.id, i.numero, i.descricao, i.quantidade, i.unidade, i.resultado, i.nosso_lance, i.participar,
+              COALESCE((SELECT SUM(ei.quantidade) FROM execucao_itens ei JOIN execucoes e2 ON e2.id = ei.execucao_id
+                         WHERE ei.item_id = i.id AND e2.id <> ?), 0) AS ja_empenhado
+         FROM licitacao_itens i WHERE i.licitacao_id = ? ORDER BY CAST(i.numero AS INTEGER), i.numero, i.id`,
+    ).bind(id, execucao.licitacao_id),
     c.env.DB.prepare(
       "SELECT id, item_id, produto, marca, custo_unitario, frete FROM cotacoes WHERE licitacao_id = ?",
     ).bind(execucao.licitacao_id),

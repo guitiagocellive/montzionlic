@@ -4492,6 +4492,390 @@ a.kpi:hover {
   margin-top: 14px;
 }
 
+/* ---------- Ficha da licitação (duas colunas) e cards do quadro ---------- */
+
+.ficha-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 330px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+  margin-top: 14px;
+}
+
+.ficha-lateral {
+  position: sticky;
+  top: 86px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ficha-lateral .cartao {
+  margin: 0;
+}
+
+.ficha-principal {
+  min-width: 0;
+}
+
+.ficha-principal .painel-etapa {
+  margin-top: 0;
+}
+
+.dados-resumo {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+}
+
+.dados-resumo dt {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72rem;
+  color: var(--texto-fraco);
+}
+
+.dados-resumo dt svg {
+  width: 13px;
+  height: 13px;
+}
+
+.dados-resumo dd {
+  margin: 2px 0 0;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.dados-resumo .dupla {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.dados-resumo .falta,
+.dados-proposta .falta {
+  color: var(--amarelo);
+  font-style: italic;
+}
+
+.dado-sessao {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--superficie-2);
+  border: 1px solid var(--borda);
+}
+
+.dado-sessao dd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-weight: 600;
+}
+
+.dado-sessao strong {
+  font-size: 0.78rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--acento-suave);
+  color: var(--acento-texto);
+}
+
+.dado-sessao.urgente {
+  border-color: color-mix(in srgb, var(--amarelo) 50%, var(--borda));
+}
+
+.dado-sessao.urgente strong {
+  background: var(--amarelo-fundo);
+  color: var(--amarelo);
+}
+
+.objeto-resumo {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--texto-suave);
+  font-size: 0.84rem !important;
+}
+
+.contagem-itens {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--texto-suave);
+}
+
+.contagem-itens span {
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: var(--superficie-2);
+}
+
+.contagem-itens strong {
+  font-size: 1rem;
+  color: var(--texto);
+  margin-right: 3px;
+}
+
+.contagem-itens .verde strong {
+  color: var(--verde);
+}
+
+.contagem-itens .amarelo strong {
+  color: var(--amarelo);
+}
+
+.contagem-itens .vermelho strong {
+  color: var(--vermelho);
+}
+
+.contagem-itens .fraco strong {
+  color: var(--texto-fraco);
+}
+
+.link-empenho {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--verde-fundo);
+  color: var(--verde);
+  font-size: 0.82rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.abas-ficha {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 14px;
+  border-radius: 14px;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.abas-ficha::-webkit-scrollbar {
+  display: none;
+}
+
+.aba-ficha {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1 0 auto;
+  justify-content: center;
+  padding: 9px 14px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--texto-suave);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.aba-ficha svg {
+  width: 16px;
+  height: 16px;
+}
+
+.aba-ficha svg.feito {
+  color: var(--verde);
+}
+
+.aba-ficha small {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--superficie-3);
+  font-size: 0.72rem;
+  color: var(--texto-fraco);
+}
+
+.aba-ficha:hover {
+  background: var(--superficie-2);
+  color: var(--texto);
+}
+
+.aba-ficha.ativa {
+  background: var(--texto);
+  color: var(--fundo, #0b0f14);
+}
+
+.aba-ficha.ativa svg,
+.aba-ficha.ativa small {
+  color: inherit;
+}
+
+.aba-ficha.ativa small {
+  background: color-mix(in srgb, var(--fundo, #000) 15%, transparent);
+}
+
+.dados-proposta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 16px;
+}
+
+.dados-proposta > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.dados-proposta small {
+  font-size: 0.72rem;
+  color: var(--texto-fraco);
+}
+
+.dados-proposta span {
+  font-size: 0.88rem;
+  overflow-wrap: anywhere;
+}
+
+.dados-proposta .largo {
+  grid-column: 1 / -1;
+}
+
+.lista-ganhamos {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 55vh;
+  overflow: auto;
+  margin: 12px 0;
+}
+
+.linha-ganhamos {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto 130px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--borda);
+  background: var(--superficie-2);
+}
+
+.linha-ganhamos.ganho {
+  border-color: color-mix(in srgb, var(--verde) 50%, var(--borda));
+  background: var(--verde-fundo);
+}
+
+.linha-ganhamos.perdido {
+  opacity: 0.7;
+}
+
+.linha-ganhamos-descricao {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 0.86rem;
+}
+
+.linha-ganhamos .valor-ganho input {
+  height: 36px;
+}
+
+.segmentado.pequeno button {
+  padding: 6px 10px;
+  font-size: 0.78rem;
+}
+
+.card-topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.card-topo + .card-orgao {
+  margin-bottom: 8px;
+}
+
+.card-resultado {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.card-resultado span {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.card-resultado .verde {
+  background: var(--verde-fundo);
+  color: var(--verde);
+}
+
+.card-resultado .amarelo {
+  background: var(--amarelo-fundo);
+  color: var(--amarelo);
+}
+
+.card-resultado .vermelho {
+  background: var(--vermelho-fundo);
+  color: var(--vermelho);
+}
+
+.card-valor {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--texto-suave);
+  white-space: nowrap;
+}
+
+.chip.amarelo {
+  background: var(--amarelo-fundo);
+  color: var(--amarelo);
+}
+
+@media (max-width: 1080px) {
+  .ficha-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ficha-lateral {
+    position: static;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .dados-proposta {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .linha-ganhamos {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .linha-ganhamos .segmentado,
+  .linha-ganhamos .valor-ganho {
+    grid-column: 1 / -1;
+  }
+
+  .linha-ganhamos .segmentado {
+    overflow-x: auto;
+  }
+}
+
 @media (max-width: 1180px) {
   .kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));

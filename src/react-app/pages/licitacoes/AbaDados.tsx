@@ -28,7 +28,16 @@ function valoresIniciais(l: Licitacao) {
   };
 }
 
-export function AbaDados({ licitacao, aoSalvar }: { licitacao: Licitacao; aoSalvar: () => Promise<void> | void }) {
+export function AbaDados({
+  licitacao,
+  aoSalvar,
+  aoCancelar,
+}: {
+  licitacao: Licitacao;
+  aoSalvar: () => Promise<void> | void;
+  /** Quando aberto numa janela: botões Cancelar/Salvar no rodapé. */
+  aoCancelar?: () => void;
+}) {
   const form = useFormulario(valoresIniciais(licitacao));
   const [equipe, setEquipe] = useState<{ id: number; nome: string }[]>([]);
   const [salvando, setSalvando] = useState(false);
@@ -69,8 +78,9 @@ export function AbaDados({ licitacao, aoSalvar }: { licitacao: Licitacao; aoSalv
     <form className="formulario" onSubmit={salvar}>
       <section className="cartao">
         <h2>Principal</h2>
-        <div className="grade-3">
+        <div className="grade-4">
           <Campo rotulo="Número da licitação" placeholder="90012/2026" {...texto("numero")} />
+          <Campo rotulo="UASG / código do órgão" placeholder="160123" {...texto("uasg")} />
           <CampoSelect rotulo="Modalidade" opcoes={MODALIDADES} vazio="Selecione" {...texto("modalidade")} />
           <CampoSelect
             rotulo="Responsável"
@@ -99,19 +109,22 @@ export function AbaDados({ licitacao, aoSalvar }: { licitacao: Licitacao; aoSalv
           </div>
           <Campo rotulo="Link da licitação" type="url" placeholder="https://" {...texto("link")} />
         </div>
+        <Interruptor
+          rotulo="É registro de preço (SRP)"
+          ligado={v.registro_preco}
+          aoMudar={(ligado) => form.definir("registro_preco", ligado)}
+        />
       </section>
 
       <details className="cartao mais-detalhes">
         <summary>
           <strong>Mais detalhes</strong>
           <span className="texto-fraco pequeno">
-            {[v.uasg && `UASG ${v.uasg}`, v.nicho, v.valor_estimado && `R$ ${v.valor_estimado}`, v.fase, v.registro_preco && "SRP", v.observacoes && "com anotações"]
-              .filter(Boolean)
-              .join(" · ") || "UASG, nicho, valor estimado, fase, registro de preço e anotações"}
+            {[v.nicho, v.valor_estimado && `R$ ${v.valor_estimado}`, v.fase, v.observacoes && "com anotações"].filter(Boolean).join(" · ") ||
+              "Nicho, valor estimado, fase e anotações"}
           </span>
         </summary>
-        <div className="grade-4">
-          <Campo rotulo="UASG / código do órgão" placeholder="160123" {...texto("uasg")} />
+        <div className="grade-3">
           <Campo rotulo="Nicho" placeholder="Ex.: Informática" {...texto("nicho")} />
           <Campo rotulo="Valor estimado (R$)" type="number" step="0.01" min="0" {...texto("valor_estimado")} />
           <div className="campo">
@@ -128,14 +141,19 @@ export function AbaDados({ licitacao, aoSalvar }: { licitacao: Licitacao; aoSalv
             </datalist>
           </div>
         </div>
-        <Interruptor
-          rotulo="É registro de preço (SRP)"
-          ligado={v.registro_preco}
-          aoMudar={(ligado) => form.definir("registro_preco", ligado)}
-        />
         <CampoArea rotulo="Anotações da equipe" rows={3} {...texto("observacoes")} />
       </details>
 
+      {aoCancelar ? (
+        <div className="botoes-modal">
+          <button type="button" className="botao secundario" onClick={aoCancelar}>
+            Cancelar
+          </button>
+          <button className="botao" disabled={salvando || !form.sujo}>
+            <Save aria-hidden="true" /> {salvando ? "Salvando…" : "Salvar dados"}
+          </button>
+        </div>
+      ) : (
       <div className={`barra-salvar ${form.sujo ? "visivel" : ""}`}>
         <span>Você tem alterações não salvas.</span>
         <button type="button" className="botao secundario" onClick={() => form.reiniciar(valoresIniciais(licitacao))}>
@@ -145,6 +163,7 @@ export function AbaDados({ licitacao, aoSalvar }: { licitacao: Licitacao; aoSalv
           <Save aria-hidden="true" /> {salvando ? "Salvando…" : "Salvar dados"}
         </button>
       </div>
+      )}
     </form>
   );
 }
