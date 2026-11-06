@@ -102,6 +102,12 @@ Não existe cadastro público: só um administrador adiciona pessoas.
   assinado é baixado na hora e fica guardado na lista da página (ver, baixar, excluir, procurar) ou, se preferir,
   direto numa licitação, na categoria escolhida. A página também lista o que foi assinado dentro das licitações e dos
   empenhos. Precisa da permissão "Assinatura digital" (editar) para assinar.
+- **Criar documentos** (Documentação → Criar documentos): declarações, ofícios e cartas em PDF com o logo e os dados
+  da empresa. Preencha título e texto (botões colocam campos como `{empresa}`, `{cnpj}`, `{representante}`, `{cpf}` e,
+  com uma licitação escolhida, `{orgao}`, `{licitacao}`, `{objeto}`), ou comece de uma declaração da biblioteca. Local
+  (padrão "Brasília/DF"), data de hoje e assinatura do responsável legal entram sozinhos. Mesmos modelos visuais da
+  proposta, pré-visualização, baixar, assinar com o certificado (vai para "Assinar documentos" ou para a licitação) e
+  guardar na licitação. O rascunho fica salvo no navegador.
 - **Modelos do PDF da proposta:** Clássico, Moderno (faixa colorida, dados em colunas, tabela listrada), Timbrado
   (dados da empresa no cabeçalho e rodapé, letra serifada), Compacto (letra menor, cabe em menos páginas) e Simples
   (preto e branco com grade, para imprimir), cada um em 8 cores. A empresa tem o modelo/cor padrão (Configurações →

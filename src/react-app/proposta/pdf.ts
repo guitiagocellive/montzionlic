@@ -24,12 +24,12 @@ export function limparTexto(texto: string): string {
     .join("");
 }
 
-const A4 = { largura: 595.28, altura: 841.89 };
-const MARGEM = 48;
-const LARGURA = A4.largura - MARGEM * 2;
+export const A4 = { largura: 595.28, altura: 841.89 };
+export const MARGEM = 48;
+export const LARGURA = A4.largura - MARGEM * 2;
 const MARGEM_INFERIOR = 92; // espaço para o selo de assinatura e o número da página
-const CINZA = rgb(0.38, 0.38, 0.42);
-const TEXTO = rgb(0.1, 0.1, 0.12);
+export const CINZA = rgb(0.38, 0.38, 0.42);
+export const TEXTO = rgb(0.1, 0.1, 0.12);
 const LINHA = rgb(0.78, 0.8, 0.85);
 const BRANCO = rgb(1, 1, 1);
 const PRETO = rgb(0, 0, 0);
@@ -45,7 +45,7 @@ function clarear(c: Cor, t: number): Cor {
   return rgb(c.red + (1 - c.red) * t, c.green + (1 - c.green) * t, c.blue + (1 - c.blue) * t);
 }
 
-interface Tema {
+export interface Tema {
   modelo: ModeloPdf;
   cor: Cor;
   fundo: Cor; // fundo suave (cabeçalho da tabela, total)
@@ -54,7 +54,7 @@ interface Tema {
   tabela: number; // tamanho do texto da tabela
 }
 
-function montarTema(modelo: ModeloPdf, hex: string): Tema {
+export function montarTema(modelo: ModeloPdf, hex: string): Tema {
   const simples = modelo === "simples";
   const cor = simples ? PRETO : corDoHex(hex);
   return {
@@ -67,7 +67,7 @@ function montarTema(modelo: ModeloPdf, hex: string): Tema {
   };
 }
 
-function quebrar(texto: string, fonte: PDFFont, tamanho: number, largura: number): string[] {
+export function quebrar(texto: string, fonte: PDFFont, tamanho: number, largura: number): string[] {
   const linhas: string[] = [];
   for (const paragrafo of limparTexto(texto).split("\n")) {
     const palavras = paragrafo.split(/\s+/).filter(Boolean);
@@ -94,7 +94,7 @@ function quebrar(texto: string, fonte: PDFFont, tamanho: number, largura: number
   return linhas;
 }
 
-interface Contexto {
+export interface Contexto {
   pdf: PDFDocument;
   pagina: PDFPage;
   y: number;
@@ -107,13 +107,13 @@ interface Contexto {
   decorar: (p: PDFPage) => void;
 }
 
-function novaPagina(ctx: Contexto) {
+export function novaPagina(ctx: Contexto) {
   ctx.pagina = ctx.pdf.addPage([A4.largura, A4.altura]);
   ctx.decorar(ctx.pagina);
   ctx.y = ctx.topo;
 }
 
-function garantirEspaco(ctx: Contexto, altura: number) {
+export function garantirEspaco(ctx: Contexto, altura: number) {
   if (ctx.y - altura < MARGEM_INFERIOR) novaPagina(ctx);
 }
 
@@ -128,7 +128,7 @@ interface OpcoesParagrafo {
   largura?: number;
 }
 
-function paragrafo(ctx: Contexto, texto: string, opcoes: OpcoesParagrafo = {}) {
+export function paragrafo(ctx: Contexto, texto: string, opcoes: OpcoesParagrafo = {}) {
   const tamanho = opcoes.tamanho ?? ctx.tema.texto;
   const fonte = opcoes.fonte ?? ctx.normal;
   const x0 = opcoes.x ?? MARGEM;
@@ -405,12 +405,20 @@ function caber(logo: PDFImage | null, maxL: number, maxA: number) {
 }
 
 /** Desenha o cabeçalho (e rodapé) do modelo e devolve a altura onde o conteúdo começa. */
-function prepararCabecalho(
+/** Dados da empresa usados no cabeçalho/rodapé (proposta ou documento avulso). */
+export type DadosCabecalho = Pick<
+  Dados,
+  "empresa_nome" | "empresa_cnpj" | "empresa_ie" | "empresa_endereco" | "empresa_cidade" | "empresa_telefone" | "empresa_email" | "numero_proposta"
+>;
+
+/** titulo = null: sem título no cabeçalho (documentos avulsos, onde o título vai no corpo). */
+export function prepararCabecalho(
   modelo: ModeloPdf,
-  d: Dados,
+  d: DadosCabecalho,
   logo: PDFImage | null,
   fontes: { normal: PDFFont; negrito: PDFFont },
   tema: Tema,
+  titulo: string | null = TITULO_PAGINA,
 ): { topo: number; desenhar: (p: PDFPage) => void } {
   const { normal, negrito } = fontes;
   const topoPagina = A4.altura - MARGEM + 8;
@@ -432,8 +440,13 @@ function prepararCabecalho(
       desenhar: (p) => {
         p.drawRectangle({ x: 0, y: A4.altura - 12, width: A4.largura, height: 12, color: tema.cor });
         if (logo) p.drawImage(logo, { x: MARGEM, y: topoPagina - 12 - l.h, width: l.w, height: l.h });
-        textoDireita(p, TITULO_PAGINA, topoPagina - 28, 15, negrito, tema.cor);
-        textoDireita(p, [d.empresa_nome, d.empresa_cnpj && `CNPJ ${d.empresa_cnpj}`].filter(Boolean).join("  ·  "), topoPagina - 42, 8, normal, CINZA);
+        if (titulo) {
+          textoDireita(p, titulo, topoPagina - 28, 15, negrito, tema.cor);
+          textoDireita(p, [d.empresa_nome, d.empresa_cnpj && `CNPJ ${d.empresa_cnpj}`].filter(Boolean).join("  ·  "), topoPagina - 42, 8, normal, CINZA);
+        } else {
+          textoDireita(p, d.empresa_nome, topoPagina - 28, 12, negrito, tema.cor);
+          textoDireita(p, [d.empresa_cnpj && `CNPJ ${d.empresa_cnpj}`, d.empresa_cidade].filter(Boolean).join("  ·  "), topoPagina - 41, 8, normal, CINZA);
+        }
         p.drawLine({ start: { x: MARGEM, y: base - 8 }, end: { x: A4.largura - MARGEM, y: base - 8 }, thickness: 1.2, color: tema.cor });
       },
     };
@@ -475,8 +488,13 @@ function prepararCabecalho(
       topo: base - 16,
       desenhar: (p) => {
         if (logo) p.drawImage(logo, { x: MARGEM, y: topoPagina - l.h, width: l.w, height: l.h });
-        textoDireita(p, TITULO_PAGINA, topoPagina - 13, 12, negrito, tema.cor);
-        if (d.numero_proposta) textoDireita(p, `Nº ${d.numero_proposta}`, topoPagina - 25, 8, normal, CINZA);
+        if (titulo) {
+          textoDireita(p, titulo, topoPagina - 13, 12, negrito, tema.cor);
+          if (d.numero_proposta) textoDireita(p, `Nº ${d.numero_proposta}`, topoPagina - 25, 8, normal, CINZA);
+        } else {
+          textoDireita(p, d.empresa_nome, topoPagina - 12, 10, negrito, tema.cor);
+          if (d.empresa_cnpj) textoDireita(p, `CNPJ ${d.empresa_cnpj}`, topoPagina - 23, 7.5, normal, CINZA);
+        }
         p.drawLine({ start: { x: MARGEM, y: base - 6 }, end: { x: A4.largura - MARGEM, y: base - 6 }, thickness: 0.6, color: LINHA });
       },
     };
@@ -486,11 +504,13 @@ function prepararCabecalho(
     const l = caber(logo, 130, 42);
     const caixa = topoPagina - (logo ? l.h + 8 : 0);
     return {
-      topo: caixa - 22 - 14,
+      topo: titulo ? caixa - 22 - 14 : caixa - 14,
       desenhar: (p) => {
         if (logo) p.drawImage(logo, { x: (A4.largura - l.w) / 2, y: topoPagina - l.h, width: l.w, height: l.h });
-        p.drawRectangle({ x: MARGEM, y: caixa - 22, width: LARGURA, height: 22, borderColor: PRETO, borderWidth: 1 });
-        centro(p, TITULO_PAGINA, caixa - 15, 12, negrito, PRETO);
+        if (titulo) {
+          p.drawRectangle({ x: MARGEM, y: caixa - 22, width: LARGURA, height: 22, borderColor: PRETO, borderWidth: 1 });
+          centro(p, titulo, caixa - 15, 12, negrito, PRETO);
+        } else p.drawLine({ start: { x: MARGEM, y: caixa - 4 }, end: { x: A4.largura - MARGEM, y: caixa - 4 }, thickness: 0.8, color: PRETO });
       },
     };
   }
@@ -498,16 +518,34 @@ function prepararCabecalho(
   // clássico
   const l = caber(logo, 150, 50);
   return {
-    topo: topoPagina - (logo ? l.h + 8 : 0) - 30,
+    topo: topoPagina - (logo ? l.h + 8 : 0) - (titulo ? 30 : 8),
     desenhar: (p) => {
       let y = topoPagina;
       if (logo) {
         p.drawImage(logo, { x: (A4.largura - l.w) / 2, y: y - l.h, width: l.w, height: l.h });
         y -= l.h + 8;
       }
-      centro(p, TITULO_PAGINA, y - 13, 12, negrito, TEXTO);
+      if (titulo) centro(p, titulo, y - 13, 12, negrito, TEXTO);
     },
   };
+}
+
+/** Marca d'água: o logo grande e bem claro no meio da página. */
+export function marcaDagua(p: PDFPage, logo: PDFImage) {
+  const escala = Math.min(440 / logo.width, 300 / logo.height);
+  const w = logo.width * escala;
+  const h = logo.height * escala;
+  p.drawImage(logo, { x: (A4.largura - w) / 2, y: (A4.altura - h) / 2 - 40, width: w, height: h, opacity: 0.07 });
+}
+
+/** Embute o logo (PNG ou JPG); se falhar, segue sem. */
+export async function embutirLogo(pdf: PDFDocument, logo: ExtrasPdf["logo"]): Promise<PDFImage | null> {
+  if (!logo) return null;
+  try {
+    return logo.tipo === "image/png" ? await pdf.embedPng(logo.bytes) : await pdf.embedJpg(logo.bytes);
+  } catch {
+    return null;
+  }
 }
 
 // ---------------- Proposta ----------------
@@ -535,13 +573,7 @@ export async function gerarPropostaPdf(d: Dados, extras: ExtrasPdf): Promise<Uin
 
   const cabecalho = prepararCabecalho(modelo, d, logo, { normal, negrito }, tema);
   const decorar = (p: PDFPage) => {
-    // Marca d'água: o logo grande e bem claro no meio da página
-    if (logo && extras.marcaDagua) {
-      const escala = Math.min(440 / logo.width, 300 / logo.height);
-      const w = logo.width * escala;
-      const h = logo.height * escala;
-      p.drawImage(logo, { x: (A4.largura - w) / 2, y: (A4.altura - h) / 2 - 40, width: w, height: h, opacity: 0.07 });
-    }
+    if (logo && extras.marcaDagua) marcaDagua(p, logo);
     cabecalho.desenhar(p);
   };
 

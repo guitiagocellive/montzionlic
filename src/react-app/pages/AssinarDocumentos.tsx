@@ -9,6 +9,9 @@ import { avisar, Carregando, Modal, Vazio } from "../components/Ui";
 import { formatarTamanho } from "../formato";
 import { link } from "../rota";
 
+/** Nome do arquivo baixado sem acentos (alguns navegadores trocam nomes acentuados por "download"). */
+const semAcento = (nome: string) => nome.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
 const ModalAssinar = lazy(() => import("../assinatura/ModalAssinar").then((m) => ({ default: m.ModalAssinar })));
 
 interface Assinado {
@@ -36,7 +39,7 @@ function baixarBytes(bytes: Uint8Array, nome: string) {
   const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: "application/pdf" }));
   const a = document.createElement("a");
   a.href = url;
-  a.download = nome;
+  a.download = semAcento(nome);
   document.body.appendChild(a);
   a.click();
   a.remove();

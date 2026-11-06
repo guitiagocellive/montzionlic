@@ -7831,3 +7831,84 @@ code {
 .barra-assinados .pequena-entrada.largo {
   flex: 0 1 340px;
 }
+
+/* ---------- Criar documentos ---------- */
+
+.criar-doc {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  margin-bottom: 16px;
+}
+
+.criar-doc-principal {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.criar-doc-principal textarea {
+  min-height: 260px;
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+.criar-doc-principal .campo > span svg {
+  vertical-align: -2px;
+}
+
+.criar-doc-lateral {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.criar-doc-lateral .cartao {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.criar-doc-lateral h2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 1rem;
+}
+
+.criar-doc-lateral h2 small {
+  font-weight: 400;
+  font-size: 0.78rem;
+}
+
+.campos-documento {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: -6px;
+}
+
+.aviso-campos {
+  color: var(--amarelo);
+  font-weight: 500;
+}
+
+.opcoes-licitacao-doc,
+.campos-assinante {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+@media (max-width: 960px) {
+  .criar-doc {
+    grid-template-columns: 1fr;
+  }
+}
+
+.criar-doc .cartao {
+  margin: 0;
+}

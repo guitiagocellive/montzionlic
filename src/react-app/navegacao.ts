@@ -2,6 +2,7 @@ import {
   BellRing,
   CalendarDays,
   ChartColumnIncreasing,
+  FilePlus2,
   FileSearch,
   FileSignature,
   FolderLock,
@@ -79,6 +80,7 @@ export const AREAS: Area[] = [
     funcoes: [
       { caminho: "/documentacao", rotulo: "Documentos da empresa", icone: FolderLock, modulo: "documentacao" },
       { caminho: "/assinar", rotulo: "Assinar documentos", icone: PenLine, modulo: "assinatura" },
+      { caminho: "/criar-documento", rotulo: "Criar documentos", icone: FilePlus2, modulo: "documentacao" },
     ],
   },
 ];
