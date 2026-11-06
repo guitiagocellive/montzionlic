@@ -4969,6 +4969,46 @@ a.kpi:hover {
   }
 }
 
+/* ---------- Aplicativo para Windows ---------- */
+
+.app-download-topo {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.app-download-topo > div {
+  flex: 1 1 260px;
+}
+
+.app-download-topo h2 {
+  margin: 0;
+}
+
+.app-icone img {
+  width: 56px;
+  height: 56px;
+  display: block;
+}
+
+.passos-app {
+  margin: 16px 0 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: var(--texto-suave);
+}
+
+.nota-app {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 14px 0 0;
+}
+
 @media (max-width: 1180px) {
   .kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));

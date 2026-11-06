@@ -126,6 +126,23 @@ Não existe cadastro público: só um administrador adiciona pessoas.
 - **Relatórios:** taxa de sucesso, resultados por mês, motivos de perda, concorrentes que mais ganham,
   desempenho por órgão, nicho e modalidade, empenhado e lucro no período; exportação em CSV.
 
+## Aplicativo para Windows
+
+Em **Configurações → Aplicativo** (ou no menu da conta → "Baixar app para Windows") cada pessoa baixa o
+`Montzion-Instalador.exe`. Ao abrir, ele instala o Montzion na pasta do usuário (sem pedir administrador), cria
+atalhos na área de trabalho e no menu Iniciar, registra em "Aplicativos instalados" (para desinstalar) e abre
+`https://montzion.com.br` numa janela própria (modo aplicativo do Edge ou Chrome). O instalador ainda não tem
+assinatura digital de código, então o Windows mostra "O Windows protegeu o computador" na primeira vez
+(Mais informações → Executar assim mesmo).
+
+Para gerar de novo depois de mudar algo em `desktop/` (precisa de Go 1.22+ e Python 3):
+
+```bash
+./desktop/build.sh
+```
+
+O arquivo sai em `public/downloads/Montzion-Instalador.exe` e é publicado junto com o site.
+
 ## Publicar na Cloudflare
 
 Tudo pelo painel da Cloudflare, sem linha de comando:

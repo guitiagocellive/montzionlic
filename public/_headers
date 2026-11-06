@@ -4,3 +4,8 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=()
   X-Robots-Tag: noindex, nofollow
+
+/downloads/*
+  Content-Type: application/vnd.microsoft.portable-executable
+  Content-Disposition: attachment; filename="Montzion-Instalador.exe"
+  Cache-Control: public, max-age=3600

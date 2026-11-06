@@ -1,4 +1,4 @@
-import { LogOut, Moon, Settings, Sparkle, Sun, UserRound } from "lucide-react";
+import { LogOut, MonitorDown, Moon, Settings, Sparkle, Sun, UserRound } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { Usuario } from "../../shared/tipos";
 import { api } from "../api";
@@ -129,6 +129,9 @@ export function Layout({ usuario, caminho, aoSair, aoMudarUsuario, children }: P
                   </a>
                   <a className="item-menu" {...link("/configuracoes/aparencia")} onClick={(e) => { setMenuAberto(false); link("/configuracoes/aparencia").onClick(e); }}>
                     <Settings /> Configurações
+                  </a>
+                  <a className="item-menu" {...link("/configuracoes/aplicativo")} onClick={(e) => { setMenuAberto(false); link("/configuracoes/aplicativo").onClick(e); }}>
+                    <MonitorDown /> Baixar app para Windows
                   </a>
                   <button className="item-menu" onClick={sair}>
                     <LogOut /> Sair

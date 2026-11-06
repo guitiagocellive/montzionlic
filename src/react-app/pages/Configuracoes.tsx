@@ -7,6 +7,7 @@ import {
   Download,
   FileText,
   Landmark,
+  MonitorDown,
   Percent,
   Plus,
   Star,
@@ -51,6 +52,7 @@ import { formatarData } from "../formato";
 import { link } from "../rota";
 import { aplicarTema } from "../tema";
 import { DeclaracoesConfig } from "./configuracoes/Declaracoes";
+import { AplicativoConfig } from "./configuracoes/Aplicativo";
 import { EmpresasConfig } from "./configuracoes/Empresas";
 import { Moon, MonitorSmartphone, Sun } from "lucide-react";
 
@@ -66,6 +68,7 @@ export function Configuracoes({ usuario, secao, aoMudarUsuario }: Props) {
     { chave: "", rotulo: "Meu perfil", icone: UserRound },
     { chave: "aparencia", rotulo: "Aparência", icone: Palette },
     { chave: "seguranca", rotulo: "Segurança", icone: KeyRound },
+    { chave: "aplicativo", rotulo: "Aplicativo", icone: MonitorDown },
     ...(admin
       ? [
           { chave: "empresas", rotulo: "Empresas", icone: Building2 },
@@ -114,6 +117,7 @@ export function Configuracoes({ usuario, secao, aoMudarUsuario }: Props) {
             </section>
           )}
           {atual === "empresa" && <Empresa />}
+          {atual === "aplicativo" && <AplicativoConfig />}
           {atual === "empresas" && <EmpresasConfig />}
           {atual === "propostas" && (
             <>
