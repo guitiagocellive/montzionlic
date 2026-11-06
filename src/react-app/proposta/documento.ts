@@ -1,6 +1,6 @@
 // Roda no navegador: monta um documento avulso (declaração, ofício…) em PDF com a identidade da empresa,
 // usando os mesmos modelos visuais da proposta.
-import { PDFDocument, type PDFPage, StandardFonts } from "pdf-lib";
+import { PDFDocument, type PDFPage, rgb, StandardFonts } from "pdf-lib";
 import type { ModeloPdf } from "../../shared/proposta";
 import {
   A4,
@@ -16,6 +16,7 @@ import {
   montarTema,
   paragrafo,
   prepararCabecalho,
+  quebrar,
   TEXTO,
 } from "./pdf";
 
@@ -45,6 +46,46 @@ export function dataPorExtenso(iso: string) {
   const [a, m, d] = iso.split("-").map(Number);
   if (!a || !m || !d) return iso;
   return `${d} de ${MESES[m - 1]} de ${a}`;
+}
+
+/** Título do documento no estilo de cada modelo. */
+function desenharTitulo(ctx: Contexto, titulo: string) {
+  const { modelo, cor, fundo } = ctx.tema;
+  const p = () => ctx.pagina;
+  const largura = A4.largura - MARGEM * 2;
+  if (modelo === "moderno") {
+    // faixa clarinha com o título na cor
+    const linhas = quebrar(titulo, ctx.negrito, 13, largura - 28);
+    const altura = linhas.length * 17 + 14;
+    garantirEspaco(ctx, altura + 20);
+    p().drawRectangle({ x: MARGEM, y: ctx.y - altura, width: largura, height: altura, color: fundo });
+    p().drawRectangle({ x: MARGEM, y: ctx.y - altura, width: 4, height: altura, color: cor });
+    linhas.forEach((l, i) => p().drawText(l, { x: MARGEM + 16, y: ctx.y - 20 - i * 17, size: 13, font: ctx.negrito, color: cor }));
+    ctx.y -= altura + 20;
+  } else if (modelo === "simples") {
+    // caixa preta, como formulário
+    const linhas = quebrar(titulo, ctx.negrito, 12.5, largura - 20);
+    const altura = linhas.length * 16 + 12;
+    garantirEspaco(ctx, altura + 20);
+    p().drawRectangle({ x: MARGEM, y: ctx.y - altura, width: largura, height: altura, borderColor: rgb(0, 0, 0), borderWidth: 1 });
+    linhas.forEach((l) => {
+      const w = ctx.negrito.widthOfTextAtSize(l, 12.5);
+      p().drawText(l, { x: (A4.largura - w) / 2, y: ctx.y - 19, size: 12.5, font: ctx.negrito, color: rgb(0, 0, 0) });
+      ctx.y -= 16;
+    });
+    ctx.y -= 32;
+  } else if (modelo === "compacto") {
+    // à esquerda, com linha na cor por baixo
+    paragrafo(ctx, titulo, { tamanho: 12, fonte: ctx.negrito, cor, espaco: 2 });
+    p().drawLine({ start: { x: MARGEM, y: ctx.y }, end: { x: A4.largura - MARGEM, y: ctx.y }, thickness: 1.2, color: cor });
+    ctx.y -= 16;
+  } else {
+    // clássico e timbrado: centralizado na cor, com um traço curto embaixo
+    paragrafo(ctx, titulo, { tamanho: 13, fonte: ctx.negrito, cor, alinhar: "centro", espaco: 4 });
+    const meio = A4.largura / 2;
+    p().drawLine({ start: { x: meio - 40, y: ctx.y }, end: { x: meio + 40, y: ctx.y }, thickness: 1.6, color: cor });
+    ctx.y -= 20;
+  }
 }
 
 export async function gerarDocumentoPdf(d: DadosDocumento, extras: ExtrasPdf): Promise<Uint8Array> {
@@ -88,10 +129,9 @@ export async function gerarDocumentoPdf(d: DadosDocumento, extras: ExtrasPdf): P
     if (d.destinatario.referencia) paragrafo(ctx, d.destinatario.referencia, { rotulo: "Referente: ", tamanho: 10, espaco: 1 });
   }
 
-  // Título
+  // Título: cada modelo tem o seu jeito (e usa a cor escolhida)
   ctx.y -= 22;
-  const corTitulo = modelo === "classico" || modelo === "simples" ? TEXTO : tema.cor;
-  paragrafo(ctx, (d.titulo || "Declaração").toUpperCase(), { tamanho: 13, fonte: negrito, cor: corTitulo, alinhar: "centro", espaco: 18 });
+  desenharTitulo(ctx, (d.titulo || "Declaração").toUpperCase());
 
   // Texto: cada parágrafo justificado; linha em branco vira espaço
   for (const p of d.texto.replace(/\r/g, "").split("\n")) {

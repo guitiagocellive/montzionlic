@@ -60,7 +60,7 @@ export function montarTema(modelo: ModeloPdf, hex: string): Tema {
   return {
     modelo,
     cor,
-    fundo: simples ? CINZA_CLARO : clarear(cor, 0.88),
+    fundo: simples ? CINZA_CLARO : clarear(cor, modelo === "classico" || modelo === "compacto" ? 0.8 : 0.88),
     listra: clarear(cor, 0.95),
     texto: modelo === "compacto" ? 8.8 : 9.5,
     tabela: modelo === "compacto" ? 7.8 : 8.5,
@@ -129,6 +129,15 @@ interface OpcoesParagrafo {
 }
 
 export function paragrafo(ctx: Contexto, texto: string, opcoes: OpcoesParagrafo = {}) {
+  // Justificado: cada linha do texto original é um parágrafo (a última linha de cada um não estica).
+  if (opcoes.alinhar === "justificar" && texto.includes("\n")) {
+    const partes = texto.split("\n");
+    partes.forEach((parte, i) => {
+      const ultima = i === partes.length - 1;
+      paragrafo(ctx, parte, { ...opcoes, espaco: ultima ? opcoes.espaco : 0, rotulo: i === 0 ? opcoes.rotulo : undefined });
+    });
+    return;
+  }
   const tamanho = opcoes.tamanho ?? ctx.tema.texto;
   const fonte = opcoes.fonte ?? ctx.normal;
   const x0 = opcoes.x ?? MARGEM;
@@ -185,11 +194,11 @@ function titulo(ctx: Contexto, texto: string, x = MARGEM, largura = LARGURA) {
     ctx.y -= 22;
   } else if (modelo === "compacto") {
     p.drawText(t.toUpperCase(), { x, y: ctx.y - 8.5, size: 8.2, font: ctx.negrito, color: cor });
-    p.drawLine({ start: { x, y: ctx.y - 12 }, end: { x: x + largura, y: ctx.y - 12 }, thickness: 0.5, color: LINHA });
+    p.drawLine({ start: { x, y: ctx.y - 12 }, end: { x: x + largura, y: ctx.y - 12 }, thickness: 0.9, color: cor });
     ctx.y -= 18;
   } else {
     p.drawText(t, { x, y: ctx.y - 10, size: 10, font: ctx.negrito, color: cor });
-    p.drawLine({ start: { x, y: ctx.y - 14 }, end: { x: x + largura, y: ctx.y - 14 }, thickness: 0.6, color: LINHA });
+    p.drawLine({ start: { x, y: ctx.y - 14 }, end: { x: x + largura, y: ctx.y - 14 }, thickness: 1, color: cor });
     ctx.y -= 22;
   }
 }
@@ -495,7 +504,7 @@ export function prepararCabecalho(
           textoDireita(p, d.empresa_nome, topoPagina - 12, 10, negrito, tema.cor);
           if (d.empresa_cnpj) textoDireita(p, `CNPJ ${d.empresa_cnpj}`, topoPagina - 23, 7.5, normal, CINZA);
         }
-        p.drawLine({ start: { x: MARGEM, y: base - 6 }, end: { x: A4.largura - MARGEM, y: base - 6 }, thickness: 0.6, color: LINHA });
+        p.drawLine({ start: { x: MARGEM, y: base - 6 }, end: { x: A4.largura - MARGEM, y: base - 6 }, thickness: 1.2, color: tema.cor });
       },
     };
   }
@@ -525,7 +534,10 @@ export function prepararCabecalho(
         p.drawImage(logo, { x: (A4.largura - l.w) / 2, y: y - l.h, width: l.w, height: l.h });
         y -= l.h + 8;
       }
-      if (titulo) centro(p, titulo, y - 13, 12, negrito, TEXTO);
+      if (titulo) {
+        centro(p, titulo, y - 13, 12, negrito, tema.cor);
+        p.drawLine({ start: { x: A4.largura / 2 - 40, y: y - 19 }, end: { x: A4.largura / 2 + 40, y: y - 19 }, thickness: 1.6, color: tema.cor });
+      }
     },
   };
 }
