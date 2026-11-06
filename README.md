@@ -97,6 +97,11 @@ Não existe cadastro público: só um administrador adiciona pessoas.
   modelos** (.docx): campos entre chaves, ex.: `{orgao}`; tabela de itens com `{#itens}` … `{/itens}`; declarações
   com `{#declaracoes}{titulo} {texto}{/declaracoes}` e condições com `{#condicoes}{texto}{/condicoes}`.
   Modelo de exemplo em `public/modelos/modelo-proposta.docx`.
+- **Modelos do PDF da proposta:** Clássico, Moderno (faixa colorida, dados em colunas, tabela listrada), Timbrado
+  (dados da empresa no cabeçalho e rodapé, letra serifada), Compacto (letra menor, cabe em menos páginas) e Simples
+  (preto e branco com grade, para imprimir), cada um em 8 cores. A empresa tem o modelo/cor padrão (Configurações →
+  Empresas) e cada proposta pode trocar na aba Proposta. "Pré-visualizar" mostra o PDF antes de salvar e permite
+  trocar o modelo e a cor ali mesmo.
 - **Proposta em PDF e assinatura digital:** a plataforma monta a proposta em Word (seus modelos) ou em PDF
   (com logo, itens, total por extenso, condições e declaração). Também dá para enviar um PDF pronto (por exemplo,
   o Word que você ajustou e converteu). Na hora de assinar, abre a página do PDF e você **clica onde o carimbo

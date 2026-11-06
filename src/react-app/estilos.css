@@ -7382,3 +7382,335 @@ code {
     height: 65vh;
   }
 }
+
+/* ---------- Modelos do PDF da proposta ---------- */
+
+.escolher-modelo-pdf {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 12px 0 4px;
+}
+
+.modelos-pdf {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.modelo-pdf {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 10px 10px;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-sm);
+  background: var(--superficie-2);
+  color: var(--texto);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    transform 0.15s;
+}
+
+.modelo-pdf:hover {
+  border-color: var(--borda-forte);
+  transform: translateY(-1px);
+}
+
+.modelo-pdf.ativo {
+  border-color: var(--acento);
+  background: var(--acento-suave);
+  box-shadow: 0 0 0 1px var(--acento);
+}
+
+.modelo-pdf strong {
+  font-size: 0.86rem;
+}
+
+.modelo-pdf small {
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--texto-fraco);
+}
+
+.cores-pdf {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cor-pdf {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px var(--borda);
+}
+
+.cor-pdf.ativa {
+  box-shadow: 0 0 0 2px var(--superficie-solida), 0 0 0 4px var(--acento);
+}
+
+.cor-pdf:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Miniatura da página (desenhada com CSS) */
+.mini-pagina {
+  --tinta: color-mix(in srgb, var(--cor-modelo) 20%, #fff);
+  --listra: color-mix(in srgb, var(--cor-modelo) 8%, #fff);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 74px;
+  height: 104px;
+  padding: 8px 7px 6px;
+  border-radius: 3px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.25);
+  overflow: hidden;
+}
+
+.mini-pagina span {
+  display: block;
+}
+
+.mini-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.mini-logo {
+  width: 16px;
+  height: 9px;
+  border-radius: 2px;
+  background: #cbd5e1;
+}
+
+.mini-titulo {
+  width: 30px;
+  height: 4px;
+  border-radius: 1px;
+  background: #27272a;
+}
+
+.mini-dados {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mini-dados span,
+.mini-texto span {
+  height: 2.5px;
+  border-radius: 1px;
+  background: #d4d4d8;
+}
+
+.mini-dados span:nth-child(2) {
+  width: 80%;
+}
+
+.mini-dados span:nth-child(3) {
+  width: 60%;
+}
+
+.mini-tabela {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5px;
+}
+
+.mini-tabela span {
+  height: 3.5px;
+  background: #ececef;
+}
+
+.mini-tabela .mini-cab {
+  height: 5px;
+  background: var(--tinta);
+}
+
+.mini-texto {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mini-texto span:last-child {
+  width: 70%;
+}
+
+.mini-rodape {
+  display: none;
+}
+
+/* clássico: logo e título no centro */
+.mini-classico .mini-topo {
+  flex-direction: column;
+  gap: 3px;
+}
+
+.mini-classico .mini-titulo {
+  width: 26px;
+}
+
+/* moderno: faixa colorida, dados em colunas, tabela listrada */
+.mini-moderno::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 4px;
+  background: var(--cor-modelo);
+}
+
+.mini-moderno .mini-titulo {
+  background: var(--cor-modelo);
+}
+
+.mini-moderno .mini-dados {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 5px;
+  padding-top: 3px;
+  border-top: 1px solid var(--cor-modelo);
+}
+
+.mini-moderno .mini-tabela .mini-cab {
+  background: var(--cor-modelo);
+}
+
+.mini-moderno .mini-tabela span:nth-child(odd):not(.mini-cab) {
+  background: var(--listra);
+}
+
+/* timbrado: cabeçalho da empresa com linha dupla e rodapé */
+.mini-timbrado .mini-topo {
+  padding-bottom: 3px;
+  border-bottom: 3px double var(--cor-modelo);
+}
+
+.mini-timbrado .mini-titulo {
+  width: 24px;
+  height: 7px;
+  background: repeating-linear-gradient(#a1a1aa 0 1.5px, transparent 1.5px 3px);
+}
+
+.mini-timbrado .mini-tabela .mini-cab {
+  background: transparent;
+  border-top: 1px solid var(--cor-modelo);
+  border-bottom: 1px solid var(--cor-modelo);
+}
+
+.mini-timbrado .mini-rodape {
+  display: block;
+  margin-top: auto;
+  height: 3px;
+  border-top: 1px solid var(--cor-modelo);
+}
+
+/* compacto: tudo menor, dados em três colunas */
+.mini-compacto {
+  gap: 4px;
+}
+
+.mini-compacto .mini-titulo {
+  width: 22px;
+  height: 3px;
+  background: var(--cor-modelo);
+}
+
+.mini-compacto .mini-dados {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3px;
+}
+
+.mini-compacto .mini-dados span {
+  width: auto;
+}
+
+.mini-compacto .mini-tabela span {
+  height: 2.5px;
+}
+
+/* simples: preto e branco com grade */
+.mini-simples {
+  --tinta: #d4d4d8;
+}
+
+.mini-simples .mini-topo {
+  flex-direction: column;
+  gap: 3px;
+}
+
+.mini-simples .mini-titulo {
+  width: 100%;
+  height: 7px;
+  background: transparent;
+  border: 1px solid #111;
+}
+
+.mini-simples .mini-tabela {
+  gap: 0;
+  border: 1px solid #333;
+}
+
+.mini-simples .mini-tabela span {
+  background: #fff;
+  border-bottom: 1px solid #333;
+}
+
+.mini-simples .mini-tabela span:last-child {
+  border-bottom: 0;
+}
+
+.mini-simples .mini-tabela .mini-cab {
+  background: #d4d4d8;
+}
+
+.previa-proposta {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.previa-proposta .escolher-modelo-pdf {
+  margin: 0;
+}
+
+.previa-proposta .modelos-pdf {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.previa-proposta .modelo-pdf small {
+  display: none;
+}
+
+.previa-proposta .leitor-pdf,
+.previa-proposta .visor-pdf {
+  height: min(64vh, 820px);
+}
+
+@media (max-width: 640px) {
+  .previa-proposta .modelos-pdf {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .modelos-pdf {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

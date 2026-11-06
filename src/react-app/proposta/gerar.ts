@@ -1,13 +1,13 @@
 // Monta a proposta no navegador (Word ou PDF) e envia para os arquivos da licitação.
 // Assim o servidor não faz o trabalho pesado e tudo cabe no plano grátis da Cloudflare.
-import type { DadosMontados } from "../../shared/proposta";
+import type { DadosMontados, ModeloPdf } from "../../shared/proposta";
 import { enviarArquivo } from "../api";
 
 export interface RespostaDados {
   dados: DadosMontados;
   nome: string;
   modelo: { id: number; nome: string } | null;
-  pdf: { tem_logo: boolean; marca_dagua: boolean; empresa_id: number };
+  pdf: { tem_logo: boolean; marca_dagua: boolean; empresa_id: number; modelo: ModeloPdf; cor: string };
 }
 
 const TIPO_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -42,7 +42,7 @@ export async function montarPdf(r: RespostaDados): Promise<Uint8Array> {
       logo = null;
     }
   }
-  return gerarPropostaPdf(r.dados, { logo, marcaDagua: r.pdf.marca_dagua });
+  return gerarPropostaPdf(r.dados, { logo, marcaDagua: r.pdf.marca_dagua, modelo: r.pdf.modelo, cor: r.pdf.cor });
 }
 
 /** Guarda a proposta montada nos arquivos da licitação. */

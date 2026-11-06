@@ -3,6 +3,7 @@ import { type Ambiente, exigirAdmin, exigirLogin } from "../auth";
 import { buscar, comandoAtualizar, inserir } from "../banco";
 import { type Esquema, idDaRota, lerCampos, lerJson, temErro, texto } from "../validacao";
 import { marcarUnicaPadrao } from "./propostas";
+import { CORES_PDF, MODELOS_PDF } from "../../shared/proposta";
 
 // Empresas que participam das licitações (cada proposta escolhe uma). Todos leem; só admin altera.
 export const rotasEmpresas = new Hono<Ambiente>();
@@ -21,11 +22,13 @@ const ESQUEMA_EMPRESA: Esquema = {
   representante_rg: "texto",
   representante_cargo: "texto",
   marca_dagua: "bool",
+  modelo_pdf: MODELOS_PDF.map((m) => m.chave),
+  cor_pdf: CORES_PDF.map((c) => c.cor),
   padrao: "bool",
 };
 
 const COLUNAS = `id, nome, cnpj, ie, endereco, cidade, telefone, email, representante_nome, representante_cpf,
-  representante_rg, representante_cargo, marca_dagua, padrao, (logo_chave IS NOT NULL) AS tem_logo`;
+  representante_rg, representante_cargo, marca_dagua, modelo_pdf, cor_pdf, padrao, (logo_chave IS NOT NULL) AS tem_logo`;
 
 rotasEmpresas.get("/", async (c) => {
   const { results } = await c.env.DB.prepare(`SELECT ${COLUNAS} FROM empresas ORDER BY padrao DESC, nome COLLATE NOCASE`).all();

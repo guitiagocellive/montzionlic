@@ -4,6 +4,7 @@ import type { Empresa } from "../../../shared/tipos";
 import { api, enviarArquivo, mensagemDeErro } from "../../api";
 import { Alerta, Campo } from "../../components/Formulario";
 import { avisar, Carregando, Interruptor, Modal, Vazio } from "../../components/Ui";
+import { EscolherModeloPdf } from "../../proposta/EscolherModelo";
 
 /** Empresas que participam das licitações. Cada proposta escolhe uma. */
 export function EmpresasConfig() {
@@ -104,6 +105,8 @@ function ModalEmpresa({ empresa, aoFechar, aoSalvar }: { empresa: Empresa | null
   const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [marcaDagua, setMarcaDagua] = useState(empresa ? !!empresa.marca_dagua : true);
+  const [modeloPdf, setModeloPdf] = useState(empresa?.modelo_pdf || "classico");
+  const [corPdf, setCorPdf] = useState(empresa?.cor_pdf || "#1f3b8a");
   const [logo, setLogo] = useState<File | null>(null);
   const [temLogo, setTemLogo] = useState(!!empresa?.tem_logo);
   const [previa, setPrevia] = useState<string | null>(empresa?.tem_logo ? `/api/empresas/${empresa.id}/logo?v=${Date.now()}` : null);
@@ -121,7 +124,7 @@ function ModalEmpresa({ empresa, aoFechar, aoSalvar }: { empresa: Empresa | null
 
   async function enviar(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const corpo = { ...Object.fromEntries(new FormData(e.currentTarget)), marca_dagua: marcaDagua };
+    const corpo = { ...Object.fromEntries(new FormData(e.currentTarget)), marca_dagua: marcaDagua, modelo_pdf: modeloPdf, cor_pdf: corPdf };
     setErro("");
     setEnviando(true);
     try {
@@ -186,6 +189,19 @@ function ModalEmpresa({ empresa, aoFechar, aoSalvar }: { empresa: Empresa | null
           </div>
         </div>
         <Interruptor ligado={marcaDagua} aoMudar={setMarcaDagua} rotulo="Logo clarinho no fundo das páginas (marca d'água)" />
+
+        <h3 className="subtitulo-form">Modelo padrão da proposta em PDF</h3>
+        <p className="texto-fraco pequeno" style={{ margin: "-4px 0 4px" }}>
+          Usado em todas as propostas desta empresa. Dá para trocar em cada proposta, na aba Proposta.
+        </p>
+        <EscolherModeloPdf
+          modelo={modeloPdf}
+          cor={corPdf}
+          aoMudar={(n) => {
+            if (n.modelo) setModeloPdf(n.modelo);
+            if (n.cor) setCorPdf(n.cor);
+          }}
+        />
 
         <h3 className="subtitulo-form">Dados da empresa</h3>
         <div className="grade-2">

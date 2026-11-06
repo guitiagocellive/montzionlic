@@ -138,6 +138,8 @@ export interface Empresa {
   representante_rg: string | null;
   representante_cargo: string | null;
   marca_dagua: number;
+  modelo_pdf: string;
+  cor_pdf: string;
   padrao: number;
   tem_logo: number;
 }
@@ -156,6 +158,9 @@ export interface RascunhoProposta {
   empresa_id: number | null;
   conta_id: number | null;
   modelo_id: number | null;
+  /** Modelo visual e cor do PDF desta proposta (vazio = o padrão da empresa). */
+  modelo_pdf?: string;
+  cor_pdf?: string;
   contratacao: string;
   numero: string;
   data: string;

@@ -18,7 +18,10 @@ import type {
 } from "../../../shared/tipos";
 import { api, mensagemDeErro } from "../../api";
 import { Campo } from "../../components/Formulario";
-import { avisar, CampoArea, CampoSelect, Carregando, SeloAssinado, Vazio } from "../../components/Ui";
+import { avisar, CampoArea, CampoSelect, Carregando, Modal, SeloAssinado, Vazio } from "../../components/Ui";
+import { type Conteudo, montarConteudo, Visor } from "../../components/PreviaArquivo";
+import { EscolherModeloPdf } from "../../proposta/EscolherModelo";
+import { ehCorPdf, ehModeloPdf, MODELOS_PDF } from "../../../shared/proposta";
 import { formatarData, formatarMoeda, formatarNumero, paraNumero } from "../../formato";
 import { enviarProposta, montarPdf, montarWord, type RespostaDados } from "../../proposta/gerar";
 import { link } from "../../rota";
@@ -115,7 +118,8 @@ export function AbaProposta({
   } | null>(null);
   const [r, setR] = useState<RascunhoProposta | null>(null);
   const [salvo, setSalvo] = useState<"" | "salvando" | "salvo">("");
-  const [gerando, setGerando] = useState<"" | "docx" | "pdf" | "assinado">("");
+  const [gerando, setGerando] = useState<"" | "docx" | "pdf" | "assinado" | "previa">("");
+  const [previa, setPrevia] = useState<{ conteudo: Conteudo; urls: string[] } | null>(null);
   const [assinando, setAssinando] = useState<Assinatura | null>(null);
   const entradaPdf = useRef<HTMLInputElement>(null);
   const carregado = useRef(false);
@@ -223,6 +227,9 @@ export function AbaProposta({
   const condicoes = declaracoes.filter((d) => d.tipo === "condicao");
   const declaracoesLista = declaracoes.filter((d) => d.tipo === "declaracao");
   const marcadas = new Set(r.declaracoes);
+  // Modelo e cor do PDF: o escolhido nesta proposta ou o padrão da empresa.
+  const modeloPdf = ehModeloPdf(r.modelo_pdf) ? r.modelo_pdf : ehModeloPdf(empresaAtual?.modelo_pdf) ? empresaAtual!.modelo_pdf : "classico";
+  const corPdf = ehCorPdf(r.cor_pdf) ? r.cor_pdf : ehCorPdf(empresaAtual?.cor_pdf) ? empresaAtual!.cor_pdf : "#1f3b8a";
 
   const certificadoPronto = !!certificado?.configurado && certificado.segredo_configurado && (certificado.dias_restantes ?? 0) >= 0;
   const motivoSemAssinatura = !podeAssinar
@@ -245,12 +252,14 @@ export function AbaProposta({
     mudar({ empresa_id: id, conta_id: contaOk ? r!.conta_id : ((permitidas.find((c) => c.padrao) ?? permitidas[0])?.id ?? null) });
   }
 
-  async function pedirDados(tipo: "docx" | "pdf" | "assinado") {
+  async function pedirDados(tipo: "docx" | "pdf" | "assinado" | "previa", visual: { modelo: string; cor: string } = { modelo: modeloPdf, cor: corPdf }) {
     return api<RespostaDados>(`/licitacoes/${licitacao.id}/proposta`, {
       corpo: {
         empresa_id: r!.empresa_id,
         modelo_id: tipo === "docx" ? r!.modelo_id : null,
         conta_id: r!.conta_id,
+        modelo_pdf: visual.modelo,
+        cor_pdf: visual.cor,
         contratacao: r!.contratacao,
         numero: r!.numero,
         data: r!.data,
@@ -270,7 +279,7 @@ export function AbaProposta({
     });
   }
 
-  async function gerar(tipo: "docx" | "pdf" | "assinado") {
+  async function gerar(tipo: "docx" | "pdf" | "assinado" | "previa") {
     setGerando(tipo);
     try {
       const dados = await pedirDados(tipo);
@@ -286,10 +295,37 @@ export function AbaProposta({
         window.open(`/api/arquivos/${arquivo.id}`, "_blank", "noopener");
         avisar("Proposta em PDF gerada e salva nos arquivos da licitação.");
         await aoMudar();
+      } else if (tipo === "previa") {
+        await mostrarPrevia();
       } else {
         const bytes = await montarPdf(dados);
         setAssinando({ titulo: "Assinar a proposta", nome: dados.nome, carregar: async () => bytes });
       }
+    } catch (err) {
+      avisar(mensagemDeErro(err), "erro");
+    } finally {
+      setGerando("");
+    }
+  }
+
+  /** Monta o PDF só para ver (não salva). Também usado ao trocar modelo/cor dentro da prévia. */
+  async function mostrarPrevia(visual: { modelo: string; cor: string } = { modelo: modeloPdf, cor: corPdf }) {
+    const dados = await pedirDados("previa", visual);
+    const bytes = await montarPdf(dados);
+    const urls: string[] = [];
+    const conteudo = montarConteudo(`${dados.nome}.pdf`, bytes, urls);
+    setPrevia((antiga) => {
+      antiga?.urls.forEach((u) => URL.revokeObjectURL(u));
+      return { conteudo, urls };
+    });
+  }
+
+  async function trocarVisualNaPrevia(n: { modelo?: string; cor?: string }) {
+    const visual = { modelo: n.modelo ?? modeloPdf, cor: n.cor ?? corPdf };
+    mudar({ modelo_pdf: visual.modelo, cor_pdf: visual.cor });
+    setGerando("previa");
+    try {
+      await mostrarPrevia(visual);
     } catch (err) {
       avisar(mensagemDeErro(err), "erro");
     } finally {
@@ -582,10 +618,14 @@ export function AbaProposta({
       <section className="cartao">
         <h2>Gerar a proposta</h2>
         <p className="texto-fraco pequeno" style={{ margin: "0 0 4px" }}>
-          O PDF sai completo, com logo, dados da empresa, banco, representante, itens, condições, declarações e a data. Para imprimir
-          ou salvar, é só abrir o PDF.
+          O PDF sai completo, com logo, dados da empresa, banco, representante, itens, condições, declarações e a data. Escolha o
+          modelo e a cor; use "Pré-visualizar" para ver antes de salvar.
         </p>
+        <EscolherModeloPdf modelo={modeloPdf} cor={corPdf} aoMudar={(n) => mudar({ ...(n.modelo ? { modelo_pdf: n.modelo } : {}), ...(n.cor ? { cor_pdf: n.cor } : {}) })} />
         <div className="botoes-proposta">
+          <button className="botao secundario" onClick={() => gerar("previa")} disabled={!!gerando || !prontoParaGerar}>
+            <Eye /> {gerando === "previa" ? "Montando…" : "Pré-visualizar"}
+          </button>
           <button
             className="botao secundario"
             onClick={() => gerar("docx")}
@@ -644,6 +684,29 @@ export function AbaProposta({
             }}
           />
         </section>
+      )}
+
+      {previa && (
+        <Modal
+          titulo={`Pré-visualização · modelo ${MODELOS_PDF.find((m) => m.chave === modeloPdf)?.nome ?? ""}`}
+          aoFechar={() => {
+            previa.urls.forEach((u) => URL.revokeObjectURL(u));
+            setPrevia(null);
+          }}
+          largo
+        >
+          <div className="previa-proposta">
+            <EscolherModeloPdf modelo={modeloPdf} cor={corPdf} aoMudar={trocarVisualNaPrevia} />
+            {gerando === "previa" ? (
+              <p className="texto-fraco carregando-linha">Montando o PDF…</p>
+            ) : (
+              <Visor conteudo={previa.conteudo} />
+            )}
+            <p className="texto-fraco pequeno">
+              Esta é só uma prévia (não foi salva). Para salvar, feche e clique em PDF ou PDF assinado.
+            </p>
+          </div>
+        </Modal>
       )}
 
       {assinando && (

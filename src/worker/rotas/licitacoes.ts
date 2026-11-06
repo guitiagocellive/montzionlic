@@ -5,7 +5,7 @@ import { type Ambiente, exigirAdmin, exigirLogin, exigirModulo } from "../auth";
 import { notificar } from "../notificacoes";
 import { comandoEvento, registrarEvento } from "../atividades";
 import { hojeBrasilia, lerConfiguracoes } from "../configuracoes";
-import { type EmpresaProposta, montarDados } from "../../shared/proposta";
+import { type EmpresaProposta, ehCorPdf, ehModeloPdf, montarDados } from "../../shared/proposta";
 import { comandoUsarPedido, pedidoValido } from "../pedidosAssinatura";
 import { nomeEtapa } from "../../shared/negocio";
 import { buscar, comandoAtualizar, comExtras, inserir } from "../banco";
@@ -611,11 +611,11 @@ rotasLicitacoes.post("/:id/proposta", async (c) => {
   const empresaId = idDaRota(String(corpo.empresa_id ?? ""));
   const empresa = await c.env.DB.prepare(
     `SELECT id, nome, cnpj, ie, endereco, cidade, telefone, email, representante_nome, representante_cpf, representante_rg,
-            representante_cargo, marca_dagua, (logo_chave IS NOT NULL) AS tem_logo
+            representante_cargo, marca_dagua, modelo_pdf, cor_pdf, (logo_chave IS NOT NULL) AS tem_logo
        FROM empresas ${empresaId ? "WHERE id = ?" : "ORDER BY padrao DESC, id"} LIMIT 1`,
   )
     .bind(...(empresaId ? [empresaId] : []))
-    .first<EmpresaProposta & { marca_dagua: number; tem_logo: number }>();
+    .first<EmpresaProposta & { marca_dagua: number; tem_logo: number; modelo_pdf: string; cor_pdf: string }>();
   if (!empresa) return c.json({ erro: "Cadastre a empresa em Configurações → Empresas." }, 400);
 
   // Declarações e condições escolhidas (na ordem da biblioteca) + as extras desta licitação
@@ -658,7 +658,14 @@ rotasLicitacoes.post("/:id/proposta", async (c) => {
     dados,
     nome,
     modelo: modelo ? { id: modelo.id, nome: modelo.nome } : null,
-    pdf: { tem_logo: !!empresa.tem_logo, marca_dagua: !!empresa.marca_dagua, empresa_id: empresa.id },
+    pdf: {
+      tem_logo: !!empresa.tem_logo,
+      marca_dagua: !!empresa.marca_dagua,
+      empresa_id: empresa.id,
+      // Modelo e cor: o escolhido nesta proposta ou o padrão da empresa.
+      modelo: ehModeloPdf(corpo.modelo_pdf) ? corpo.modelo_pdf : ehModeloPdf(empresa.modelo_pdf) ? empresa.modelo_pdf : "classico",
+      cor: ehCorPdf(corpo.cor_pdf) ? corpo.cor_pdf : ehCorPdf(empresa.cor_pdf) ? empresa.cor_pdf : "#1f3b8a",
+    },
   });
 });
 

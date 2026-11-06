@@ -20,6 +20,32 @@ function somarDias(iso: string, dias: number) {
   return d.toISOString().slice(0, 10);
 }
 
+// ---------------- Modelos visuais do PDF ----------------
+
+export const MODELOS_PDF = [
+  { chave: "classico", nome: "Clássico", descricao: "Logo no centro, títulos coloridos e tabela com fundo suave." },
+  { chave: "moderno", nome: "Moderno", descricao: "Faixa colorida no topo, dados em colunas e tabela listrada." },
+  { chave: "timbrado", nome: "Timbrado", descricao: "Papel timbrado: dados da empresa no cabeçalho e no rodapé, letra serifada." },
+  { chave: "compacto", nome: "Compacto", descricao: "Letra menor e dados lado a lado: cabe em menos páginas." },
+  { chave: "simples", nome: "Simples", descricao: "Preto e branco, tabela com grade completa. Ideal para imprimir." },
+] as const;
+
+export type ModeloPdf = (typeof MODELOS_PDF)[number]["chave"];
+
+export const CORES_PDF = [
+  { cor: "#1f3b8a", nome: "Azul" },
+  { cor: "#0f5e6e", nome: "Petróleo" },
+  { cor: "#166534", nome: "Verde" },
+  { cor: "#7f1d1d", nome: "Vinho" },
+  { cor: "#c2410c", nome: "Laranja" },
+  { cor: "#5b21b6", nome: "Roxo" },
+  { cor: "#334155", nome: "Grafite" },
+  { cor: "#111111", nome: "Preto" },
+] as const;
+
+export const ehModeloPdf = (v: unknown): v is ModeloPdf => MODELOS_PDF.some((m) => m.chave === v);
+export const ehCorPdf = (v: unknown): v is string => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v);
+
 export interface EmpresaProposta {
   id: number;
   nome: string;
