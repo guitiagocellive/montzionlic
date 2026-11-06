@@ -4,6 +4,7 @@ import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
 import type { Ambiente } from "./auth";
 import { rotasArquivos } from "./rotas/arquivos";
+import { rotasAssinaturas } from "./rotas/assinaturas";
 import { rotasAtas } from "./rotas/atas";
 import { gerarNotificacoes } from "./notificacoes";
 import { rotasAtividades } from "./rotas/atividades";
@@ -55,6 +56,7 @@ app.route("/certificado", rotasCertificado);
 app.route("/empresas", rotasEmpresas);
 app.route("/financeiro", rotasFinanceiro);
 app.route("/pncp", rotasPncp);
+app.route("/assinaturas", rotasAssinaturas);
 app.route("/", rotasPainel);
 app.route("/", rotasNotificacoes);
 

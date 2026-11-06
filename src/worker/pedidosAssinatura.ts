@@ -16,13 +16,17 @@ export async function criarPedido(db: D1Database, usuarioId: number, titular: st
 export async function pedidoValido(db: D1Database, id: string, usuarioId: number): Promise<string | null> {
   if (!/^[0-9a-f-]{36}$/.test(id)) return null;
   const linha = await db
-    .prepare("SELECT titular, criado_em, arquivo_id FROM pedidos_assinatura WHERE id = ? AND usuario_id = ?")
+    .prepare("SELECT titular, criado_em, arquivo_id, avulso_id FROM pedidos_assinatura WHERE id = ? AND usuario_id = ?")
     .bind(id, usuarioId)
-    .first<{ titular: string; criado_em: number; arquivo_id: number | null }>();
-  if (!linha || linha.arquivo_id || Date.now() - linha.criado_em > VALIDADE_MS) return null;
+    .first<{ titular: string; criado_em: number; arquivo_id: number | null; avulso_id: number | null }>();
+  if (!linha || linha.arquivo_id || linha.avulso_id || Date.now() - linha.criado_em > VALIDADE_MS) return null;
   return linha.titular;
 }
 
 export function comandoUsarPedido(db: D1Database, id: string, arquivoId: number) {
   return db.prepare("UPDATE pedidos_assinatura SET arquivo_id = ? WHERE id = ?").bind(arquivoId, id);
+}
+
+export function comandoUsarPedidoAvulso(db: D1Database, id: string, avulsoId: number) {
+  return db.prepare("UPDATE pedidos_assinatura SET avulso_id = ? WHERE id = ?").bind(avulsoId, id);
 }

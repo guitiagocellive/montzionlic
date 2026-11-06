@@ -7714,3 +7714,120 @@ code {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* ---------- Assinar documentos ---------- */
+
+.assinar-cartao {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.assinar-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.assinar-status .etiqueta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+}
+
+.zona-assinar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 34px 20px;
+  border: 2px dashed var(--borda-forte);
+  border-radius: var(--raio, 18px);
+  background: var(--superficie-2);
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+
+.zona-assinar > svg {
+  width: 38px;
+  height: 38px;
+  color: var(--acento);
+}
+
+.zona-assinar strong {
+  font-size: 1rem;
+}
+
+.zona-assinar:hover,
+.zona-assinar:focus-visible,
+.zona-assinar.arrastando {
+  border-color: var(--acento);
+  background: var(--acento-suave);
+  outline: none;
+}
+
+.assinar-cartao.bloqueado .zona-assinar {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.assinar-cartao.bloqueado .zona-assinar:hover {
+  border-color: var(--borda-forte);
+  background: var(--superficie-2);
+}
+
+.assinar-cartao.bloqueado .zona-assinar > svg {
+  color: var(--texto-fraco);
+}
+
+.assinar-opcoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 16px;
+}
+
+.assinar-opcoes .campo {
+  flex: 1 1 260px;
+}
+
+.opcao-baixar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 10px;
+  font-size: 0.86rem;
+  color: var(--texto-suave);
+  cursor: pointer;
+}
+
+.opcao-baixar input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--acento);
+}
+
+.barra-assinados {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 22px 2px 10px;
+}
+
+.barra-assinados h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.barra-assinados .pequena-entrada.largo {
+  flex: 0 1 340px;
+}

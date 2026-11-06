@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   type LucideIcon,
   PackageCheck,
+  PenLine,
   Truck,
   Wallet,
 } from "lucide-react";
@@ -75,7 +76,10 @@ export const AREAS: Area[] = [
     chave: "documentacao",
     rotulo: "Documentação",
     icone: FolderLock,
-    funcoes: [{ caminho: "/documentacao", rotulo: "Documentos da empresa", icone: FolderLock, modulo: "documentacao" }],
+    funcoes: [
+      { caminho: "/documentacao", rotulo: "Documentos da empresa", icone: FolderLock, modulo: "documentacao" },
+      { caminho: "/assinar", rotulo: "Assinar documentos", icone: PenLine, modulo: "assinatura" },
+    ],
   },
 ];
 

@@ -9,6 +9,7 @@ import { Calendario } from "./pages/Calendario";
 import { Configuracoes } from "./pages/Configuracoes";
 import { Convite } from "./pages/Convite";
 import { Documentacao } from "./pages/Documentacao";
+import { AssinarDocumentos } from "./pages/AssinarDocumentos";
 import { Financeiro } from "./pages/Financeiro";
 import { PainelLicitacoes, PainelPosGanho } from "./pages/PaineisArea";
 import { BuscarLicitacoes } from "./pages/licitacoes/BuscarLicitacoes";
@@ -87,6 +88,8 @@ function Pagina({ caminho, usuario, aoMudarUsuario }: { caminho: string; usuario
       return podeVer(p, "financeiro") ? <Financeiro /> : <SemAcesso />;
     case "/documentacao":
       return podeVer(p, "documentacao") ? <Documentacao usuario={usuario} /> : <SemAcesso />;
+    case "/assinar":
+      return podeVer(p, "assinatura") ? <AssinarDocumentos usuario={usuario} /> : <SemAcesso />;
     default:
       return <Painel usuario={usuario} />;
   }

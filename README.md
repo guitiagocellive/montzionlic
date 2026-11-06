@@ -97,6 +97,11 @@ Não existe cadastro público: só um administrador adiciona pessoas.
   modelos** (.docx): campos entre chaves, ex.: `{orgao}`; tabela de itens com `{#itens}` … `{/itens}`; declarações
   com `{#declaracoes}{titulo} {texto}{/declaracoes}` e condições com `{#condicoes}{texto}{/condicoes}`.
   Modelo de exemplo em `public/modelos/modelo-proposta.docx`.
+- **Assinar documentos** (Documentação → Assinar documentos): envie um ou vários PDFs (declarações, contratos,
+  atas, ofícios…), escolha a página e o lugar do carimbo em cada um e assine com o certificado A1 da empresa. O PDF
+  assinado é baixado na hora e fica guardado na lista da página (ver, baixar, excluir, procurar) ou, se preferir,
+  direto numa licitação, na categoria escolhida. A página também lista o que foi assinado dentro das licitações e dos
+  empenhos. Precisa da permissão "Assinatura digital" (editar) para assinar.
 - **Modelos do PDF da proposta:** Clássico, Moderno (faixa colorida, dados em colunas, tabela listrada), Timbrado
   (dados da empresa no cabeçalho e rodapé, letra serifada), Compacto (letra menor, cabe em menos páginas) e Simples
   (preto e branco com grade, para imprimir), cada um em 8 cores. A empresa tem o modelo/cor padrão (Configurações →
