@@ -267,7 +267,9 @@ function Corpo({ resultado: r, idQuadro, podeImportar, importando, ocupado, aoIm
   const [arquivos, tentarArquivos] = useCarga(() => listarArquivos(r), r.id);
   const [extra] = useCarga(() => detalheCompra(r), r.id);
   const corpo = useRef<HTMLDivElement>(null);
-  useEffect(() => corpo.current?.closest(".modal")?.scrollTo({ top: 0 }), []);
+  useEffect(() => {
+    corpo.current?.closest(".modal")?.scrollTo({ top: 0 });
+  }, []);
 
   const dados = extra.estado === "pronto" ? extra.dados : null;
   const linkPortal = r.linkPortal ?? dados?.linkPortal ?? null;
@@ -281,7 +283,7 @@ function Corpo({ resultado: r, idQuadro, podeImportar, importando, ocupado, aoIm
     {
       rotulo: "Sessão",
       valor: r.encerramento ? dataHora(r.encerramento) : "Não informada",
-      detalhe: quando ? (quando.texto === "encerrada" ? "Prazo de propostas encerrado" : `Propostas até ${quando.texto}`) : undefined,
+      detalhe: quando ? (quando.texto === "encerrada" ? "Prazo de propostas encerrado" : `Sessão ${quando.texto}`) : undefined,
       classe: quando?.classe,
     },
     {

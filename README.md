@@ -68,14 +68,19 @@ Não existe cadastro público: só um administrador adiciona pessoas.
   Contratações Públicas por palavra-chave, nº da licitação, **data da sessão** (hoje, amanhã, próximos 3/7/15/30 dias
   ou datas escolhidas), estado, modalidade e situação. Em "Mais filtros": **município** (lista do IBGE em
   `public/dados/municipios.json`, até 10 por busca), **UASG**, **órgão** (nome ou CNPJ), **registro de preço**, esfera
-  e faixa de **valor estimado**. Ordena por publicação, sessão mais próxima ou relevância.
+  e faixa de **valor estimado**. Na área principal também: **registro de preço** (só SRP / sem SRP) e **plataforma**
+  da disputa (Compras.gov.br, Licitações-e, Portal de Compras Públicas, BNC, BLL, Licitanet…). Ordena por publicação,
+  sessão mais próxima ou relevância.
+  - **Clicar no card** abre uma janela única com tudo: sessão, valor de referência, registro de preço, modalidade,
+    plataforma, UASG, objeto, itens, arquivos com prévia (o edital já abre) e mais informações. "Anterior/Próxima"
+    (ou as setas do teclado) passam de uma licitação para outra sem fechar.
   - Cada resultado mostra sessão (com aviso de "hoje"/"amanhã"), UASG, valor estimado, SRP, modo de disputa e os links
     para o **PNCP** e para o **portal da disputa** (Compras.gov.br, BLL, BNC, Licitações-e, Portal de Compras
     Públicas…), direto na licitação quando o PNCP informa.
-  - **Arquivos e itens:** abre uma janela com todos os arquivos publicados (prévia do PDF dentro da plataforma, também
-    no celular; .zip mostra o que tem dentro), a lista de itens com valores estimados e o resumo completo.
+  - Prévia do PDF dentro da plataforma também no celular; .zip mostra o que tem dentro. A prévia dos arquivos na ficha
+    da licitação usa o mesmo leitor.
   - **Adicionar ao quadro** cria o card em "Para estudar" com os dados, os itens e **todos os arquivos** anexados.
-  - Filtros que o PNCP não faz (data da sessão, UASG, CNPJ, nº, vários municípios) são aplicados aqui depois de
+  - Filtros que o PNCP não faz (data da sessão, plataforma, UASG, CNPJ, nº, vários municípios) são aplicados aqui depois de
     baixar até 3.000 resultados por consulta; a tela avisa quando é preciso afinar a busca.
   - A pesquisa sai do navegador; só o download dos arquivos passa pelo servidor (`/api/pncp/arquivo`).
 - **Fornecedores** por nicho, com WhatsApp, site e catálogo.

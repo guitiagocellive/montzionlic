@@ -28,11 +28,15 @@ export function nomeDoArquivo(resposta: Response): string {
   const d = resposta.headers.get("content-disposition") ?? "";
   const utf = /filename\*=UTF-8''([^;]+)/i.exec(d)?.[1];
   const simples = /filename="?([^";]+)"?/i.exec(d)?.[1];
+  let nome = simples ?? "";
   try {
-    return (utf ? decodeURIComponent(utf) : simples ?? "").trim();
+    nome = utf ? decodeURIComponent(utf) : nome;
   } catch {
-    return (simples ?? "").trim();
+    /* fica o nome simples */
   }
+  // Alguns órgãos mandam o nome com "+" no lugar dos espaços.
+  if (nome.includes("+") && !nome.includes(" ")) nome = nome.replace(/\+/g, " ");
+  return nome.trim();
 }
 
 export function extensaoDe(nome: string): string {

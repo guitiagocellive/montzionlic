@@ -7197,3 +7197,18 @@ code {
   flex-wrap: wrap;
   max-width: 100%;
 }
+
+.ficha-pncp .itens-pncp {
+  font-size: 0.8rem;
+}
+
+.ficha-pncp .itens-pncp th,
+.ficha-pncp .itens-pncp td {
+  padding-left: 5px;
+  padding-right: 5px;
+}
+
+.ficha-pncp .itens-pncp td:nth-child(2) {
+  width: auto;
+  min-width: 150px;
+}

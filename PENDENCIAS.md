@@ -15,6 +15,8 @@ Lista do que foi combinado e ainda falta fazer (ou melhorar). Atualizar sempre q
   - [x] Link do portal da disputa (Compras.gov.br etc.) além do PNCP.
   - [x] Prévia de todos os arquivos do PNCP dentro da plataforma (PDF, imagens, .zip) e lista de itens.
   - [x] "Adicionar ao quadro" anexa todos os arquivos (não só o edital).
+  - [x] Janela única ao clicar no card (dados, itens, arquivos, links) com Anterior/Próxima.
+  - [x] Filtro por plataforma da disputa e registro de preço na área principal.
   - [ ] Continuar ajustando com o uso (ordem, destaque, resumo).
   - [ ] Buscas salvas e aviso diário de licitações novas que batem com os nichos.
 
