@@ -11,6 +11,7 @@ import { Convite } from "./pages/Convite";
 import { Documentacao } from "./pages/Documentacao";
 import { Financeiro } from "./pages/Financeiro";
 import { PainelLicitacoes, PainelPosGanho } from "./pages/PaineisArea";
+import { BuscarLicitacoes } from "./pages/licitacoes/BuscarLicitacoes";
 import { DetalheLicitacao } from "./pages/licitacoes/Detalhe";
 import { Fornecedores } from "./pages/licitacoes/Fornecedores";
 import { QuadroLicitacoes } from "./pages/licitacoes/Quadro";
@@ -55,6 +56,7 @@ function Pagina({ caminho, usuario, aoMudarUsuario }: { caminho: string; usuario
   const p = usuario.permissoes;
   let m: Record<string, string> | null;
   const limpo = caminho.replace(/\/+$/, "");
+  if (limpo === "/licitacoes/buscar") return podeVer(p, "licitacoes") ? <BuscarLicitacoes usuario={usuario} /> : <SemAcesso />;
   if (limpo === "/licitacoes/painel") return podeVer(p, "licitacoes") ? <PainelLicitacoes /> : <SemAcesso />;
   if (limpo === "/pos-ganho/painel") return podeVer(p, "posganho") ? <PainelPosGanho /> : <SemAcesso />;
   if ((m = combinar(caminho, "/licitacoes/:id")))

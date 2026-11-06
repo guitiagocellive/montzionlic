@@ -64,6 +64,10 @@ Não existe cadastro público: só um administrador adiciona pessoas.
 - **Orçamento automático:** preço de venda = custo com frete ÷ (1 − impostos − lucro).
 - **IA gratuita (Workers AI):** lê edital/termo de referência (PDF, imagem, Word, Excel), resume,
   preenche os dados e importa os itens. Limite grátis diário (~8 a 10 editais).
+- **Buscar licitações (PNCP):** Licitações → Buscar licitações. Pesquisa os editais do Portal Nacional de
+  Contratações Públicas por palavra-chave, nº da licitação, estado, modalidade e situação. "Adicionar ao quadro"
+  cria o card em "Para estudar" com os dados, os itens e o edital anexado. A consulta sai do navegador; só o
+  download do edital passa pelo servidor.
 - **Fornecedores** por nicho, com WhatsApp, site e catálogo.
 - **Calendário** e **Painel** com números reais.
 

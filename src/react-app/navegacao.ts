@@ -2,6 +2,7 @@ import {
   BellRing,
   CalendarDays,
   ChartColumnIncreasing,
+  FileSearch,
   FileSignature,
   FolderLock,
   Gauge,
@@ -49,6 +50,7 @@ export const AREAS: Area[] = [
     icone: Gavel,
     funcoes: [
       { caminho: "/licitacoes", rotulo: "Quadro de licitações", icone: KanbanSquare, modulo: "licitacoes" },
+      { caminho: "/licitacoes/buscar", rotulo: "Buscar licitações", icone: FileSearch, modulo: "licitacoes" },
       { caminho: "/licitacoes/painel", rotulo: "Painel de licitações", icone: LayoutDashboard, modulo: "licitacoes" },
       { caminho: "/fornecedores", rotulo: "Fornecedores", icone: Truck, modulo: "fornecedores" },
     ],

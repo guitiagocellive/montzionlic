@@ -29,6 +29,7 @@ const ESQUEMA_LICITACAO: Esquema = {
   nicho: "texto",
   data_sessao: "data",
   horario: "hora",
+  pncp_id: "texto",
   acompanhar: "bool",
   colocacao: "inteiro",
   situacao_disputa: "texto",
@@ -183,7 +184,7 @@ rotasLicitacoes.get("/", async (c) => {
             (SELECT COUNT(*) FROM licitacao_itens i WHERE i.licitacao_id = l.id AND i.resultado = 'ganho') AS itens_ganhos,
             (SELECT COUNT(*) FROM licitacao_itens i WHERE i.licitacao_id = l.id AND i.resultado = 'perdido') AS itens_perdidos,
             (SELECT COUNT(*) FROM licitacao_itens i WHERE i.licitacao_id = l.id AND i.resultado = 'acompanhando') AS itens_acompanhando,
-            l.acompanhar, l.colocacao, l.data_reabertura, l.hora_reabertura,
+            l.acompanhar, l.colocacao, l.data_reabertura, l.hora_reabertura, l.pncp_id,
             (SELECT COUNT(*) FROM arquivos a WHERE a.licitacao_id = l.id) AS total_arquivos,
             (SELECT COUNT(*) FROM cotacoes ct WHERE ct.licitacao_id = l.id) AS total_cotacoes
        FROM licitacoes l
@@ -198,6 +199,12 @@ rotasLicitacoes.post("/", async (c) => {
   if (!corpo) return c.json({ erro: "Requisição inválida." }, 400);
   const campos = lerCampos(corpo, ESQUEMA_LICITACAO);
   if (temErro(campos)) return c.json(campos, 400);
+
+  // Já importada do PNCP? Não duplica.
+  if (typeof corpo.pncp_id === "string" && corpo.pncp_id) {
+    const ja = await c.env.DB.prepare("SELECT id FROM licitacoes WHERE pncp_id = ?").bind(corpo.pncp_id).first<{ id: number }>();
+    if (ja) return c.json({ erro: "Esta licitação já está no quadro.", id: ja.id }, 409);
+  }
 
   const etapa = (corpo.etapa as string) || "estudar";
   const max = await c.env.DB.prepare(
@@ -496,6 +503,50 @@ rotasLicitacoes.delete("/cotacoes/:cotacaoId", async (c) => {
   if (!id) return c.json({ erro: "Cotação inválida." }, 400);
   await c.env.DB.prepare("DELETE FROM cotacoes WHERE id = ?").bind(id).run();
   return c.json({ ok: true });
+});
+
+// Anexa o edital de uma licitação importada do PNCP (o navegador não consegue baixar direto do PNCP).
+rotasLicitacoes.post("/:id/edital-pncp", async (c) => {
+  const id = idDaRota(c.req.param("id"));
+  if (!id) return c.json({ erro: "Licitação inválida." }, 400);
+  const usuario = c.get("usuario");
+  if (!podeEditar(usuario.permissoes, "licitacoes")) return c.json({ erro: "Sem permissão." }, 403);
+  if (!(await buscar(c.env.DB, "licitacoes", id))) return c.json({ erro: "Licitação não encontrada." }, 404);
+  const corpo = await lerJson(c);
+  const url = typeof corpo?.url === "string" ? corpo.url : "";
+  if (!/^https:\/\/pncp\.gov\.br\/pncp-api\/v1\/orgaos\/\d{14}\/compras\/\d{4}\/\d+\/arquivos\/\d+$/.test(url)) {
+    return c.json({ erro: "Endereço de arquivo do PNCP inválido." }, 400);
+  }
+  let resposta: Response;
+  try {
+    resposta = await fetch(url, { redirect: "follow" });
+  } catch {
+    return c.json({ erro: "O PNCP não respondeu." }, 502);
+  }
+  if (!resposta.ok) return c.json({ erro: "O PNCP não entregou o arquivo." }, 502);
+  const tamanho = Number(resposta.headers.get("content-length") ?? 0);
+  if (tamanho > 45 * 1024 * 1024) return c.json({ erro: "Edital grande demais para anexar." }, 400);
+  const dados = await resposta.arrayBuffer();
+  if (dados.byteLength === 0 || dados.byteLength > 45 * 1024 * 1024) return c.json({ erro: "Arquivo do edital inválido." }, 400);
+  const inicio = new Uint8Array(dados, 0, Math.min(4, dados.byteLength));
+  const pdf = inicio[0] === 0x25 && inicio[1] === 0x50 && inicio[2] === 0x44 && inicio[3] === 0x46;
+  const zip = inicio[0] === 0x50 && inicio[1] === 0x4b;
+  const tipo = pdf ? "application/pdf" : zip ? "application/zip" : "application/octet-stream";
+  const disposicao = resposta.headers.get("content-disposition") ?? "";
+  const original = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposicao)?.[1];
+  const titulo = (typeof corpo?.titulo === "string" ? corpo.titulo : "") || (original ? decodeURIComponent(original) : "Edital");
+  const extensao = pdf ? "pdf" : zip ? "zip" : "bin";
+  const nome = `${titulo.replace(/\.(pdf|zip)$/i, "").replace(/[\\/:*?"<>|]+/g, "-").slice(0, 150)}.${extensao}`;
+  const chave = `licitacoes/${id}/${crypto.randomUUID()}-edital.${extensao}`;
+  await c.env.ARQUIVOS.put(chave, dados, { httpMetadata: { contentType: tipo } });
+  const arquivo = await c.env.DB.prepare(
+    `INSERT INTO arquivos (licitacao_id, chave, nome, tipo_mime, tamanho, categoria, enviado_por)
+     VALUES (?, ?, ?, ?, ?, 'Edital', ?) RETURNING id, nome`,
+  )
+    .bind(id, chave, nome, tipo, dados.byteLength, usuario.id)
+    .first<{ id: number; nome: string }>();
+  await registrarEvento(c.env.DB, { licitacao_id: id }, usuario.id, `anexou o edital do PNCP ("${nome}")`);
+  return c.json({ arquivo }, 201);
 });
 
 // ---------------- Proposta comercial ----------------

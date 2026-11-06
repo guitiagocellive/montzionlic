@@ -5009,6 +5009,177 @@ a.kpi:hover {
   margin: 14px 0 0;
 }
 
+/* ---------- Buscar licitações (PNCP) ---------- */
+
+.filtros-pncp {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.filtros-pncp-linha {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.filtros-pncp-linha .busca {
+  flex: 3 1 320px;
+}
+
+.filtros-pncp-linha .numero-pncp {
+  flex: 1 1 200px;
+}
+
+.filtros-pncp-grupo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.rotulo-filtro {
+  min-width: 82px;
+  font-size: 0.78rem;
+  color: var(--texto-fraco);
+}
+
+.chips-filtro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+
+.chip-filtro {
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--borda);
+  background: var(--superficie-2);
+  color: var(--texto-suave);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.chip-filtro.uf {
+  min-width: 42px;
+  padding: 5px 8px;
+}
+
+.chip-filtro:hover {
+  border-color: var(--borda-forte);
+  color: var(--texto);
+}
+
+.chip-filtro.ativo {
+  background: var(--acento-suave);
+  border-color: color-mix(in srgb, var(--acento) 50%, var(--borda));
+  color: var(--acento-texto);
+  font-weight: 600;
+}
+
+.resumo-busca {
+  margin: 14px 2px 8px;
+}
+
+.lista-pncp {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.resultado-pncp {
+  padding: 16px 18px;
+  border-radius: var(--raio, 18px);
+  border: 1px solid var(--borda);
+  background: var(--superficie);
+}
+
+.resultado-pncp.cancelado {
+  opacity: 0.6;
+}
+
+.resultado-pncp-etiquetas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.resultado-pncp-etiquetas .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.resultado-pncp h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.resultado-pncp-orgao {
+  margin: 2px 0 6px;
+  font-size: 0.86rem;
+  color: var(--texto-suave);
+}
+
+.resultado-pncp-objeto {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.resultado-pncp-objeto.aberto {
+  -webkit-line-clamp: unset;
+  display: block;
+}
+
+.resultado-pncp-acoes {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.resultado-pncp-acoes > span {
+  margin-right: auto;
+}
+
+.chip.verde {
+  background: var(--verde-fundo);
+  color: var(--verde);
+}
+
+.chip.vermelho {
+  background: var(--vermelho-fundo);
+  color: var(--vermelho);
+}
+
+.carregar-mais {
+  display: flex;
+  justify-content: center;
+  margin: 16px 0;
+}
+
+.girando {
+  animation: girar 0.9s linear infinite;
+}
+
+@keyframes girar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (max-width: 1180px) {
   .kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));

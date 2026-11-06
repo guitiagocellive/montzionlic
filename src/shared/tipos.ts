@@ -235,6 +235,7 @@ export interface LicitacaoResumo {
   colocacao: number | null;
   data_reabertura: string | null;
   hora_reabertura: string | null;
+  pncp_id: string | null;
 }
 
 export interface Licitacao {
