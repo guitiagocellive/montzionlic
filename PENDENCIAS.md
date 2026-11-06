@@ -10,9 +10,13 @@ Lista do que foi combinado e ainda falta fazer (ou melhorar). Atualizar sempre q
   - [x] "Adicionar ao quadro": cria o card em "Para estudar" com órgão, UASG, número, objeto, modalidade,
         data/hora da sessão, portal, valor estimado, registro de preço, itens e o edital anexado.
   - [x] Marca as licitações que já estão no quadro.
-  - [ ] Otimizar como os resultados aparecem (ajustar com o uso: ordem, destaque, resumo).
+  - [x] Filtro por data da sessão (hoje, amanhã, 3/7/15/30 dias, datas), município, UASG, órgão/CNPJ,
+        registro de preço, esfera e faixa de valor; ordenar por sessão mais próxima.
+  - [x] Link do portal da disputa (Compras.gov.br etc.) além do PNCP.
+  - [x] Prévia de todos os arquivos do PNCP dentro da plataforma (PDF, imagens, .zip) e lista de itens.
+  - [x] "Adicionar ao quadro" anexa todos os arquivos (não só o edital).
+  - [ ] Continuar ajustando com o uso (ordem, destaque, resumo).
   - [ ] Buscas salvas e aviso diário de licitações novas que batem com os nichos.
-  - [ ] Filtro por município, órgão, faixa de valor e data de abertura.
 
 ## A fazer
 

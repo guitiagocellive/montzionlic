@@ -65,9 +65,19 @@ Não existe cadastro público: só um administrador adiciona pessoas.
 - **IA gratuita (Workers AI):** lê edital/termo de referência (PDF, imagem, Word, Excel), resume,
   preenche os dados e importa os itens. Limite grátis diário (~8 a 10 editais).
 - **Buscar licitações (PNCP):** Licitações → Buscar licitações. Pesquisa os editais do Portal Nacional de
-  Contratações Públicas por palavra-chave, nº da licitação, estado, modalidade e situação. "Adicionar ao quadro"
-  cria o card em "Para estudar" com os dados, os itens e o edital anexado. A consulta sai do navegador; só o
-  download do edital passa pelo servidor.
+  Contratações Públicas por palavra-chave, nº da licitação, **data da sessão** (hoje, amanhã, próximos 3/7/15/30 dias
+  ou datas escolhidas), estado, modalidade e situação. Em "Mais filtros": **município** (lista do IBGE em
+  `public/dados/municipios.json`, até 10 por busca), **UASG**, **órgão** (nome ou CNPJ), **registro de preço**, esfera
+  e faixa de **valor estimado**. Ordena por publicação, sessão mais próxima ou relevância.
+  - Cada resultado mostra sessão (com aviso de "hoje"/"amanhã"), UASG, valor estimado, SRP, modo de disputa e os links
+    para o **PNCP** e para o **portal da disputa** (Compras.gov.br, BLL, BNC, Licitações-e, Portal de Compras
+    Públicas…), direto na licitação quando o PNCP informa.
+  - **Arquivos e itens:** abre uma janela com todos os arquivos publicados (prévia do PDF dentro da plataforma, também
+    no celular; .zip mostra o que tem dentro), a lista de itens com valores estimados e o resumo completo.
+  - **Adicionar ao quadro** cria o card em "Para estudar" com os dados, os itens e **todos os arquivos** anexados.
+  - Filtros que o PNCP não faz (data da sessão, UASG, CNPJ, nº, vários municípios) são aplicados aqui depois de
+    baixar até 3.000 resultados por consulta; a tela avisa quando é preciso afinar a busca.
+  - A pesquisa sai do navegador; só o download dos arquivos passa pelo servidor (`/api/pncp/arquivo`).
 - **Fornecedores** por nicho, com WhatsApp, site e catálogo.
 - **Calendário** e **Painel** com números reais.
 

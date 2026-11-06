@@ -19,10 +19,11 @@ import { api, enviarArquivo, mensagemDeErro } from "../api";
 import { formatarData, formatarTamanho } from "../formato";
 import { ResultadoIA } from "./ResultadoIA";
 import { avisar, Modal, SeloAssinado, Vazio } from "./Ui";
+import { PreviaArquivo } from "./PreviaArquivo";
 
 const ModalAssinar = lazy(() => import("../assinatura/ModalAssinar").then((m) => ({ default: m.ModalAssinar })));
 
-const VISUALIZAVEIS = ["application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp", "text/plain"];
+const VISUALIZAVEIS = ["application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp", "text/plain", "application/zip", "application/x-zip-compressed"];
 const ANALISAVEIS = [
   "application/pdf",
   "image/png",
@@ -308,21 +309,7 @@ export function AbaArquivos({
 
       {vendo && (
         <Modal titulo={vendo.nome} aoFechar={() => setVendo(null)} largo>
-          <div className="visualizador">
-            {vendo.tipo_mime?.startsWith("image/") ? (
-              <img src={`/api/arquivos/${vendo.id}`} alt={vendo.nome} />
-            ) : (
-              <iframe src={`/api/arquivos/${vendo.id}`} title={vendo.nome} />
-            )}
-          </div>
-          <div className="botoes-modal">
-            <a className="botao secundario" href={`/api/arquivos/${vendo.id}`} target="_blank" rel="noreferrer">
-              Abrir em nova aba
-            </a>
-            <a className="botao" href={`/api/arquivos/${vendo.id}?baixar=1`}>
-              <Download aria-hidden="true" /> Baixar
-            </a>
-          </div>
+          <PreviaArquivo url={`/api/arquivos/${vendo.id}`} nome={vendo.nome} />
         </Modal>
       )}
 

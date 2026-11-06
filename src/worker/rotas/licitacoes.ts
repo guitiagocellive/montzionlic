@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { ETAPAS_LICITACAO } from "../../shared/negocio";
+import { CATEGORIAS_ARQUIVO, ETAPAS_LICITACAO } from "../../shared/negocio";
 import { podeEditar, podeVer } from "../../shared/permissoes";
 import { type Ambiente, exigirAdmin, exigirLogin, exigirModulo } from "../auth";
 import { notificar } from "../notificacoes";
@@ -11,6 +11,7 @@ import { nomeEtapa } from "../../shared/negocio";
 import { buscar, comandoAtualizar, comExtras, inserir } from "../banco";
 import { calcularPreco } from "../../shared/negocio";
 import { type Esquema, idDaRota, lerCampos, lerJson, temErro, texto } from "../validacao";
+import { extensaoDe, extensaoPelosBytes, nomeDoArquivo, tipoPorExtensao, URL_ARQUIVO_PNCP } from "../pncp";
 
 export const rotasLicitacoes = new Hono<Ambiente>();
 rotasLicitacoes.use(exigirLogin);
@@ -514,38 +515,36 @@ rotasLicitacoes.post("/:id/edital-pncp", async (c) => {
   if (!(await buscar(c.env.DB, "licitacoes", id))) return c.json({ erro: "Licitação não encontrada." }, 404);
   const corpo = await lerJson(c);
   const url = typeof corpo?.url === "string" ? corpo.url : "";
-  if (!/^https:\/\/pncp\.gov\.br\/pncp-api\/v1\/orgaos\/\d{14}\/compras\/\d{4}\/\d+\/arquivos\/\d+$/.test(url)) {
-    return c.json({ erro: "Endereço de arquivo do PNCP inválido." }, 400);
+  if (!URL_ARQUIVO_PNCP.test(url)) return c.json({ erro: "Endereço de arquivo do PNCP inválido." }, 400);
+  const categoria = CATEGORIAS_ARQUIVO.includes(corpo?.categoria as string) ? (corpo?.categoria as string) : "Edital";
+  let resposta: Response | null = null;
+  for (let tentativa = 0; tentativa < 2 && !resposta; tentativa++) {
+    try {
+      const r = await fetch(url, { redirect: "follow" });
+      if (r.ok) resposta = r;
+    } catch {
+      /* tenta de novo */
+    }
   }
-  let resposta: Response;
-  try {
-    resposta = await fetch(url, { redirect: "follow" });
-  } catch {
-    return c.json({ erro: "O PNCP não respondeu." }, 502);
-  }
-  if (!resposta.ok) return c.json({ erro: "O PNCP não entregou o arquivo." }, 502);
-  const tamanho = Number(resposta.headers.get("content-length") ?? 0);
-  if (tamanho > 45 * 1024 * 1024) return c.json({ erro: "Edital grande demais para anexar." }, 400);
+  if (!resposta) return c.json({ erro: "O PNCP não entregou o arquivo." }, 502);
+  const limite = 45 * 1024 * 1024;
+  if (Number(resposta.headers.get("content-length") ?? 0) > limite) return c.json({ erro: "Arquivo grande demais para anexar." }, 400);
   const dados = await resposta.arrayBuffer();
-  if (dados.byteLength === 0 || dados.byteLength > 45 * 1024 * 1024) return c.json({ erro: "Arquivo do edital inválido." }, 400);
-  const inicio = new Uint8Array(dados, 0, Math.min(4, dados.byteLength));
-  const pdf = inicio[0] === 0x25 && inicio[1] === 0x50 && inicio[2] === 0x44 && inicio[3] === 0x46;
-  const zip = inicio[0] === 0x50 && inicio[1] === 0x4b;
-  const tipo = pdf ? "application/pdf" : zip ? "application/zip" : "application/octet-stream";
-  const disposicao = resposta.headers.get("content-disposition") ?? "";
-  const original = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposicao)?.[1];
-  const titulo = (typeof corpo?.titulo === "string" ? corpo.titulo : "") || (original ? decodeURIComponent(original) : "Edital");
-  const extensao = pdf ? "pdf" : zip ? "zip" : "bin";
-  const nome = `${titulo.replace(/\.(pdf|zip)$/i, "").replace(/[\\/:*?"<>|]+/g, "-").slice(0, 150)}.${extensao}`;
-  const chave = `licitacoes/${id}/${crypto.randomUUID()}-edital.${extensao}`;
+  if (dados.byteLength === 0 || dados.byteLength > limite) return c.json({ erro: "Arquivo do PNCP inválido." }, 400);
+  const original = nomeDoArquivo(resposta);
+  const extensao = extensaoDe(original) || extensaoPelosBytes(new Uint8Array(dados, 0, Math.min(4, dados.byteLength))) || "bin";
+  const tipo = tipoPorExtensao(extensao);
+  const titulo = (typeof corpo?.titulo === "string" ? corpo.titulo.trim() : "") || original.replace(/\.[a-z0-9]{1,5}$/i, "") || categoria;
+  const nome = `${titulo.replace(/\.[a-z0-9]{1,5}$/i, "").replace(/[\\/:*?"<>|]+/g, "-").slice(0, 150)}.${extensao}`;
+  const chave = `licitacoes/${id}/${crypto.randomUUID()}-pncp.${extensao}`;
   await c.env.ARQUIVOS.put(chave, dados, { httpMetadata: { contentType: tipo } });
   const arquivo = await c.env.DB.prepare(
     `INSERT INTO arquivos (licitacao_id, chave, nome, tipo_mime, tamanho, categoria, enviado_por)
-     VALUES (?, ?, ?, ?, ?, 'Edital', ?) RETURNING id, nome`,
+     VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id, nome`,
   )
-    .bind(id, chave, nome, tipo, dados.byteLength, usuario.id)
+    .bind(id, chave, nome, tipo, dados.byteLength, categoria, usuario.id)
     .first<{ id: number; nome: string }>();
-  await registrarEvento(c.env.DB, { licitacao_id: id }, usuario.id, `anexou o edital do PNCP ("${nome}")`);
+  await registrarEvento(c.env.DB, { licitacao_id: id }, usuario.id, `anexou do PNCP: "${nome}"`);
   return c.json({ arquivo }, 201);
 });
 
