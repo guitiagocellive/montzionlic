@@ -29,13 +29,14 @@ import {
   type Municipio,
   ordenar,
   PERIODOS_SESSAO,
+  PLATAFORMAS,
   prepararImportacao,
   type RespostaBusca,
   type ResultadoPncp,
   semAcento,
   UFS,
 } from "../../pncp";
-import { DetalhePncp, dataHora, reais } from "./DetalhePncp";
+import { DetalhePncp, dataHora, quandoSessao, reais } from "./DetalhePncp";
 
 const CHAVE_FILTROS = "montzion:busca-pncp";
 const POR_TELA = 30;
@@ -47,18 +48,6 @@ function lerFiltros(): FiltrosBusca {
   } catch {
     return FILTROS_PADRAO;
   }
-}
-
-/** "hoje", "amanhã", "em 3 dias", "encerrada" */
-function quandoSessao(iso: string | null): { texto: string; classe: string } | null {
-  if (!iso) return null;
-  const [a, m, d] = iso.slice(0, 10).split("-").map(Number);
-  const hoje = new Date();
-  const dias = Math.round((new Date(a, m - 1, d).getTime() - new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate()).getTime()) / 86400000);
-  if (dias < 0) return { texto: "encerrada", classe: "" };
-  if (dias === 0) return { texto: "hoje", classe: "urgente" };
-  if (dias === 1) return { texto: "amanhã", classe: "urgente" };
-  return { texto: `em ${dias} dias`, classe: dias <= 3 ? "breve" : "" };
 }
 
 function FiltroMunicipios({ ufs, valor, aoMudar }: { ufs: string[]; valor: Municipio[]; aoMudar: (m: Municipio[]) => void }) {
@@ -145,7 +134,7 @@ function FiltroMunicipios({ ufs, valor, aoMudar }: { ufs: string[]; valor: Munic
 
 /** Quantos filtros de "Mais filtros" estão ligados. */
 function filtrosExtras(f: FiltrosBusca) {
-  return [f.municipios.length > 0, !!f.uasg.trim(), !!f.orgao.trim(), !!f.srp, f.esferas.length > 0, !!f.valorMin.trim() || !!f.valorMax.trim()].filter(Boolean).length;
+  return [f.municipios.length > 0, !!f.uasg.trim(), !!f.orgao.trim(), f.esferas.length > 0, !!f.valorMin.trim() || !!f.valorMax.trim()].filter(Boolean).length;
 }
 
 export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
@@ -162,7 +151,7 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
   const [abertos, setAbertos] = useState<Record<string, boolean>>({});
   const [verUfs, setVerUfs] = useState(false);
   const [maisFiltros, setMaisFiltros] = useState(() => filtrosExtras(lerFiltros()) > 0);
-  const [detalhe, setDetalhe] = useState<{ r: ResultadoPncp; aba: "resumo" | "itens" | "arquivos" } | null>(null);
+  const [detalhe, setDetalhe] = useState<string | null>(null);
 
   // Quais licitações do PNCP já estão no quadro.
   useEffect(() => {
@@ -254,6 +243,15 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
   const extras = filtrosExtras(filtros);
   const resultados = resposta?.itens ?? null;
   const visiveis = resposta?.varredura ? (resultados ?? []).slice(0, mostrar) : resultados ?? [];
+  const posAberto = detalhe && resultados ? resultados.findIndex((x) => x.id === detalhe) : -1;
+  const aberto = posAberto >= 0 ? resultados![posAberto] : null;
+  function irPara(pos: number) {
+    if (!resultados?.[pos]) return;
+    setDetalhe(resultados[pos].id);
+    if (resposta?.varredura && pos >= mostrar) setMostrar(pos + 1);
+    // Chegando no fim do que já veio do PNCP: busca a próxima página.
+    if (!resposta?.varredura && pos >= resultados.length - 2 && resultados.length < (resposta?.total ?? 0) && !buscando) buscar(pagina + 1);
+  }
   const temMais = resposta ? (resposta.varredura ? mostrar < resposta.itens.length : resposta.itens.length < resposta.total) : false;
 
   // Mudar a ordem na tela reordena o que já veio (sem nova busca) quando já está tudo carregado.
@@ -349,6 +347,42 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
                 {m.nome}
               </button>
             ))}
+            {filtros.modalidades.length === 0 ? (
+              <span className="texto-fraco pequeno">Todas as modalidades</span>
+            ) : (
+              <button type="button" className="botao link pequeno" onClick={() => mudar({ modalidades: [] })}>
+                <X size={13} /> Todas
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="filtros-pncp-grupo">
+          <span className="rotulo-filtro">Registro de preço</span>
+          <div className="segmentado pequeno">
+            {([["", "Tanto faz"], ["sim", "Só registro de preço"], ["nao", "Sem registro de preço"]] as const).map(([v, t]) => (
+              <button key={v} type="button" className={filtros.srp === v ? "ativo" : ""} onClick={() => mudar({ srp: v })}>
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="filtros-pncp-grupo">
+          <span className="rotulo-filtro">Plataforma</span>
+          <div className="chips-filtro">
+            {PLATAFORMAS.map((pl) => (
+              <button type="button" key={pl} className={`chip-filtro ${filtros.plataformas.includes(pl) ? "ativo" : ""}`} onClick={() => mudar({ plataformas: alternar(filtros.plataformas, pl) })}>
+                {pl}
+              </button>
+            ))}
+            {filtros.plataformas.length === 0 ? (
+              <span className="texto-fraco pequeno">Todas as plataformas</span>
+            ) : (
+              <button type="button" className="botao link pequeno" onClick={() => mudar({ plataformas: [] })}>
+                <X size={13} /> Todas
+              </button>
+            )}
           </div>
         </div>
 
@@ -377,8 +411,8 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
             <SlidersHorizontal size={14} /> {maisFiltros ? "Menos filtros" : "Mais filtros"}
             {extras > 0 && <span className="contador-filtros">{extras}</span>}
           </button>
-          <span className="texto-fraco pequeno">Município, UASG, órgão, registro de preço, esfera e valor</span>
-          {(extras > 0 || filtros.sessao || filtros.numero) && (
+          <span className="texto-fraco pequeno">Município, UASG, órgão, esfera e valor</span>
+          {(extras > 0 || filtros.sessao || filtros.numero || filtros.srp || filtros.plataformas.length > 0) && (
             <button type="button" className="botao link pequeno" onClick={limparFiltros}>
               <X size={13} /> Limpar filtros
             </button>
@@ -399,16 +433,6 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
               <span className="rotulo-filtro curto">Órgão</span>
               <div className="entrada pequena-entrada largo">
                 <input placeholder="Nome ou CNPJ do órgão" value={filtros.orgao} onChange={(e) => mudar({ orgao: e.target.value })} aria-label="Órgão" />
-              </div>
-            </div>
-            <div className="filtros-pncp-grupo">
-              <span className="rotulo-filtro">Registro de preço</span>
-              <div className="segmentado pequeno">
-                {([["", "Tanto faz"], ["sim", "Só SRP"], ["nao", "Sem SRP"]] as const).map(([v, t]) => (
-                  <button key={v} type="button" className={filtros.srp === v ? "ativo" : ""} onClick={() => mudar({ srp: v })}>
-                    {t}
-                  </button>
-                ))}
               </div>
             </div>
             <div className="filtros-pncp-grupo">
@@ -470,7 +494,15 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
               const quando = quandoSessao(r.encerramento);
               const importandoEste = importando?.id === r.id;
               return (
-                <article key={r.id} className={`resultado-pncp ${r.cancelado ? "cancelado" : ""}`}>
+                <article
+                  key={r.id}
+                  className={`resultado-pncp clicavel ${r.cancelado ? "cancelado" : ""}`}
+                  onClick={(e) => {
+                    if ((e.target as HTMLElement).closest("a, button, input, select")) return;
+                    if (window.getSelection()?.toString()) return; // estava selecionando texto
+                    setDetalhe(r.id);
+                  }}
+                >
                   <div className="resultado-pncp-etiquetas">
                     <span className="chip">{r.modalidade}</span>
                     {r.srp && <span className="chip azul" title="Sistema de Registro de Preços">Registro de preço</span>}
@@ -488,7 +520,7 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
                     {idQuadro && <span className="chip verde">Já no quadro</span>}
                   </div>
                   <h3>
-                    <button className="titulo-resultado" onClick={() => setDetalhe({ r, aba: "arquivos" })}>
+                    <button className="titulo-resultado" onClick={() => setDetalhe(r.id)}>
                       {r.modalidade} nº {r.numero}/{r.ano}
                     </button>
                   </h3>
@@ -514,8 +546,8 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
                     <span>Publicada em {dataHora(r.publicadoEm).split(" às")[0]}</span>
                   </div>
                   <div className="resultado-pncp-acoes">
-                    <button className="botao secundario pequeno" onClick={() => setDetalhe({ r, aba: "arquivos" })}>
-                      <FolderOpen /> Arquivos e itens
+                    <button className="botao secundario pequeno" onClick={() => setDetalhe(r.id)}>
+                      <FolderOpen /> Ver tudo
                     </button>
                     <a className="botao secundario pequeno" href={r.linkPncp} target="_blank" rel="noreferrer noopener">
                       <ExternalLink /> PNCP
@@ -570,15 +602,18 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
         </>
       )}
 
-      {detalhe && (
+      {aberto && (
         <DetalhePncp
-          resultado={detalhe.r}
-          abaInicial={detalhe.aba}
-          idQuadro={noQuadro[detalhe.r.id]}
+          resultado={aberto}
+          idQuadro={noQuadro[aberto.id]}
           podeImportar={editar}
-          importando={importando?.id === detalhe.r.id}
-          aoImportar={() => importar(detalhe.r)}
+          importando={importando?.id === aberto.id ? importando.etapa : null}
+          ocupado={!!importando && importando.id !== aberto.id}
+          aoImportar={() => importar(aberto)}
           aoFechar={() => setDetalhe(null)}
+          anterior={posAberto > 0 ? () => irPara(posAberto - 1) : undefined}
+          proxima={posAberto >= 0 && posAberto < (resultados?.length ?? 0) - 1 ? () => irPara(posAberto + 1) : undefined}
+          posicao={posAberto >= 0 ? `${posAberto + 1} de ${resposta?.varredura ? resultados!.length : resposta!.total}` : undefined}
         />
       )}
     </>

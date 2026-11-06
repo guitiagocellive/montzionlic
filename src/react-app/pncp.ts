@@ -56,6 +56,7 @@ export interface FiltrosBusca {
   modalidades: string[];
   situacao: "recebendo_proposta" | "todas";
   municipios: Municipio[];
+  plataformas: string[];
   uasg: string;
   orgao: string; // nome ou CNPJ
   srp: "" | "sim" | "nao";
@@ -75,6 +76,7 @@ export const FILTROS_PADRAO: FiltrosBusca = {
   modalidades: ["6", "8"],
   situacao: "recebendo_proposta",
   municipios: [],
+  plataformas: [],
   uasg: "",
   orgao: "",
   srp: "",
@@ -114,6 +116,7 @@ export interface ResultadoPncp {
   linkPncp: string;
   portal: string;
   linkPortal: string | null;
+  informacao: string;
   cancelado: boolean;
 }
 
@@ -140,6 +143,7 @@ interface ItemBusca {
   amparo_legal_nome: (string | null)[] | null;
   usuario_nome: string | null;
   link_sistema_origem: string | null;
+  informacao_complementar: string | null;
   data_publicacao_pncp: string | null;
   data_inicio_vigencia: string | null;
   data_fim_vigencia: string | null;
@@ -186,6 +190,21 @@ const PORTAIS: { teste: RegExp; nome: string; inicio: string }[] = [
   { teste: /licitamaisbrasil|Licita Mais/i, nome: "Licita Mais Brasil", inicio: "https://licitamaisbrasil.com.br" },
   { teste: /bbmnet/i, nome: "BBMNET", inicio: "https://bbmnet.com.br" },
   { teste: /comprasbr|compras br/i, nome: "ComprasBR", inicio: "https://comprasbr.com.br" },
+  { teste: /licitardigital|Licitar Digital/i, nome: "Licitar Digital", inicio: "https://licitardigital.com.br" },
+];
+
+/** Plataformas que aparecem no filtro (as mais usadas no PNCP) + "Outras". */
+export const PLATAFORMAS = [
+  "Compras.gov.br",
+  "Licitações-e (BB)",
+  "Portal de Compras Públicas",
+  "BNC Compras",
+  "BLL Compras",
+  "Licitanet",
+  "BBMNET",
+  "Licitar Digital",
+  "ComprasBR",
+  "Outras",
 ];
 
 function linkValido(link: string | null | undefined): string | null {
@@ -231,6 +250,7 @@ function converter(i: ItemBusca): ResultadoPncp {
     linkPncp: `https://pncp.gov.br/app/editais/${i.orgao_cnpj}/${i.ano}/${i.numero_sequencial}`,
     portal: portal.nome,
     linkPortal: portal.link,
+    informacao: (i.informacao_complementar ?? "").trim(),
     cancelado: !!i.cancelado,
   };
 }
@@ -296,11 +316,14 @@ function filtroLocal(f: FiltrosBusca) {
   const uasg = semZeros(f.uasg);
   const cnpj = somenteNumero(f.orgao).length === 14 ? somenteNumero(f.orgao) : "";
   const intervalo = intervaloSessao(f);
-  const ativo = !!(alvoNumero || uasg || cnpj || intervalo);
+  const plataformas = f.plataformas ?? [];
+  const conhecidas = PLATAFORMAS.filter((x) => x !== "Outras");
+  const ativo = !!(alvoNumero || uasg || cnpj || intervalo || plataformas.length);
   const passa = (i: ResultadoPncp) => {
     if (alvoNumero && (semZeros(i.numero) !== alvoNumero || (numAno && i.ano !== numAno))) return false;
     if (uasg && semZeros(i.uasg) !== uasg) return false;
     if (cnpj && i.cnpj !== cnpj) return false;
+    if (plataformas.length && !plataformas.includes(i.portal) && !(plataformas.includes("Outras") && !conhecidas.includes(i.portal))) return false;
     if (intervalo) {
       const dia = (i.encerramento ?? "").slice(0, 10);
       if (!dia || dia < intervalo[0] || dia > intervalo[1]) return false;
@@ -365,7 +388,7 @@ export function ordenar(itens: ResultadoPncp[], ordem: FiltrosBusca["ordem"]): R
   return copia;
 }
 
-/** Precisa baixar tudo e filtrar aqui? (data da sessão, UASG, CNPJ, nº, vários municípios ou ordem por sessão) */
+/** Precisa baixar tudo e filtrar aqui? (data da sessão, plataforma, UASG, CNPJ, nº, vários municípios ou ordem por sessão) */
 export function usaVarredura(f: FiltrosBusca) {
   return filtroLocal(f).ativo || f.municipios.length > 1 || f.ordem === "sessao";
 }
@@ -418,6 +441,7 @@ export const semAcento = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "
 
 interface DetalheCompra {
   numeroCompra: string;
+  processo?: string | null;
   anoCompra: number;
   objetoCompra: string;
   srp: boolean;
@@ -491,6 +515,14 @@ export async function listarItens(r: ResultadoPncp): Promise<ItemPncp[]> {
     tipo: i.materialOuServicoNome ?? "",
     beneficio: i.tipoBeneficioNome && !/sem benef|não se aplica/i.test(i.tipoBeneficioNome) ? i.tipoBeneficioNome : "",
   }));
+}
+
+/** Dados extras da compra (nº do processo, link de origem). O PNCP às vezes ainda não tem: devolve null. */
+export async function detalheCompra(r: ResultadoPncp): Promise<{ processo: string; linkPortal: string | null; portal: string } | null> {
+  const d = await buscarJson<Partial<DetalheCompra>>(`${CONSULTA}/orgaos/${baseCompra(r)}`, 1).catch(() => null);
+  if (!d || !d.numeroCompra) return null;
+  const portal = portalDaLicitacao(d.linkSistemaOrigem ?? r.linkPortal, d.usuarioNome ?? r.portal);
+  return { processo: (d.processo ?? "").trim(), linkPortal: portal.link, portal: portal.nome };
 }
 
 /** Categoria do arquivo na plataforma a partir do tipo informado no PNCP. */

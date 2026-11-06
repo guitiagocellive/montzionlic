@@ -6702,8 +6702,8 @@ code {
 }
 
 /* Janela de detalhes da licitação do PNCP */
-.modal:has(.detalhe-pncp) {
-  max-width: 1180px;
+.modal:has(.ficha-pncp) {
+  max-width: 1280px;
 }
 
 .detalhe-pncp {
@@ -7007,4 +7007,193 @@ code {
     height: 65vh;
     padding: 8px;
   }
+}
+
+/* Card do resultado inteiro abre a janela; janela única da licitação do PNCP */
+.resultado-pncp.clicavel {
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+
+.resultado-pncp.clicavel:hover {
+  border-color: var(--borda-forte);
+  box-shadow: var(--sombra-flutuante);
+}
+
+.navegar-pncp {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: -6px 0 14px;
+}
+
+.ficha-pncp {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ficha-pncp-topo {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ficha-pncp-topo .resultado-pncp-orgao {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  margin: -10px 0 0;
+}
+
+.separador {
+  color: var(--texto-fraco);
+}
+
+.detalhe-pncp-links {
+  align-items: center;
+}
+
+.detalhe-pncp-links .espaco {
+  flex: 1;
+}
+
+.fatos-pncp {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 8px;
+}
+
+.fato-pncp {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: var(--raio-sm);
+  border: 1px solid var(--borda);
+  background: var(--superficie-2);
+  min-width: 0;
+}
+
+.fato-pncp > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  color: var(--texto-fraco);
+}
+
+.fato-pncp strong {
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.fato-pncp small {
+  font-size: 0.74rem;
+  color: var(--texto-suave);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fato-pncp.urgente {
+  border-color: color-mix(in srgb, var(--vermelho) 40%, var(--borda));
+  background: var(--vermelho-fundo);
+}
+
+.fato-pncp.urgente strong,
+.fato-pncp.urgente small {
+  color: var(--vermelho);
+}
+
+.fato-pncp.breve {
+  border-color: color-mix(in srgb, var(--amarelo) 40%, var(--borda));
+  background: var(--amarelo-fundo);
+}
+
+.fato-pncp.azul {
+  border-color: color-mix(in srgb, var(--azul) 40%, var(--borda));
+  background: var(--azul-fundo);
+}
+
+.fato-pncp.azul strong {
+  color: var(--azul);
+}
+
+.ficha-pncp-colunas {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+}
+
+.ficha-pncp-info {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+.ficha-pncp-arquivos {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ficha-pncp-arquivos .lista-arquivos-pncp {
+  max-height: 190px;
+  overflow-y: auto;
+}
+
+.ficha-pncp-arquivos .visor-pdf,
+.ficha-pncp-arquivos .leitor-pdf {
+  height: min(62vh, 760px);
+}
+
+.titulo-secao-pncp {
+  margin: 0 0 8px;
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.titulo-secao-pncp .texto-fraco {
+  font-weight: 400;
+}
+
+.informacao-pncp {
+  margin: 8px 0 0;
+  white-space: pre-line;
+}
+
+@media (max-width: 960px) {
+  .ficha-pncp-colunas {
+    grid-template-columns: 1fr;
+  }
+
+  .ficha-pncp-arquivos {
+    position: static;
+  }
+}
+
+@media (max-width: 640px) {
+  .fatos-pncp {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .detalhe-pncp-links .espaco {
+    display: none;
+  }
+}
+
+.filtros-pncp .segmentado {
+  flex-wrap: wrap;
+  max-width: 100%;
 }
