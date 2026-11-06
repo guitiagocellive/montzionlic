@@ -1,5 +1,8 @@
 import {
   CalendarClock,
+  ClipboardList,
+  FolderOpen,
+  ListOrdered,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
@@ -128,7 +131,7 @@ function Arquivos({ carga, tentar }: { carga: Carga<ArquivoPncp[]>; tentar: () =
   if (carga.estado === "erro") return <Falha erro={carga.erro} tentar={tentar} />;
   if (!carga.dados.length) return <p className="texto-fraco">O órgão ainda não publicou arquivos desta licitação no PNCP.</p>;
   return (
-    <>
+    <div className="arquivos-pncp">
       <ul className="lista-arquivos-pncp">
         {carga.dados.map((a) => (
           <li key={a.url}>
@@ -150,22 +153,20 @@ function Arquivos({ carga, tentar }: { carga: Carga<ArquivoPncp[]>; tentar: () =
         {erro && <p className="alerta erro">{erro}</p>}
         {conteudo && !abrindo && <Visor conteudo={conteudo} />}
       </div>
-    </>
+    </div>
   );
 }
 
 // ---------------- Itens ----------------
 
-const ITENS_INICIAIS = 8;
-
-function Itens({ carga, tentar }: { carga: Carga<ItemPncp[]>; tentar: () => void }) {
-  const [todos, setTodos] = useState(false);
+function Itens({ carga, tentar, limite }: { carga: Carga<ItemPncp[]>; tentar: () => void; limite?: number }) {
+  const [todos, setTodos] = useState(!limite);
   if (carga.estado === "carregando") return <Carregando texto="Buscando os itens no PNCP…" />;
   if (carga.estado === "erro") return <Falha erro={carga.erro} tentar={tentar} />;
   const itens = carga.dados;
   if (!itens.length) return <p className="texto-fraco">Os itens ainda não foram publicados no PNCP.</p>;
   const total = itens.reduce((s, i) => s + (i.valorTotal ?? 0), 0);
-  const visiveis = todos ? itens : itens.slice(0, ITENS_INICIAIS);
+  const visiveis = todos || !limite ? itens : itens.slice(0, limite);
   return (
     <>
       <div className="tabela-rolavel">
@@ -205,7 +206,7 @@ function Itens({ carga, tentar }: { carga: Carga<ItemPncp[]>; tentar: () => void
           )}
         </table>
       </div>
-      {itens.length > ITENS_INICIAIS && (
+      {!!limite && itens.length > limite && (
         <button className="botao link pequeno" onClick={() => setTodos((t) => !t)}>
           {todos ? "Mostrar menos" : `Ver todos os ${itens.length} itens`}
         </button>
@@ -216,8 +217,12 @@ function Itens({ carga, tentar }: { carga: Carga<ItemPncp[]>; tentar: () => void
 
 // ---------------- Janela ----------------
 
+export type EtapaPncp = "dados" | "itens" | "arquivos";
+
 interface Props {
   resultado: ResultadoPncp;
+  etapa: EtapaPncp;
+  aoMudarEtapa: (e: EtapaPncp) => void;
   idQuadro?: number;
   podeImportar: boolean;
   importando: string | null; // etapa da importação desta licitação
@@ -262,14 +267,13 @@ export function DetalhePncp(props: Props) {
   );
 }
 
-function Corpo({ resultado: r, idQuadro, podeImportar, importando, ocupado, aoImportar }: Props) {
+function Corpo({ resultado: r, etapa, aoMudarEtapa, idQuadro, podeImportar, importando, ocupado, aoImportar }: Props) {
   const [itens, tentarItens] = useCarga(() => listarItens(r), r.id);
   const [arquivos, tentarArquivos] = useCarga(() => listarArquivos(r), r.id);
   const [extra] = useCarga(() => detalheCompra(r), r.id);
-  const corpo = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    corpo.current?.closest(".modal")?.scrollTo({ top: 0 });
-  }, []);
+  // Cada etapa monta na primeira visita e continua montada (a prévia não baixa de novo ao voltar).
+  const [vistas, setVistas] = useState(() => new Set<EtapaPncp>([etapa]));
+  useEffect(() => setVistas((v) => (v.has(etapa) ? v : new Set(v).add(etapa))), [etapa]);
 
   const dados = extra.estado === "pronto" ? extra.dados : null;
   const linkPortal = r.linkPortal ?? dados?.linkPortal ?? null;
@@ -300,6 +304,7 @@ function Corpo({ resultado: r, idQuadro, podeImportar, importando, ocupado, aoIm
   const maisInfo: [string, string][] = [
     ["Órgão", r.orgao],
     ["CNPJ do órgão", r.cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5")],
+    ["Município", `${r.municipio ? `${r.municipio}/` : ""}${r.uf}`],
     ["Esfera", r.esfera],
     ["Nº do processo", dados?.processo ?? ""],
     ["Início das propostas", dataHora(r.abertura)],
@@ -309,14 +314,26 @@ function Corpo({ resultado: r, idQuadro, podeImportar, importando, ocupado, aoIm
     ["Nº de controle PNCP", r.id],
   ];
 
+  const etapas: { chave: EtapaPncp; titulo: string; info?: string; Icone: typeof ClipboardList }[] = [
+    { chave: "dados", titulo: "Dados", Icone: ClipboardList },
+    { chave: "itens", titulo: "Itens", info: qtdItens != null ? String(qtdItens) : undefined, Icone: ListOrdered },
+    { chave: "arquivos", titulo: "Arquivos", info: qtdArquivos != null ? String(qtdArquivos) : undefined, Icone: FolderOpen },
+  ];
+
   return (
-    <div className="ficha-pncp" ref={corpo}>
+    <div className="ficha-pncp">
       <div className="ficha-pncp-topo">
         <p className="resultado-pncp-orgao">
           <Landmark size={13} /> {r.orgao}
           <span className="separador">·</span>
           <MapPin size={13} /> {r.municipio ? `${r.municipio}/` : ""}
           {r.uf}
+          {r.encerramento && (
+            <>
+              <span className="separador">·</span>
+              <CalendarClock size={13} /> Sessão {dataHora(r.encerramento)}
+            </>
+          )}
         </p>
         <div className="detalhe-pncp-links">
           <a className="botao secundario pequeno" href={r.linkPncp} target="_blank" rel="noreferrer noopener">
@@ -343,29 +360,31 @@ function Corpo({ resultado: r, idQuadro, podeImportar, importando, ocupado, aoIm
         </div>
       </div>
 
-      <div className="fatos-pncp">
-        {fatos.map((f) => (
-          <div key={f.rotulo} className={`fato-pncp ${f.classe ?? ""}`}>
-            <span>{f.rotulo === "Sessão" && <CalendarClock size={12} />} {f.rotulo}</span>
-            <strong>{f.valor}</strong>
-            {f.detalhe && <small>{f.detalhe}</small>}
-          </div>
+      <nav className="abas-ficha etapas-pncp" aria-label="Etapas da licitação">
+        {etapas.map(({ chave, titulo, info, Icone }) => (
+          <button key={chave} className={`aba-ficha ${etapa === chave ? "ativa" : ""}`} onClick={() => aoMudarEtapa(chave)}>
+            <Icone />
+            <span>{titulo}</span>
+            {info && <small>{info}</small>}
+          </button>
         ))}
-      </div>
+      </nav>
 
-      <div className="ficha-pncp-colunas">
-        <div className="ficha-pncp-info">
+      {vistas.has("dados") && (
+        <div hidden={etapa !== "dados"} className="etapa-pncp">
+          <div className="fatos-pncp">
+            {fatos.map((f) => (
+              <div key={f.rotulo} className={`fato-pncp ${f.classe ?? ""}`}>
+                <span>{f.rotulo}</span>
+                <strong>{f.valor}</strong>
+                {f.detalhe && <small>{f.detalhe}</small>}
+              </div>
+            ))}
+          </div>
           <section>
             <h4 className="titulo-secao-pncp">Objeto</h4>
             <p className="objeto-completo">{r.objeto}</p>
             {r.informacao && r.informacao !== r.objeto && <p className="texto-suave pequeno informacao-pncp">{r.informacao}</p>}
-          </section>
-          <section>
-            <h4 className="titulo-secao-pncp">
-              Itens{qtdItens != null ? ` (${qtdItens})` : ""}
-              {somaItens > 0 && <span className="texto-fraco"> · referência {reais(somaItens)}</span>}
-            </h4>
-            <Itens carga={itens} tentar={tentarItens} />
           </section>
           <section>
             <h4 className="titulo-secao-pncp">Mais informações</h4>
@@ -380,12 +399,32 @@ function Corpo({ resultado: r, idQuadro, podeImportar, importando, ocupado, aoIm
                 ))}
             </dl>
           </section>
+          <div className="atalhos-etapa">
+            <button className="botao secundario" onClick={() => aoMudarEtapa("itens")}>
+              <ListOrdered /> Ver itens{qtdItens != null ? ` (${qtdItens})` : ""}
+            </button>
+            <button className="botao secundario" onClick={() => aoMudarEtapa("arquivos")}>
+              <FolderOpen /> Ver arquivos{qtdArquivos != null ? ` (${qtdArquivos})` : ""}
+            </button>
+          </div>
         </div>
-        <section className="ficha-pncp-arquivos">
-          <h4 className="titulo-secao-pncp">Arquivos{qtdArquivos != null ? ` (${qtdArquivos})` : ""}</h4>
+      )}
+
+      {vistas.has("itens") && (
+        <div hidden={etapa !== "itens"} className="etapa-pncp">
+          <h4 className="titulo-secao-pncp">
+            Itens{qtdItens != null ? ` (${qtdItens})` : ""}
+            {somaItens > 0 && <span className="texto-fraco"> · referência {reais(somaItens)}</span>}
+          </h4>
+          <Itens carga={itens} tentar={tentarItens} />
+        </div>
+      )}
+
+      {vistas.has("arquivos") && (
+        <div hidden={etapa !== "arquivos"} className="etapa-pncp">
           <Arquivos carga={arquivos} tentar={tentarArquivos} />
-        </section>
-      </div>
+        </div>
+      )}
     </div>
   );
 }

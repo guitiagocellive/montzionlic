@@ -5,6 +5,7 @@ import {
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
   useEffect,
+  useRef,
   useState,
 } from "react";
 
@@ -21,19 +22,25 @@ export function Modal({
   children: ReactNode;
   largo?: boolean;
 }) {
+  const fundo = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const aoTeclar = (e: KeyboardEvent) => e.key === "Escape" && aoFechar();
+    // Com uma janela aberta por cima de outra, o Esc fecha só a de cima.
+    const aoTeclar = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const todas = document.querySelectorAll(".modal-fundo");
+      if (todas[todas.length - 1] === fundo.current) aoFechar();
+    };
     window.addEventListener("keydown", aoTeclar);
     document.body.style.overflow = "hidden";
     return () => {
       window.removeEventListener("keydown", aoTeclar);
-      document.body.style.overflow = "";
+      if (!document.querySelector(".modal-fundo")) document.body.style.overflow = "";
     };
   }, [aoFechar]);
 
   // Renderiza direto no <body> para ficar sempre por cima do topo e do menu.
   return createPortal(
-    <div className="modal-fundo" onMouseDown={(e) => e.target === e.currentTarget && aoFechar()}>
+    <div ref={fundo} className="modal-fundo" onMouseDown={(e) => e.target === e.currentTarget && aoFechar()}>
       <div className={`modal ${largo ? "largo" : ""}`} role="dialog" aria-modal="true" aria-label={titulo}>
         <div className="modal-topo">
           <h2>{titulo}</h2>

@@ -497,7 +497,22 @@ export async function listarArquivos(r: ResultadoPncp): Promise<ArquivoPncp[]> {
     .map((a) => ({ titulo: a.titulo || a.tipoDocumentoNome || "Arquivo", tipo: a.tipoDocumentoNome || "Documento", url: a.url, publicadoEm: a.dataPublicacaoPncp ?? null }));
 }
 
-export async function listarItens(r: ResultadoPncp): Promise<ItemPncp[]> {
+const cacheItens = new Map<string, Promise<ItemPncp[]>>();
+
+/** Itens da compra no PNCP (guarda o resultado para não buscar de novo na mesma tela). */
+export function listarItens(r: ResultadoPncp): Promise<ItemPncp[]> {
+  let p = cacheItens.get(r.id);
+  if (!p) {
+    p = buscarItens(r).catch((e) => {
+      cacheItens.delete(r.id);
+      throw e;
+    });
+    cacheItens.set(r.id, p);
+  }
+  return p;
+}
+
+async function buscarItens(r: ResultadoPncp): Promise<ItemPncp[]> {
   const itens: ItemCompra[] = [];
   for (let pagina = 1; pagina <= 20; pagina++) {
     const lote = await buscarJson<ItemCompra[]>(`${API}/orgaos/${baseCompra(r)}/itens?pagina=${pagina}&tamanhoPagina=50`, 3);
@@ -545,12 +560,12 @@ export interface LicitacaoImportada {
 }
 
 /** Junta os dados, os itens e os arquivos de uma licitação do PNCP no formato da plataforma. */
-export async function prepararImportacao(r: ResultadoPncp): Promise<LicitacaoImportada> {
+export async function prepararImportacao(r: ResultadoPncp, escolhidos?: ItemPncp[]): Promise<LicitacaoImportada> {
   // Os detalhes às vezes ainda não existem no PNCP (publicação recente): usa os dados da busca.
   const [detalhe, arquivos, itens] = await Promise.all([
     buscarJson<DetalheCompra>(`${CONSULTA}/orgaos/${baseCompra(r)}`, 1).catch(() => null),
     listarArquivos(r).catch(() => [] as ArquivoPncp[]),
-    listarItens(r).catch(() => [] as ItemPncp[]),
+    escolhidos ? Promise.resolve(escolhidos) : listarItens(r).catch(() => [] as ItemPncp[]),
   ]);
   const d: Partial<DetalheCompra> = detalhe && (detalhe as Partial<DetalheCompra>).numeroCompra ? detalhe : {};
   const sessao = d.dataEncerramentoProposta ?? d.dataAberturaProposta ?? r.encerramento;

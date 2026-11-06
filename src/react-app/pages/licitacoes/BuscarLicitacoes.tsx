@@ -3,6 +3,7 @@ import {
   ExternalLink,
   FileSearch,
   FolderOpen,
+  ListOrdered,
   Landmark,
   Loader2,
   MapPin,
@@ -25,6 +26,7 @@ import {
   ESFERAS,
   FILTROS_PADRAO,
   type FiltrosBusca,
+  type ItemPncp,
   MODALIDADES_PNCP,
   type Municipio,
   ordenar,
@@ -36,7 +38,8 @@ import {
   semAcento,
   UFS,
 } from "../../pncp";
-import { DetalhePncp, dataHora, quandoSessao, reais } from "./DetalhePncp";
+import { DetalhePncp, dataHora, type EtapaPncp, quandoSessao, reais } from "./DetalhePncp";
+import { EscolherItensPncp } from "./EscolherItensPncp";
 
 const CHAVE_FILTROS = "montzion:busca-pncp";
 const POR_TELA = 30;
@@ -152,6 +155,12 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
   const [verUfs, setVerUfs] = useState(false);
   const [maisFiltros, setMaisFiltros] = useState(() => filtrosExtras(lerFiltros()) > 0);
   const [detalhe, setDetalhe] = useState<string | null>(null);
+  const [etapa, setEtapa] = useState<EtapaPncp>("dados");
+  const [escolhendo, setEscolhendo] = useState<ResultadoPncp | null>(null);
+  const abrir = (id: string, e: EtapaPncp = "dados") => {
+    setDetalhe(id);
+    setEtapa(e);
+  };
 
   // Quais licitações do PNCP já estão no quadro.
   useEffect(() => {
@@ -200,11 +209,12 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
     if (resposta) buscar(1, f);
   }
 
-  async function importar(r: ResultadoPncp) {
-    setImportando({ id: r.id, etapa: "Lendo dados e itens…" });
+  async function importar(r: ResultadoPncp, escolhidos: ItemPncp[]) {
+    setEscolhendo(null);
+    setImportando({ id: r.id, etapa: "Lendo dados…" });
     let id: number | null = null;
     try {
-      const imp = await prepararImportacao(r);
+      const imp = await prepararImportacao(r, escolhidos);
       const criada = await api<{ licitacao: { id: number } }>("/licitacoes", { corpo: imp.dados });
       id = criada.licitacao.id;
       if (imp.itens.length) await api(`/licitacoes/${id}/itens`, { corpo: { itens: imp.itens } });
@@ -247,7 +257,7 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
   const aberto = posAberto >= 0 ? resultados![posAberto] : null;
   function irPara(pos: number) {
     if (!resultados?.[pos]) return;
-    setDetalhe(resultados[pos].id);
+    setDetalhe(resultados[pos].id); // mantém a etapa (dados, itens ou arquivos) ao passar para a próxima
     if (resposta?.varredura && pos >= mostrar) setMostrar(pos + 1);
     // Chegando no fim do que já veio do PNCP: busca a próxima página.
     if (!resposta?.varredura && pos >= resultados.length - 2 && resultados.length < (resposta?.total ?? 0) && !buscando) buscar(pagina + 1);
@@ -500,7 +510,7 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
                   onClick={(e) => {
                     if ((e.target as HTMLElement).closest("a, button, input, select")) return;
                     if (window.getSelection()?.toString()) return; // estava selecionando texto
-                    setDetalhe(r.id);
+                    abrir(r.id);
                   }}
                 >
                   <div className="resultado-pncp-etiquetas">
@@ -520,7 +530,7 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
                     {idQuadro && <span className="chip verde">Já no quadro</span>}
                   </div>
                   <h3>
-                    <button className="titulo-resultado" onClick={() => setDetalhe(r.id)}>
+                    <button className="titulo-resultado" onClick={() => abrir(r.id)}>
                       {r.modalidade} nº {r.numero}/{r.ano}
                     </button>
                   </h3>
@@ -546,8 +556,11 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
                     <span>Publicada em {dataHora(r.publicadoEm).split(" às")[0]}</span>
                   </div>
                   <div className="resultado-pncp-acoes">
-                    <button className="botao secundario pequeno" onClick={() => setDetalhe(r.id)}>
-                      <FolderOpen /> Ver tudo
+                    <button className="botao secundario pequeno" onClick={() => abrir(r.id, "itens")}>
+                      <ListOrdered /> Ver itens
+                    </button>
+                    <button className="botao secundario pequeno" onClick={() => abrir(r.id, "arquivos")}>
+                      <FolderOpen /> Ver arquivos
                     </button>
                     <a className="botao secundario pequeno" href={r.linkPncp} target="_blank" rel="noreferrer noopener">
                       <ExternalLink /> PNCP
@@ -565,7 +578,7 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
                       </a>
                     ) : (
                       editar && (
-                        <button className="botao acento pequeno" onClick={() => importar(r)} disabled={!!importando}>
+                        <button className="botao acento pequeno" onClick={() => setEscolhendo(r)} disabled={!!importando}>
                           {importandoEste ? <Loader2 className="girando" /> : <Plus />}
                           {importandoEste ? importando.etapa : "Adicionar ao quadro"}
                         </button>
@@ -605,17 +618,20 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
       {aberto && (
         <DetalhePncp
           resultado={aberto}
+          etapa={etapa}
+          aoMudarEtapa={setEtapa}
           idQuadro={noQuadro[aberto.id]}
           podeImportar={editar}
           importando={importando?.id === aberto.id ? importando.etapa : null}
           ocupado={!!importando && importando.id !== aberto.id}
-          aoImportar={() => importar(aberto)}
+          aoImportar={() => setEscolhendo(aberto)}
           aoFechar={() => setDetalhe(null)}
           anterior={posAberto > 0 ? () => irPara(posAberto - 1) : undefined}
           proxima={posAberto >= 0 && posAberto < (resultados?.length ?? 0) - 1 ? () => irPara(posAberto + 1) : undefined}
           posicao={posAberto >= 0 ? `${posAberto + 1} de ${resposta?.varredura ? resultados!.length : resposta!.total}` : undefined}
         />
       )}
+      {escolhendo && <EscolherItensPncp resultado={escolhendo} aoConfirmar={(itens) => importar(escolhendo, itens)} aoFechar={() => setEscolhendo(null)} />}
     </>
   );
 }

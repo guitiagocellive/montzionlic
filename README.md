@@ -71,15 +71,18 @@ Não existe cadastro público: só um administrador adiciona pessoas.
   e faixa de **valor estimado**. Na área principal também: **registro de preço** (só SRP / sem SRP) e **plataforma**
   da disputa (Compras.gov.br, Licitações-e, Portal de Compras Públicas, BNC, BLL, Licitanet…). Ordena por publicação,
   sessão mais próxima ou relevância.
-  - **Clicar no card** abre uma janela única com tudo: sessão, valor de referência, registro de preço, modalidade,
-    plataforma, UASG, objeto, itens, arquivos com prévia (o edital já abre) e mais informações. "Anterior/Próxima"
-    (ou as setas do teclado) passam de uma licitação para outra sem fechar.
+  - **Clicar no card** abre a janela da licitação em etapas: **Dados** (sessão, valor de referência, registro de preço,
+    modalidade, plataforma, UASG, objeto e mais informações), **Itens** e **Arquivos** (o arquivo ocupa a janela, com
+    o edital já aberto). No card, "Ver itens" e "Ver arquivos" abrem direto na etapa. "Anterior/Próxima" (ou as setas
+    do teclado) passam de uma licitação para outra mantendo a etapa.
+  - **Adicionar ao quadro** primeiro pergunta de quais itens a empresa vai participar (procurar, selecionar todos,
+    desmarcar todos) e só esses itens entram na licitação.
   - Cada resultado mostra sessão (com aviso de "hoje"/"amanhã"), UASG, valor estimado, SRP, modo de disputa e os links
     para o **PNCP** e para o **portal da disputa** (Compras.gov.br, BLL, BNC, Licitações-e, Portal de Compras
     Públicas…), direto na licitação quando o PNCP informa.
   - Prévia do PDF dentro da plataforma também no celular; .zip mostra o que tem dentro. A prévia dos arquivos na ficha
     da licitação usa o mesmo leitor.
-  - **Adicionar ao quadro** cria o card em "Para estudar" com os dados, os itens e **todos os arquivos** anexados.
+  - O card é criado em "Para estudar" com os dados, os itens escolhidos e **todos os arquivos** anexados.
   - Filtros que o PNCP não faz (data da sessão, plataforma, UASG, CNPJ, nº, vários municípios) são aplicados aqui depois de
     baixar até 3.000 resultados por consulta; a tela avisa quando é preciso afinar a busca.
   - A pesquisa sai do navegador; só o download dos arquivos passa pelo servidor (`/api/pncp/arquivo`).
