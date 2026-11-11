@@ -18,7 +18,7 @@ import { api, mensagemDeErro } from "../api";
 import { avisar, Vazio } from "../components/Ui";
 import { paraNumero } from "../formato";
 import { link } from "../rota";
-import { type EstadoPonte, ponte, temPonte } from "../robo/ponte";
+import { type EstadoPonte, noAplicativo, ponte, temPonte } from "../robo/ponte";
 
 const EM_DISPUTA = new Set(["LA", "AL", "LF", "DM", "DF"]);
 const ENCERRADAS = new Set(["E", "FE", "JE", "HE", "AE", "AR", "AC", "PE", "PR", "JR", "D1", "D2", "JT", "B3"]);
@@ -236,7 +236,18 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
         </div>
       </div>
 
-      {!ligada ? (
+      {!ligada && noAplicativo() ? (
+        <section className="cartao disputas-aviso entrar">
+          <RefreshCw className="girando" />
+          <div>
+            <h2>Ligando o robô de lances…</h2>
+            <p className="texto-suave">
+              Você já está no aplicativo Montzion (versão {window.montzionApp?.versao}). O robô liga sozinho em alguns segundos. Se esta mensagem
+              continuar por mais de 1 minuto, feche o Montzion e abra de novo pelo atalho.
+            </p>
+          </div>
+        </section>
+      ) : !ligada ? (
         <section className="cartao disputas-aviso entrar">
           <Download />
           <div>
@@ -244,6 +255,9 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
             <p className="texto-suave">
               Abra a plataforma pelo aplicativo Montzion. Ele abre uma janela do Compras.gov.br onde você entra com a sua conta gov.br (certificado ou senha) e é por
               ela que o robô vê as disputas e envia os lances. Sua senha e seu certificado não passam pela plataforma.
+            </p>
+            <p className="texto-suave">
+              <strong>Já está no aplicativo e vê esta mensagem?</strong> Ele está desatualizado: baixe o instalador abaixo e abra (ele atualiza sozinho, sem perder nada).
             </p>
             <a className="botao acento" {...link("/configuracoes/aplicativo")}>
               <Download /> Baixar o aplicativo
@@ -254,7 +268,13 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
         <section className="cartao disputas-aviso entrar">
           <LogIn />
           <div>
-            <h2>Entre na sua conta do Compras.gov.br</h2>
+            <h2>{estado?.portal ? "Abrindo a sala de disputa…" : "Entre na sua conta do Compras.gov.br"}</h2>
+            {estado?.portal && (
+              <p className="texto-suave">
+                Você já entrou na Área de Trabalho do Fornecedor. O Montzion está abrindo a sala de disputa sozinho. Se não abrir em alguns segundos, na janela do
+                Compras.gov.br clique em <strong>Compras</strong> e abra a sala de disputa (pregões e dispensas).
+              </p>
+            )}
             <ol className="texto-suave passos-entrar">
               <li>Clique abaixo: abre a janela de login do Compras.gov.br.</li>
               <li>

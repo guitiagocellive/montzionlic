@@ -427,6 +427,11 @@ func (a *aplicativo) ligarWeb(j *janelaWeb) {
 			}
 			return 0
 		}), uintptr(unsafe.Pointer(&token)))
+		if j.principal {
+			// Avisa a plataforma que ela está dentro do aplicativo (a página Disputas usa isso).
+			script := fmt.Sprintf(`window.montzionApp = Object.freeze({ versao: %q, janelaPropria: true });`, versao)
+			metodo(web, 27, utf16(script), novoManipulador(func(_, _ uintptr) uintptr { return 0 })) // AddScriptToExecuteOnDocumentCreated
+		}
 		j.ajustar()
 		metodo(controle, 4, 1)           // put_IsVisible(TRUE)
 		metodo(web, 5, utf16(j.inicial)) // Navigate
@@ -479,7 +484,7 @@ func focar(hwnd uintptr) {
 
 // Se o Montzion já está aberto, só traz a janela para a frente.
 func focarJanelaAberta() bool {
-	hwnd, _, _ := procFindWindow.Call(utf16(classeJanela), 0)
+	hwnd, _, _ := procFindWindow.Call(utf16(classeJanela), utf16(nomeApp)) // a principal (não a do Compras)
 	if hwnd == 0 {
 		return false
 	}

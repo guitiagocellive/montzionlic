@@ -7,6 +7,8 @@ declare global {
   interface Window {
     montzionRobo?: (mensagem: string) => void;
     __montzionRoboResposta?: (id: number, dados: unknown) => void;
+    /** Colocado pela janela própria do aplicativo (versão 2.0.2 em diante). */
+    montzionApp?: { versao: string; janelaPropria: boolean };
   }
 }
 
@@ -27,6 +29,9 @@ function instalarResposta() {
   };
 }
 
+/** Está dentro do aplicativo Montzion (janela própria), mesmo que o robô ainda esteja ligando. */
+export const noAplicativo = () => typeof window !== "undefined" && !!window.montzionApp;
+
 export const temPonte = () => typeof window !== "undefined" && typeof window.montzionRobo === "function";
 
 export function chamar<T>(tipo: string, dados: Record<string, unknown> = {}, tempoMs = 20_000): Promise<T> {
@@ -46,6 +51,7 @@ export function chamar<T>(tipo: string, dados: Record<string, unknown> = {}, tem
 export interface EstadoPonte {
   conectado: boolean; // logado no Compras.gov.br
   janela: boolean; // a janela do Compras.gov.br está aberta
+  portal?: boolean; // já entrou na Área de Trabalho do Fornecedor, mas ainda não na sala de disputa
   versao?: string;
 }
 

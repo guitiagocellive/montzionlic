@@ -50,16 +50,19 @@ type sessaoAlvo struct {
 }
 
 type ponte struct {
-	cfg       configPonte
-	cdp       *clienteCDP
-	mu        sync.Mutex
-	alvos     map[string]*sessaoAlvo // targetId -> sessão
-	ligando   map[string]bool
-	pedidos   map[string]bool // requestId da lista de disputas
-	lista     json.RawMessage
-	listaEm   time.Time
-	novaLista chan struct{}
-	logada    string // targetId da janela com a sessão da sala de disputa (o token fica em cada aba)
+	cfg        configPonte
+	cdp        *clienteCDP
+	mu         sync.Mutex
+	alvos      map[string]*sessaoAlvo // targetId -> sessão
+	ligando    map[string]bool
+	pedidos    map[string]bool // requestId da lista de disputas
+	lista      json.RawMessage
+	listaEm    time.Time
+	novaLista  chan struct{}
+	logada     string               // targetId da janela com a sessão da sala de disputa (o token fica em cada aba)
+	tentouSala map[string]time.Time // portal -> última vez que a ponte tentou abrir a sala de disputa
+	tentativas map[string]int       // portal -> quantas vezes tentou (no máximo 2, para não abrir janelas sem parar)
+	menuVisto  map[string]bool      // endereços do portal cujo menu já foi anotado no registro
 	// Janela própria do aplicativo: abre/foca a janela nativa do Compras.gov.br (nil = aba do navegador).
 	abrirCompras func() bool
 }
@@ -70,7 +73,7 @@ var (
 )
 
 func novaPonte(cfg configPonte, cdp *clienteCDP) *ponte {
-	return &ponte{cfg: cfg, cdp: cdp, alvos: map[string]*sessaoAlvo{}, ligando: map[string]bool{}, pedidos: map[string]bool{}, novaLista: make(chan struct{}, 1)}
+	return &ponte{cfg: cfg, cdp: cdp, alvos: map[string]*sessaoAlvo{}, ligando: map[string]bool{}, pedidos: map[string]bool{}, novaLista: make(chan struct{}, 1), tentouSala: map[string]time.Time{}, tentativas: map[string]int{}, menuVisto: map[string]bool{}}
 }
 
 func mesmoSite(endereco, base string) bool {
@@ -450,7 +453,11 @@ func (p *ponte) executar(tipo, compra string, item int, valor float64, fase stri
 	case "estado":
 		conectado := p.sessaoLogada(true) != nil
 		janela := len(p.janelasCompras("compras", "portal")) > 0
-		return mapa{"conectado": conectado, "janela": janela, "versao": versao}
+		portal := false
+		if !conectado {
+			portal = p.abrirSalaPeloPortal()
+		}
+		return mapa{"conectado": conectado, "janela": janela, "portal": portal, "versao": versao}
 
 	case "entrar":
 		if p.abrirCompras != nil {
@@ -547,4 +554,128 @@ func (p *ponte) executar(tipo, compra string, item int, valor float64, fase stri
 		return resposta
 	}
 	return mapa{"erro": "Pedido desconhecido: " + tipo}
+}
+
+// ---------- da Área de Trabalho do Fornecedor para a sala de disputa ----------
+
+var paginaDeLogin = regexp.MustCompile(`(?i)/seguro/loginPortal|acesso\.gov\.br`)
+
+// Lê os itens do menu da Área de Trabalho (o menu é montado em listas JavaScript "MenuN" nos quadros da
+// página) e os links da página. Guarda em window.__montzionSala uma função para abrir cada um.
+const scriptMenuPortal = `(() => {
+  const itens = [], acoes = [];
+  const add = (texto, link, f) => { itens.push({ texto: String(texto || "").replace(/\s+/g, " ").trim().slice(0, 90), link: String(link || "").slice(0, 300) }); acoes.push(f); };
+  const visitar = (w, prof) => {
+    let d;
+    try { d = w.document; void d.body; } catch (e) { return; }
+    try {
+      for (const k of Object.keys(w)) {
+        if (!/^Menu\d+(_\d+)*$/.test(k)) continue;
+        const m = w[k];
+        if (!m || typeof m.length !== "number") continue;
+        const link = String(m[1] || "").trim();
+        if (!link) continue;
+        add(m[0], link, () => {
+          if (/^javascript:/i.test(link)) { w.eval(link.slice(11)); return; }
+          w.open(new URL(link, w.location.href).href, "_blank");
+        });
+      }
+    } catch (e) {}
+    try {
+      for (const el of d.querySelectorAll("a[href], [onclick]")) {
+        const link = el.getAttribute("href") || el.getAttribute("onclick") || "";
+        add(el.innerText || el.title || el.value, link, () => el.click());
+      }
+    } catch (e) {}
+    if (prof < 4) for (let i = 0; i < w.frames.length; i++) visitar(w.frames[i], prof + 1);
+  };
+  visitar(window, 0);
+  window.__montzionSala = acoes;
+  return JSON.stringify({ url: location.href, itens });
+})()`
+
+type itemMenu struct {
+	Texto string `json:"texto"`
+	Link  string `json:"link"`
+}
+
+// Nota de quanto um item do menu parece levar à sala de disputa (o sistema novo, cnetmobile).
+func notaSala(it itemMenu) int {
+	t, l := strings.ToLower(it.Texto), strings.ToLower(it.Link)
+	if strings.Contains(l, "logout") || strings.Contains(l, "sair") || t == "sair" || strings.HasPrefix(l, "mailto:") {
+		return -10
+	}
+	n := 0
+	if strings.Contains(l, "comprasnet-web") || strings.Contains(l, "cnetmobile") {
+		n += 4
+	}
+	if strings.Contains(t, "disputa") || strings.Contains(l, "disputa") {
+		n += 3
+	}
+	for _, k := range []string{"acompanh", "proposta", "lance", "sele\u00e7\u00e3o do fornecedor", "selecao"} {
+		if strings.Contains(t, k) {
+			n++
+		}
+	}
+	return n
+}
+
+// abrirSalaPeloPortal: a pessoa já entrou na Área de Trabalho do Fornecedor (portal antigo), mas a sala
+// de disputa é outro sistema e só ganha sessão quando aberta pelo menu dela. A ponte procura o item certo
+// e abre sozinha. Devolve true se há uma Área de Trabalho logada aberta.
+func (p *ponte) abrirSalaPeloPortal() bool {
+	logado := false
+	for _, a := range p.janelasCompras("portal") {
+		if paginaDeLogin.MatchString(a.url) {
+			continue
+		}
+		logado = true
+		p.mu.Lock()
+		ultima, vezes := p.tentouSala[a.alvo], p.tentativas[a.alvo]
+		p.mu.Unlock()
+		if time.Since(ultima) < 30*time.Second || vezes >= 2 {
+			continue
+		}
+		saida, err := p.avaliar(a.sessao, scriptMenuPortal, 5*time.Second)
+		if err != nil {
+			continue
+		}
+		var v struct {
+			URL   string     `json:"url"`
+			Itens []itemMenu `json:"itens"`
+		}
+		if json.Unmarshal([]byte(saida), &v) != nil {
+			continue
+		}
+		melhor, nota := -1, 2
+		for i, it := range v.Itens {
+			if n := notaSala(it); n > nota {
+				melhor, nota = i, n
+			}
+		}
+		p.mu.Lock()
+		visto := p.menuVisto[v.URL]
+		p.menuVisto[v.URL] = true
+		p.mu.Unlock()
+		if !visto {
+			var linhas []string
+			for i, it := range v.Itens {
+				if i >= 120 {
+					break
+				}
+				linhas = append(linhas, it.Texto+" -> "+it.Link)
+			}
+			registrarLog("ponte: área do fornecedor em %s; itens do menu: %s", v.URL, strings.Join(linhas, " | "))
+		}
+		if melhor < 0 {
+			continue
+		}
+		p.mu.Lock()
+		p.tentouSala[a.alvo] = time.Now()
+		p.tentativas[a.alvo]++
+		p.mu.Unlock()
+		registrarLog("ponte: abrindo a sala de disputa pelo menu: %s -> %s", v.Itens[melhor].Texto, v.Itens[melhor].Link)
+		_, _ = p.avaliar(a.sessao, fmt.Sprintf("(window.__montzionSala && window.__montzionSala[%d] && window.__montzionSala[%d](), 'ok')", melhor, melhor), 5*time.Second)
+	}
+	return logado
 }

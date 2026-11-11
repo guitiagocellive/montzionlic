@@ -8,6 +8,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -54,6 +57,37 @@ func enderecoDevTools(porta int, espera time.Duration) (string, error) {
 			return "", errors.New("o navegador não abriu a porta de controle")
 		}
 		time.Sleep(300 * time.Millisecond)
+	}
+}
+
+// Porta que o navegador realmente abriu. Se já havia um processo do motor rodando (aberto há pouco),
+// ele ignora a porta pedida e continua na antiga: o número fica no arquivo DevToolsActivePort.
+func portaAtiva(arquivo string) int {
+	dados, err := os.ReadFile(arquivo)
+	if err != nil {
+		return 0
+	}
+	linha, _, _ := strings.Cut(string(dados), "\n")
+	n, _ := strconv.Atoi(strings.TrimSpace(linha))
+	return n
+}
+
+// esperarDevTools tenta as portas candidatas (a do arquivo primeiro) até o navegador responder.
+func esperarDevTools(arquivo string, pedida int, espera time.Duration) (string, int, error) {
+	limite := time.Now().Add(espera)
+	for {
+		for _, porta := range []int{portaAtiva(arquivo), pedida} {
+			if porta <= 0 {
+				continue
+			}
+			if ws, err := enderecoDevTools(porta, 0); err == nil {
+				return ws, porta, nil
+			}
+		}
+		if time.Now().After(limite) {
+			return "", 0, errors.New("o motor da janela não abriu a porta de controle")
+		}
+		time.Sleep(500 * time.Millisecond)
 	}
 }
 

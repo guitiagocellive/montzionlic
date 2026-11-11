@@ -232,23 +232,29 @@ func configuracao() configPonte {
 	}
 }
 
-// Liga a ponte do robô de lances ao motor das janelas e fica rodando enquanto elas estiverem abertas.
-func ligarPonte(porta int, abrirCompras func() bool) {
-	ws, err := enderecoDevTools(porta, 60*time.Second)
-	if err != nil {
-		registrarLog("robô de lances indisponível: %v", err)
-		return
-	}
-	cdp, err := conectarCDP(ws)
-	if err != nil {
-		registrarLog("robô de lances indisponível: %v", err)
-		return
-	}
-	registrarLog("ponte do robô ligada (porta %d)", porta)
-	p := novaPonte(configuracao(), cdp)
-	p.abrirCompras = abrirCompras
-	if err := p.Rodar(); err != nil {
-		registrarLog("ponte do robô parou: %v", err)
+// Liga a ponte do robô de lances ao motor das janelas. Na janela própria fica tentando (e se religa se
+// cair) enquanto o aplicativo estiver aberto; no modo navegador para quando o navegador fecha.
+func ligarPonte(arquivoPorta string, porta int, abrirCompras func() bool, sempre bool) {
+	for tentativa := 0; ; tentativa++ {
+		ws, real, err := esperarDevTools(arquivoPorta, porta, 60*time.Second)
+		if err != nil {
+			registrarLog("robô de lances: %v (tentativa %d)", err, tentativa+1)
+		} else if cdp, err := conectarCDP(ws); err != nil {
+			registrarLog("robô de lances: não conectou: %v", err)
+		} else {
+			registrarLog("ponte do robô ligada (porta %d)", real)
+			p := novaPonte(configuracao(), cdp)
+			p.abrirCompras = abrirCompras
+			if err := p.Rodar(); err != nil {
+				registrarLog("ponte do robô parou: %v", err)
+			} else {
+				registrarLog("ponte do robô desligada")
+			}
+		}
+		if !sempre {
+			return
+		}
+		time.Sleep(3 * time.Second)
 	}
 }
 
@@ -269,14 +275,25 @@ func abrir() {
 		defer trava.Close()
 	}
 	comPonte := trava != nil
+	arquivoPorta := filepath.Join(pastaInstalacao(), "Dados", "EBWebView", "DevToolsActivePort")
 	porta := 0
 	if comPonte {
-		porta = portaLivre()
+		// Se o motor de uma abertura anterior ainda está vivo, usa a mesma porta (com outra, o Windows
+		// recusaria criar a janela e a ligação do robô não aconteceria).
+		if p := portaAtiva(arquivoPorta); p > 0 {
+			if _, err := enderecoDevTools(p, 0); err == nil {
+				porta = p
+				registrarLog("motor da janela já estava aberto (porta %d)", p)
+			}
+		}
+		if porta == 0 {
+			porta = portaLivre()
+		}
 	}
 	err = janelaNativa(configuracao(), porta, func() {
 		registrarLog("janela própria aberta")
 		if comPonte {
-			go ligarPonte(porta, pedirJanelaCompras)
+			go ligarPonte(arquivoPorta, porta, pedirJanelaCompras, true)
 		}
 	})
 	if err == nil {
@@ -331,7 +348,7 @@ func abrirModoNavegador(comPonte bool) {
 		_ = exec.Command(navegador, "--app="+endereco, "--start-maximized").Start()
 		return
 	}
-	ligarPonte(porta, nil)
+	ligarPonte(filepath.Join(perfil, "DevToolsActivePort"), porta, nil, false)
 }
 
 func main() {

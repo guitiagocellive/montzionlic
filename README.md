@@ -86,7 +86,11 @@ Não existe cadastro público: só um administrador adiciona pessoas.
   O token da sala de disputa vale só na aba onde o login terminou (muitas vezes um pop-up), então a ponte procura
   a sessão em todas as janelas do Compras.gov.br; se alguma cair em "Acesso não autorizado", ela é levada de volta
   ao login de fornecedor (o botão da página oficial leva ao login de governo). Fechar a janela do Compras.gov.br
-  só a esconde, para não perder o login. A página Disputas lista as disputas da conta
+  só a esconde, para não perder o login. Depois do login o Compras.gov.br mostra a Área de Trabalho do Fornecedor
+  (portal antigo); a sala de disputa é outro sistema, então a ponte lê o menu da Área de Trabalho, acha o item da
+  sala de disputa e abre sozinha (os itens do menu ficam anotados no `montzion.log`). A ponte lê a porta real do
+  motor (`DevToolsActivePort`) e se religa sozinha, e a página Disputas sabe quando está dentro do aplicativo
+  (`window.montzionApp`). A página Disputas lista as disputas da conta
   (pregões e dispensas), os itens com melhor lance, meu lance e cronômetro, e por item: lance mínimo, desconto
   (%), ligar/parar, "Permitir lances com 4 casas decimais" e "Não aguardar os segundos finais para enviar
   lances". O robô **sempre espera os 10 segundos finais**, dá o menor lance que coloca a empresa em 1º
