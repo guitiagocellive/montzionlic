@@ -64,6 +64,17 @@ Não existe cadastro público: só um administrador adiciona pessoas.
 - **Orçamento automático:** preço de venda = custo com frete ÷ (1 − impostos − lucro).
 - **IA gratuita (Workers AI):** lê edital/termo de referência (PDF, imagem, Word, Excel), resume,
   preenche os dados e importa os itens. Limite grátis diário (~8 a 10 editais).
+- **Inteligência de mercado:** Licitações → Inteligência de mercado. Digite um produto (ar-condicionado, caneta…) e
+  escolha o período (3, 6, 12 ou 24 meses): a plataforma acha os produtos parecidos no catálogo do governo (o mais
+  comprado já vem marcado) e mostra as **marcas mais vendidas**, as **empresas que mais venderam** (com CNPJ e as
+  marcas de cada uma) e os **estados que mais compraram**, com nº de licitações, valor homologado e preço unitário
+  mediano. Clicar num estado mostra as marcas e empresas daquele estado. Cada ranking baixa em CSV.
+  - Fonte: dados abertos do Compras.gov.br (pesquisa de preços), grátis e sem login; entram as compras feitas pelo
+    Compras.gov.br (federal e estados/municípios que usam). O servidor só repassa e guarda as respostas por 12 h; a
+    soma é feita no navegador (cabe no plano grátis). Analisa até 20 mil itens (os mais recentes) por pesquisa.
+  - A marca é digitada pelo fornecedor; a plataforma padroniza (tira modelos, códigos e palavras do produto) e preços
+    absurdos (mais de 50× o típico) ficam de fora. O catálogo de produtos fica em `public/dados/pdms.json`
+    (atualizar com `python3 -I scripts/baixar-pdms.py public/dados/pdms.json`).
 - **Buscar licitações (PNCP):** Licitações → Buscar licitações, no formato do Siga Pregão. Barra compacta: a **lupa**
   fica recolhida e se abre ao clicar (busca por palavra: notebook, uniforme…), os campos **Nº da licitação** e
   **UASG ou CNPJ do órgão** ficam abertos, a **data da sessão** (hoje, amanhã, 3/7/15/30 dias ou datas) e o botão da

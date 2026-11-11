@@ -22,6 +22,10 @@ Lista do que foi combinado e ainda falta fazer (ou melhorar). Atualizar sempre q
   - [ ] Continuar ajustando com o uso (ordem, destaque, resumo).
   - [ ] Buscas salvas e aviso diário de licitações novas que batem com os nichos.
 
+- [x] **Inteligência de mercado** — marcas, empresas e estados por produto (dados abertos do Compras.gov.br).
+  - [ ] Compras de outras plataformas (BLL, Licitanet, Portal de Compras Públicas) não aparecem: a fonte só tem o Compras.gov.br.
+  - [ ] Melhorar a padronização das marcas conforme aparecerem nomes separados (lista em `src/shared/mercado.ts`).
+
 ## A fazer
 
 - [ ] **2. Robô de lances** (Licitações → Disputas)
