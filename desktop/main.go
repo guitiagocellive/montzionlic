@@ -225,7 +225,11 @@ func portaLivre() int {
 }
 
 func configuracao() configPonte {
-	return configPonte{Plataforma: endereco, Compras: "https://cnetmobile.estaleiro.serpro.gov.br"}
+	return configPonte{
+		Plataforma: endereco,
+		Compras:    "https://cnetmobile.estaleiro.serpro.gov.br",
+		Login:      "https://www.comprasnet.gov.br/seguro/loginPortal.asp",
+	}
 }
 
 // Liga a ponte do robô de lances ao motor das janelas e fica rodando enquanto elas estiverem abertas.

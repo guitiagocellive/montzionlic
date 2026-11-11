@@ -255,9 +255,17 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
           <LogIn />
           <div>
             <h2>Entre na sua conta do Compras.gov.br</h2>
-            <p className="texto-suave">
-              Clique abaixo: abre a janela do Compras.gov.br. Entre com o gov.br e deixe essa janela aberta (pode minimizar). As disputas aparecem aqui sozinhas.
-            </p>
+            <ol className="texto-suave passos-entrar">
+              <li>Clique abaixo: abre a janela de login do Compras.gov.br.</li>
+              <li>
+                Escolha <strong>Fornecedor Brasileiro</strong> e entre com o gov.br (certificado ou senha).
+              </li>
+              <li>
+                Se o Compras.gov.br não abrir sozinho a área do fornecedor, abra a <strong>sala de disputa</strong> por lá. O Montzion
+                acha a sessão em qualquer janela ou aba do Compras.gov.br.
+              </li>
+              <li>Deixe essa janela aberta (pode minimizar ou fechar no X: ela só fica escondida). As disputas aparecem aqui sozinhas.</li>
+            </ol>
             <button className="botao acento" onClick={() => ponte.entrar().catch((e) => avisar(mensagemDeErro(e), "erro"))}>
               <LogIn /> {estado?.janela ? "Mostrar a janela do Compras.gov.br" : "Entrar no Compras.gov.br"}
             </button>

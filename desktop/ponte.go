@@ -22,12 +22,25 @@ import (
 
 type configPonte struct {
 	Plataforma string // ex.: https://montzion.com.br
-	Compras    string // ex.: https://cnetmobile.estaleiro.serpro.gov.br
+	Compras    string // ex.: https://cnetmobile.estaleiro.serpro.gov.br (sala de disputa)
+	Login      string // login do fornecedor, ex.: https://www.comprasnet.gov.br/seguro/loginPortal.asp
 }
 
 func (c configPonte) paginaDisputas() string {
 	return strings.TrimRight(c.Compras, "/") + "/comprasnet-web/seguro/fornecedor/disputa"
 }
+
+// Onde a pessoa começa: o login de FORNECEDOR do Compras.gov.br. Abrir a sala de disputa direto, sem
+// sessão, cai em "Acesso não autorizado", cujo botão leva ao login de governo (e nunca volta para a disputa).
+func (c configPonte) paginaLogin() string {
+	if c.Login != "" {
+		return c.Login
+	}
+	return c.paginaDisputas()
+}
+
+// Página de "sem sessão" da sala de disputa: a ponte manda a janela para o login de fornecedor.
+var semSessao = regexp.MustCompile(`/comprasnet-web/(acesso-nao-autorizado|sessao-encerrada)`)
 
 type sessaoAlvo struct {
 	tipo   string // "plataforma" ou "compras"
@@ -46,6 +59,7 @@ type ponte struct {
 	lista     json.RawMessage
 	listaEm   time.Time
 	novaLista chan struct{}
+	logada    string // targetId da janela com a sessão da sala de disputa (o token fica em cada aba)
 	// Janela própria do aplicativo: abre/foca a janela nativa do Compras.gov.br (nil = aba do navegador).
 	abrirCompras func() bool
 }
@@ -75,6 +89,8 @@ func (p *ponte) tipoDe(endereco string) string {
 		return "plataforma"
 	case mesmoSite(endereco, p.cfg.Compras):
 		return "compras"
+	case p.cfg.Login != "" && mesmoSite(endereco, p.cfg.Login):
+		return "portal"
 	}
 	return ""
 }
@@ -116,6 +132,9 @@ func (p *ponte) verAlvo(t infoAlvo) {
 	tipo := p.tipoDe(t.URL)
 	p.mu.Lock()
 	atual := p.alvos[t.TargetID]
+	if atual != nil && tipo == "compras" && semSessao.MatchString(t.URL) && p.cfg.Login != "" && atual.url != t.URL {
+		go p.irParaLogin(atual.sessao)
+	}
 	if atual != nil {
 		atual.url = t.URL
 		if tipo != "" && atual.tipo != tipo {
@@ -153,6 +172,9 @@ func (p *ponte) verAlvo(t infoAlvo) {
 		p.alvos[t.TargetID] = &sessaoAlvo{tipo: tipo, sessao: v.SessionID, alvo: t.TargetID, url: t.URL}
 		p.mu.Unlock()
 		p.prepararSessao(v.SessionID, tipo)
+		if tipo == "compras" && semSessao.MatchString(t.URL) && p.cfg.Login != "" {
+			p.irParaLogin(v.SessionID)
+		}
 	}()
 }
 
@@ -162,19 +184,61 @@ func (p *ponte) prepararSessao(sessao, tipo string) {
 		if _, err := p.cdp.Chamar(sessao, "Runtime.addBinding", map[string]any{"name": "montzionRobo"}, 10*time.Second); err != nil {
 			registrarLog("ponte: não ligou a função do robô: %v", err)
 		}
-	} else {
+	} else if tipo == "compras" {
 		_, _ = p.cdp.Chamar(sessao, "Network.enable", map[string]any{"maxResourceBufferSize": 8 << 20, "maxTotalBufferSize": 32 << 20}, 10*time.Second)
 	}
 }
 
-func (p *ponte) sessaoCompras() *sessaoAlvo {
+// Leva a janela sem sessão para o login de fornecedor (em vez do login de governo da página oficial).
+func (p *ponte) irParaLogin(sessao string) {
+	registrarLog("ponte: sala de disputa sem sessão; abrindo o login de fornecedor")
+	_, _ = p.cdp.Chamar(sessao, "Page.navigate", mapa{"url": p.cfg.paginaLogin()}, 10*time.Second)
+}
+
+// Janelas do Compras.gov.br abertas (sala de disputa e portal de login).
+func (p *ponte) janelasCompras(tipos ...string) []*sessaoAlvo {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	var lista []*sessaoAlvo
 	for _, a := range p.alvos {
-		if a.tipo == "compras" {
+		for _, t := range tipos {
+			if a.tipo == t {
+				lista = append(lista, a)
+			}
+		}
+	}
+	return lista
+}
+
+func (p *ponte) temToken(a *sessaoAlvo) bool {
+	s, err := p.avaliar(a.sessao, `String(!!sessionStorage.getItem("accessToken"))`, 3*time.Second)
+	return err == nil && s == "true"
+}
+
+// sessaoLogada acha a janela (ou aba/pop-up) onde a pessoa está logada na sala de disputa. O login do
+// Compras.gov.br costuma abrir a área do fornecedor em outra janela, e o token só vale naquela aba.
+// Com verificar=false usa a última janela achada sem conferir de novo (mais rápido para os lances).
+func (p *ponte) sessaoLogada(verificar bool) *sessaoAlvo {
+	p.mu.Lock()
+	guardada := p.alvos[p.logada]
+	p.mu.Unlock()
+	if guardada != nil && (!verificar || p.temToken(guardada)) {
+		return guardada
+	}
+	for _, a := range p.janelasCompras("compras") {
+		if a != guardada && p.temToken(a) {
+			p.mu.Lock()
+			if p.logada != a.alvo {
+				registrarLog("ponte: sessão da sala de disputa encontrada em %s", a.url)
+			}
+			p.logada = a.alvo
+			p.mu.Unlock()
 			return a
 		}
 	}
+	p.mu.Lock()
+	p.logada = ""
+	p.mu.Unlock()
 	return nil
 }
 
@@ -296,10 +360,21 @@ func jsTexto(s string) string {
 
 // Chamada à API da sala de disputa com a sessão logada (o token fica na própria página oficial).
 func (p *ponte) api(metodo, caminho string, corpo any) (int, json.RawMessage, error) {
-	a := p.sessaoCompras()
+	a := p.sessaoLogada(false)
 	if a == nil {
-		return 0, nil, fmt.Errorf("a janela do Compras.gov.br está fechada: clique em Entrar no Compras.gov.br")
+		return 0, nil, fmt.Errorf("você ainda não entrou na sala de disputa do Compras.gov.br: clique em Entrar no Compras.gov.br")
 	}
+	status, resposta, err := p.apiEm(a, metodo, caminho, corpo)
+	if err == nil && status == 401 {
+		// A sessão pode ter passado para outra aba (novo login): procura de novo e tenta uma vez.
+		if b := p.sessaoLogada(true); b != nil && b != a {
+			return p.apiEm(b, metodo, caminho, corpo)
+		}
+	}
+	return status, resposta, err
+}
+
+func (p *ponte) apiEm(a *sessaoAlvo, metodo, caminho string, corpo any) (int, json.RawMessage, error) {
 	corpoJS := "undefined"
 	if corpo != nil {
 		b, _ := json.Marshal(corpo)
@@ -373,13 +448,9 @@ type mapa = map[string]any
 func (p *ponte) executar(tipo, compra string, item int, valor float64, fase string, atualizar bool) any {
 	switch tipo {
 	case "estado":
-		a := p.sessaoCompras()
-		conectado := false
-		if a != nil {
-			s, err := p.avaliar(a.sessao, `String(!!sessionStorage.getItem("accessToken"))`, 5*time.Second)
-			conectado = err == nil && s == "true"
-		}
-		return mapa{"conectado": conectado, "janela": a != nil, "versao": versao}
+		conectado := p.sessaoLogada(true) != nil
+		janela := len(p.janelasCompras("compras", "portal")) > 0
+		return mapa{"conectado": conectado, "janela": janela, "versao": versao}
 
 	case "entrar":
 		if p.abrirCompras != nil {
@@ -388,11 +459,17 @@ func (p *ponte) executar(tipo, compra string, item int, valor float64, fase stri
 			}
 			return mapa{"ok": true}
 		}
-		if a := p.sessaoCompras(); a != nil {
+		a := p.sessaoLogada(true)
+		if a == nil {
+			if lista := p.janelasCompras("compras", "portal"); len(lista) > 0 {
+				a = lista[0]
+			}
+		}
+		if a != nil {
 			_, _ = p.cdp.Chamar("", "Target.activateTarget", mapa{"targetId": a.alvo}, 5*time.Second)
 			return mapa{"ok": true}
 		}
-		if _, err := p.cdp.Chamar("", "Target.createTarget", mapa{"url": p.cfg.paginaDisputas(), "newWindow": true}, 10*time.Second); err != nil {
+		if _, err := p.cdp.Chamar("", "Target.createTarget", mapa{"url": p.cfg.paginaLogin(), "newWindow": true}, 10*time.Second); err != nil {
 			return mapa{"erro": "Não foi possível abrir a janela do Compras.gov.br: " + err.Error()}
 		}
 		return mapa{"ok": true}
@@ -404,9 +481,9 @@ func (p *ponte) executar(tipo, compra string, item int, valor float64, fase stri
 		if !atualizar && lista != nil && time.Since(em) < 2*time.Minute {
 			return mapa{"compras": lista, "capturadaEm": em.UnixMilli()}
 		}
-		a := p.sessaoCompras()
+		a := p.sessaoLogada(true)
 		if a == nil {
-			return mapa{"erro": "A janela do Compras.gov.br está fechada: clique em Entrar no Compras.gov.br."}
+			return mapa{"erro": "Você ainda não entrou na sala de disputa do Compras.gov.br: clique em Entrar no Compras.gov.br."}
 		}
 		inicio := time.Now()
 		select {

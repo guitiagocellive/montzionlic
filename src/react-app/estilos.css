@@ -7937,6 +7937,14 @@ code {
   max-width: 720px;
 }
 
+.disputas-aviso .passos-entrar {
+  margin: 0 0 14px;
+  padding-left: 20px;
+  max-width: 720px;
+  display: grid;
+  gap: 4px;
+}
+
 .disputas-topo {
   display: flex;
   align-items: center;

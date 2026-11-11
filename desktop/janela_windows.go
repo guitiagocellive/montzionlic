@@ -41,6 +41,7 @@ const (
 	wmAbrirCompra = wmApp + 1
 	wsOverlapped  = 0x00CF0000 // WS_OVERLAPPEDWINDOW
 	cwUseDefault  = 0x80000000
+	swHide        = 0
 	swMaximize    = 3
 	swShow        = 5
 	swRestore     = 9
@@ -264,6 +265,11 @@ func (a *aplicativo) procedimento(hwnd, msg, wParam, lParam uintptr) uintptr {
 		a.abrirCompras()
 		return 0
 	case wmClose:
+		if j != nil && j == a.compras {
+			// Fechar a janela do Compras.gov.br só a esconde: o login (que vale só nesta janela) continua.
+			procShowWindow.Call(hwnd, swHide)
+			return 0
+		}
 		procDestroyWindow.Call(hwnd)
 		return 0
 	case wmDestroy:
@@ -440,6 +446,7 @@ func (a *aplicativo) ligarWeb(j *janelaWeb) {
 // Abre (ou traz para a frente) a janela do Compras.gov.br, onde a pessoa entra com o gov.br.
 func (a *aplicativo) abrirCompras() {
 	if a.compras != nil {
+		procShowWindow.Call(a.compras.hwnd, swShow)
 		focar(a.compras.hwnd)
 		return
 	}
@@ -451,7 +458,7 @@ func (a *aplicativo) abrirCompras() {
 		registrarLog("janela do Compras.gov.br: %v", err)
 		return
 	}
-	j := &janelaWeb{hwnd: hwnd, inicial: a.configura.paginaDisputas()}
+	j := &janelaWeb{hwnd: hwnd, inicial: a.configura.paginaLogin()}
 	j.aoCarregar = func(erro error) {
 		if erro != nil {
 			registrarLog("janela do Compras.gov.br: %v", erro)

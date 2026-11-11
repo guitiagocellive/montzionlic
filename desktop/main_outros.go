@@ -16,7 +16,7 @@ func main() {
 		fmt.Println("O aplicativo Montzion é para Windows. Use https://montzion.com.br no navegador.")
 		return
 	}
-	cfg := configPonte{Plataforma: valorOu("MONTZION_ENDERECO", "https://montzion.com.br"), Compras: valorOu("MONTZION_COMPRAS", "https://cnetmobile.estaleiro.serpro.gov.br")}
+	cfg := configPonte{Plataforma: valorOu("MONTZION_ENDERECO", "https://montzion.com.br"), Compras: valorOu("MONTZION_COMPRAS", "https://cnetmobile.estaleiro.serpro.gov.br"), Login: os.Getenv("MONTZION_LOGIN")}
 	ws, err := enderecoDevTools(porta, 15e9)
 	if err != nil {
 		fmt.Println("erro:", err)

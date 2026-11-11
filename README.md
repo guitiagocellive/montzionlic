@@ -12,7 +12,7 @@ Plataforma interna de gestão de licitações. Roda inteira na Cloudflare:
   Depois disso essa tela some.
 - **Login com e-mail e senha:** senhas guardadas com PBKDF2-SHA256 (nunca em texto puro),
   sessão em cookie `HttpOnly` válida por 30 dias.
-- **Proteção contra força bruta:** 5 senhas erradas seguidas bloqueiam o e-mail por 15 minutos.
+- **Senha errada não bloqueia:** o usuário pode tentar de novo quantas vezes precisar.
 - **Equipe (só administradores):** adicionar pessoas com senha provisória, mudar perfil
   (Administrador/Membro), desativar/reativar e redefinir senha.
 - **Senha provisória:** quem recebe uma senha provisória é obrigado a criar a própria no primeiro acesso.
@@ -81,8 +81,12 @@ Não existe cadastro público: só um administrador adiciona pessoas.
     baixar até 3.000 resultados por consulta; a tela avisa quando é preciso afinar a busca.
   - A pesquisa sai do navegador; só o download dos arquivos passa pelo servidor (`/api/pncp/arquivo`).
 - **Disputas / robô de lances** (Licitações → Disputas): funciona pelo aplicativo do Windows. O aplicativo abre a
-  plataforma na janela própria e, quando pedido, a janela do Compras.gov.br, onde a pessoa entra com o
-  gov.br (a senha e o certificado não passam pela plataforma). A página Disputas lista as disputas da conta
+  plataforma na janela própria e, quando pedido, a janela de **login de fornecedor** do Compras.gov.br
+  (`loginPortal.asp`), onde a pessoa entra com o gov.br (a senha e o certificado não passam pela plataforma).
+  O token da sala de disputa vale só na aba onde o login terminou (muitas vezes um pop-up), então a ponte procura
+  a sessão em todas as janelas do Compras.gov.br; se alguma cair em "Acesso não autorizado", ela é levada de volta
+  ao login de fornecedor (o botão da página oficial leva ao login de governo). Fechar a janela do Compras.gov.br
+  só a esconde, para não perder o login. A página Disputas lista as disputas da conta
   (pregões e dispensas), os itens com melhor lance, meu lance e cronômetro, e por item: lance mínimo, desconto
   (%), ligar/parar, "Permitir lances com 4 casas decimais" e "Não aguardar os segundos finais para enviar
   lances". O robô **sempre espera os 10 segundos finais**, dá o menor lance que coloca a empresa em 1º

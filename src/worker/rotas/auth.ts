@@ -17,10 +17,6 @@ import {
   texto,
 } from "../validacao";
 
-const MINUTO = 60 * 1000;
-const MAX_TENTATIVAS = 5;
-const JANELA_TENTATIVAS = 15 * MINUTO;
-
 export const rotasAuth = new Hono<Ambiente>();
 
 // Diz se o sistema ainda não tem nenhum usuário (primeiro acesso).
@@ -68,19 +64,6 @@ rotasAuth.post("/login", async (c) => {
   const senha = typeof corpo.senha === "string" ? corpo.senha : "";
   if (!email || !senha) return c.json({ erro: "Informe e-mail e senha." }, 400);
 
-  const agora = Date.now();
-  const tentativas = await c.env.DB.prepare(
-    "SELECT COUNT(*) AS total FROM tentativas_login WHERE email = ? AND criado_em > ?",
-  )
-    .bind(email, agora - JANELA_TENTATIVAS)
-    .first<{ total: number }>();
-  if ((tentativas?.total ?? 0) >= MAX_TENTATIVAS) {
-    return c.json(
-      { erro: "Muitas tentativas com senha errada. Aguarde 15 minutos e tente de novo." },
-      429,
-    );
-  }
-
   const usuario = await c.env.DB.prepare(
     `SELECT ${CAMPOS_USUARIO}, senha_hash FROM usuarios WHERE email = ?`,
   )
@@ -90,20 +73,11 @@ rotasAuth.post("/login", async (c) => {
   // Sempre calcula o hash, mesmo sem usuário, para não revelar e-mails cadastrados.
   const senhaCorreta = await verificarSenha(senha, usuario?.senha_hash ?? HASH_FALSO);
 
+  // Senha errada não bloqueia o usuário: pode tentar de novo quantas vezes precisar.
   if (!usuario || !senhaCorreta || usuario.ativo !== 1) {
-    await c.env.DB.batch([
-      c.env.DB.prepare("INSERT INTO tentativas_login (email, criado_em) VALUES (?, ?)").bind(
-        email,
-        agora,
-      ),
-      c.env.DB.prepare("DELETE FROM tentativas_login WHERE criado_em < ?").bind(
-        agora - 24 * 60 * MINUTO,
-      ),
-    ]);
     return c.json({ erro: "E-mail ou senha incorretos." }, 401);
   }
 
-  await c.env.DB.prepare("DELETE FROM tentativas_login WHERE email = ?").bind(email).run();
   await iniciarSessao(c, usuario.id);
   return c.json({ usuario: paraUsuario(usuario) });
 });
