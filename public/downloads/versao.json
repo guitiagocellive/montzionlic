@@ -1,9 +1,9 @@
 {
-  "versao": "3.0.0",
+  "versao": "3.0.1",
   "data": "2026-11-11",
   "novidades": [
-    "Robô de lances dentro do aplicativo, em tempo real (cobre o lance do concorrente na hora).",
-    "Login direto no gov.br, como no Siga Pregão: a janela some sozinha depois do login.",
-    "Mostra só as compras em disputa agora."
+    "Instalador refeito para não ser confundido com ameaça pelo antivírus do Windows (sem PowerShell nem comandos escondidos).",
+    "Dados da empresa e da versão no arquivo (Propriedades → Detalhes).",
+    "Robô de lances em tempo real e login direto no gov.br (da versão 3.0)."
   ]
 }

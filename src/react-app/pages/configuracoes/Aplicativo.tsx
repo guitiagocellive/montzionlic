@@ -152,6 +152,10 @@ function AplicativoNavegador() {
             Clique em <strong>Baixar instalador (.exe)</strong> e abra o arquivo baixado.
           </li>
           <li>
+            Se o navegador disser que o arquivo <strong>"não é baixado com frequência"</strong>, clique nos <strong>…</strong> ao lado do
+            download → <strong>Manter</strong> → <strong>Mostrar mais</strong> → <strong>Manter mesmo assim</strong>.
+          </li>
+          <li>
             Se o Windows mostrar <strong>"O Windows protegeu o computador"</strong>, clique em <strong>Mais informações</strong> e
             depois em <strong>Executar assim mesmo</strong>. O aviso aparece porque o instalador é novo e ainda não tem assinatura de
             empresa.
@@ -167,6 +171,29 @@ function AplicativoNavegador() {
             Para remover: <strong>Configurações do Windows → Aplicativos → Montzion → Desinstalar</strong>.
           </li>
         </ol>
+        <details className="ajuda-defender">
+          <summary>
+            <ShieldAlert size={15} /> O antivírus do Windows apagou o arquivo ("Ameaças encontradas")?
+          </summary>
+          <p className="texto-suave pequeno">
+            É um alarme falso, comum com programas novos que ainda não têm assinatura digital paga. Para liberar só este arquivo:
+          </p>
+          <ol className="passos-app">
+            <li>
+              Abra <strong>Segurança do Windows</strong> (clique no aviso ou procure no menu Iniciar) →{" "}
+              <strong>Proteção contra vírus e ameaças</strong> → <strong>Histórico de proteção</strong>.
+            </li>
+            <li>
+              Clique no item do <strong>Montzion-Instalador.exe</strong> → <strong>Ações</strong> → <strong>Permitir no
+              dispositivo</strong> (ou <strong>Restaurar</strong>).
+            </li>
+            <li>Baixe de novo, se o arquivo tiver sumido, e abra normalmente.</li>
+          </ol>
+          <p className="texto-fraco pequeno">
+            Só libere arquivos baixados daqui (montzion.com.br). O instalador não pede senha de administrador e só grava na pasta
+            do seu usuário.
+          </p>
+        </details>
         <p className="texto-fraco pequeno nota-app">
           <ShieldAlert size={14} /> O aplicativo só abre o endereço montzion.com.br: o login e os dados continuam os mesmos da
           plataforma.

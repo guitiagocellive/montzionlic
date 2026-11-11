@@ -4,8 +4,10 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-python3 gerar_recursos.py recursos/montzion.ico recursos/montzion.manifest rsrc_windows_amd64.syso
+VERSAO=$(sed -n 's/^[[:space:]]*versao[[:space:]]*=[[:space:]]*"\(.*\)".*/\1/p' comum.go)
+python3 gerar_recursos.py recursos/montzion.ico recursos/montzion.manifest rsrc_windows_amd64.syso "$VERSAO"
 mkdir -p ../public/downloads
-CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -H=windowsgui" \
+# Sem "-s -w": programas sem símbolos são vistos com mais desconfiança pelos antivírus.
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-H=windowsgui" \
   -o ../public/downloads/Montzion-Instalador.exe .
 ls -la ../public/downloads/Montzion-Instalador.exe

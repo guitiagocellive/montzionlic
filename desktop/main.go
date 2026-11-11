@@ -23,8 +23,6 @@ import (
 
 const (
 	endereco   = "https://montzion.com.br"
-	chaveReg   = `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\Montzion`
-	semJanela  = 0x08000000 // CREATE_NO_WINDOW
 	mbOK       = 0x00000000
 	mbIconInfo = 0x00000040
 	mbYesNo    = 0x00000004
@@ -67,12 +65,6 @@ func mensagem(texto string, flags uintptr) int {
 	return int(r)
 }
 
-func oculto(nome string, args ...string) *exec.Cmd {
-	cmd := exec.Command(nome, args...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: semJanela}
-	return cmd
-}
-
 func atalhos() []string {
 	inicio := pastaConhecida(pastaProgramas, filepath.Join(os.Getenv("APPDATA"), "Microsoft", "Windows", "Start Menu", "Programs"))
 	desktop := pastaConhecida(pastaDesktop, filepath.Join(os.Getenv("USERPROFILE"), "Desktop"))
@@ -113,43 +105,34 @@ func copiar(origem, destino string) error {
 	return os.Rename(tmp, destino)
 }
 
-// Cria um atalho .lnk usando o próprio Windows (WScript.Shell).
+// Cria um atalho .lnk pelo próprio Windows. Se não der, cria um atalho de internet simples (.url).
 func criarAtalho(lnk, alvo, args string) error {
-	_ = os.MkdirAll(filepath.Dir(lnk), 0o755)
-	aspas := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
-	script := fmt.Sprintf(
-		"$s=(New-Object -ComObject WScript.Shell).CreateShortcut(%s);$s.TargetPath=%s;$s.Arguments=%s;$s.IconLocation=%s;$s.WorkingDirectory=%s;$s.Description='Montzion - gestão de licitações';$s.Save()",
-		aspas(lnk), aspas(alvo), aspas(args), aspas(alvo+",0"), aspas(filepath.Dir(alvo)),
-	)
-	saida, err := oculto("powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script).CombinedOutput()
+	err := criarAtalhoNativo(lnk, alvo, args, "Montzion - gestão de licitações")
 	if err == nil {
-		if _, e := os.Stat(lnk); e == nil {
-			return nil
-		}
-		err = fmt.Errorf("atalho não foi criado")
+		return nil
 	}
-	registrarLog("atalho %s falhou: %v %s", lnk, err, strings.TrimSpace(string(saida)))
-	// Sem PowerShell (bloqueado em algumas empresas): cria um atalho de internet simples.
+	registrarLog("atalho %s falhou: %v", lnk, err)
 	url := strings.TrimSuffix(lnk, ".lnk") + ".url"
 	conteudo := "[InternetShortcut]\r\nURL=file:///" + strings.ReplaceAll(alvo, `\`, "/") + "\r\nIconFile=" + alvo + "\r\nIconIndex=0\r\n"
 	return os.WriteFile(url, []byte(conteudo), 0o644)
 }
 
+// Registra em "Aplicativos instalados" do Windows (só para este usuário, sem administrador).
 func registrar(exe string) {
-	valores := [][2]string{
-		{"DisplayName", nomeApp},
-		{"DisplayVersion", versao},
-		{"Publisher", "Montzion"},
-		{"DisplayIcon", exe + ",0"},
-		{"InstallLocation", filepath.Dir(exe)},
-		{"UninstallString", `"` + exe + `" --desinstalar`},
-		{"URLInfoAbout", endereco},
+	err := gravarRegistro(subchaveDesinstalar, map[string]any{
+		"DisplayName":     nomeApp,
+		"DisplayVersion":  versao,
+		"Publisher":       "Montzion",
+		"DisplayIcon":     exe + ",0",
+		"InstallLocation": filepath.Dir(exe),
+		"UninstallString": `"` + exe + `" --desinstalar`,
+		"URLInfoAbout":    endereco,
+		"NoModify":        uint32(1),
+		"NoRepair":        uint32(1),
+	})
+	if err != nil {
+		registrarLog("não registrou em Aplicativos instalados: %v", err)
 	}
-	for _, v := range valores {
-		_ = oculto("reg.exe", "add", chaveReg, "/v", v[0], "/t", "REG_SZ", "/d", v[1], "/f").Run()
-	}
-	_ = oculto("reg.exe", "add", chaveReg, "/v", "NoModify", "/t", "REG_DWORD", "/d", "1", "/f").Run()
-	_ = oculto("reg.exe", "add", chaveReg, "/v", "NoRepair", "/t", "REG_DWORD", "/d", "1", "/f").Run()
 }
 
 func instalar(atual string) (string, error) {
@@ -179,10 +162,28 @@ func desinstalar() {
 		_ = os.Remove(lnk)
 		_ = os.Remove(strings.TrimSuffix(lnk, ".lnk") + ".url")
 	}
-	_ = oculto("reg.exe", "delete", chaveReg, "/f").Run()
-	// O próprio .exe está em uso: apaga a pasta alguns segundos depois de fechar.
+	apagarRegistro(subchaveDesinstalar)
+	// Apaga tudo da pasta, menos o próprio .exe (o Windows não deixa apagar um programa aberto).
 	pasta := pastaInstalacao()
-	_ = oculto("cmd.exe", "/c", "ping 127.0.0.1 -n 3 >nul & rmdir /s /q \""+pasta+"\"").Start()
+	eu, _ := os.Executable()
+	itens, _ := os.ReadDir(pasta)
+	sobrou := false
+	for _, it := range itens {
+		caminho := filepath.Join(pasta, it.Name())
+		if strings.EqualFold(filepath.Clean(caminho), filepath.Clean(eu)) {
+			sobrou = true
+			continue
+		}
+		if os.RemoveAll(caminho) != nil {
+			sobrou = true
+		}
+	}
+	if sobrou {
+		if mensagem("O Montzion foi removido deste computador.\n\nFalta só apagar o arquivo do programa. Abrir a pasta agora para apagá-la?\n("+pasta+")", mbYesNo|mbIconQ) == idYes {
+			abrirNoNavegador(pasta)
+		}
+		return
+	}
 	mensagem("O Montzion foi removido deste computador.", mbOK|mbIconInfo)
 }
 
@@ -324,10 +325,7 @@ func abrirModoNavegador(comPonte bool) {
 	navegador := procurarNavegador()
 	if navegador == "" {
 		registrarLog("Edge/Chrome não encontrados; abrindo no navegador padrão")
-		if err := oculto("rundll32.exe", "url.dll,FileProtocolHandler", endereco).Start(); err != nil {
-			registrarLog("não abriu o navegador padrão: %v", err)
-			mensagem("Não foi possível abrir o navegador.\n\nAbra "+endereco+" no seu navegador.", mbOK|mbIconInfo)
-		}
+		abrirNoNavegador(endereco)
 		return
 	}
 	perfil := filepath.Join(pastaInstalacao(), "Navegador")
@@ -365,7 +363,7 @@ func main() {
 		if r := recover(); r != nil {
 			registrarLog("erro inesperado: %v", r)
 			mensagem(fmt.Sprintf("Erro inesperado no Montzion: %v\n\nA plataforma vai abrir no navegador.", r), mbOK|mbIconInfo)
-			_ = oculto("rundll32.exe", "url.dll,FileProtocolHandler", endereco).Start()
+			abrirNoNavegador(endereco)
 		}
 	}()
 	// Limpa a versão antiga que ficou de uma atualização.

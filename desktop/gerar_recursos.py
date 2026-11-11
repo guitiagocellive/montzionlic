@@ -1,13 +1,15 @@
-"""Gera rsrc_windows_amd64.syso (ícone + manifesto do Windows) para o compilador Go embutir no .exe.
+"""Gera rsrc_windows_amd64.syso (ícone, manifesto e dados de versão) para o compilador Go embutir no .exe.
 
-Escreve um objeto COFF com uma seção .rsrc contendo RT_ICON, RT_GROUP_ICON e RT_MANIFEST.
-Uso: python3 gerar_recursos.py recursos/montzion.ico recursos/montzion.manifest rsrc_windows_amd64.syso
+Escreve um objeto COFF com uma seção .rsrc contendo RT_ICON, RT_GROUP_ICON, RT_VERSION e RT_MANIFEST.
+Os dados de versão (empresa, produto, versão) aparecem em Propriedades → Detalhes e ajudam o
+antivírus do Windows a identificar o programa.
+Uso: python3 gerar_recursos.py recursos/montzion.ico recursos/montzion.manifest rsrc_windows_amd64.syso 3.0.0
 """
 
 import struct
 import sys
 
-RT_ICON, RT_GROUP_ICON, RT_MANIFEST = 3, 14, 24
+RT_ICON, RT_GROUP_ICON, RT_VERSION, RT_MANIFEST = 3, 14, 16, 24
 IDIOMA = 0x0409
 
 
@@ -23,12 +25,49 @@ def ler_ico(caminho):
     return imagens
 
 
+def bloco_versao(chave, valor=b"", tipo=1, filhos=(), tam_valor=None):
+    """Um bloco do VS_VERSIONINFO: tamanho, tamanho do valor, tipo, chave UTF-16, valor e filhos (alinhados a 4)."""
+    corpo = bytearray(struct.pack("<HHH", 0, 0, tipo))
+    corpo += (chave + "\0").encode("utf-16-le")
+    alinhar(corpo, 4)
+    corpo += valor
+    for f in filhos:
+        alinhar(corpo, 4)
+        corpo += f
+    if tam_valor is None:
+        tam_valor = len(valor) // 2 if tipo == 1 else len(valor)
+    struct.pack_into("<HH", corpo, 0, len(corpo), tam_valor)
+    return bytes(corpo)
+
+
+def dados_versao(versao):
+    partes = [int(x) for x in (versao.split(".") + ["0", "0", "0"])[:4]]
+    ms, ls = (partes[0] << 16) | partes[1], (partes[2] << 16) | partes[3]
+    fixo = struct.pack("<13I", 0xFEEF04BD, 0x00010000, ms, ls, ms, ls, 0x3F, 0, 0x40004, 1, 0, 0, 0)
+    textos = {
+        "CompanyName": "Montzion",
+        "FileDescription": "Montzion - gestão de licitações",
+        "FileVersion": versao,
+        "InternalName": "Montzion",
+        "LegalCopyright": "© Montzion",
+        "OriginalFilename": "Montzion-Instalador.exe",
+        "ProductName": "Montzion",
+        "ProductVersion": versao,
+    }
+    strings = [bloco_versao(k, (v + "\0").encode("utf-16-le")) for k, v in textos.items()]
+    tabela = bloco_versao("041604B0", filhos=strings)  # português (Brasil), Unicode
+    info_strings = bloco_versao("StringFileInfo", filhos=[tabela])
+    traducao = bloco_versao("Translation", struct.pack("<HH", 0x0416, 1200), tipo=0)
+    info_var = bloco_versao("VarFileInfo", filhos=[traducao])
+    return bloco_versao("VS_VERSION_INFO", fixo, tipo=0, filhos=[info_strings, info_var])
+
+
 def alinhar(buf, n=8):
     while len(buf) % n:
         buf.append(0)
 
 
-def main(ico, manifesto, saida):
+def main(ico, manifesto, saida, versao="0.0.0"):
     imagens = ler_ico(ico)
     grupo = bytearray(struct.pack("<HHH", 0, 1, len(imagens)))
     for i, ((w, h, cores, planos, bits), img) in enumerate(imagens, start=1):
@@ -38,6 +77,7 @@ def main(ico, manifesto, saida):
     recursos = {
         RT_ICON: [(i, img) for i, (_, img) in enumerate(imagens, start=1)],
         RT_GROUP_ICON: [(1, bytes(grupo))],
+        RT_VERSION: [(1, dados_versao(versao))],
         RT_MANIFEST: [(1, open(manifesto, "rb").read())],
     }
     tipos = sorted(recursos)
@@ -113,4 +153,4 @@ def main(ico, manifesto, saida):
 
 
 if __name__ == "__main__":
-    main(*sys.argv[1:4])
+    main(*sys.argv[1:5])

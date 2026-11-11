@@ -9881,3 +9881,21 @@ code {
   padding-left: 18px;
   font-size: 0.84rem;
 }
+.ajuda-defender {
+  margin: 14px 0 0;
+  padding: 10px 14px;
+  border-radius: var(--raio-sm);
+  border: 1px solid var(--borda);
+  background: var(--superficie-2);
+}
+.ajuda-defender summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ajuda-defender[open] summary {
+  margin-bottom: 8px;
+}
