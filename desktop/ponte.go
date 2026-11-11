@@ -23,7 +23,8 @@ import (
 type configPonte struct {
 	Plataforma string // ex.: https://montzion.com.br
 	Compras    string // ex.: https://cnetmobile.estaleiro.serpro.gov.br (sala de disputa)
-	Login      string // login do fornecedor, ex.: https://www.comprasnet.gov.br/seguro/loginPortal.asp
+	Login      string // onde o login começa (gov.br de fornecedor)
+	Portal     string // portal antigo do Compras.gov.br (Área de Trabalho), ex.: https://www.comprasnet.gov.br
 }
 
 func (c configPonte) paginaDisputas() string {
@@ -68,6 +69,7 @@ type ponte struct {
 	// Esconde a janela do Compras.gov.br depois do login (nil = não dá para esconder).
 	esconderCompras func()
 	estavaLogado    bool // para esconder a janela só na hora em que o login acontece
+	motor           *motor
 }
 
 var (
@@ -76,7 +78,9 @@ var (
 )
 
 func novaPonte(cfg configPonte, cdp *clienteCDP) *ponte {
-	return &ponte{cfg: cfg, cdp: cdp, alvos: map[string]*sessaoAlvo{}, ligando: map[string]bool{}, pedidos: map[string]bool{}, novaLista: make(chan struct{}, 1), tentouSala: map[string]time.Time{}, tentativas: map[string]int{}, menuVisto: map[string]bool{}}
+	p := &ponte{cfg: cfg, cdp: cdp, alvos: map[string]*sessaoAlvo{}, ligando: map[string]bool{}, pedidos: map[string]bool{}, novaLista: make(chan struct{}, 1), tentouSala: map[string]time.Time{}, tentativas: map[string]int{}, menuVisto: map[string]bool{}}
+	p.motor = novoMotor(p)
+	return p
 }
 
 func mesmoSite(endereco, base string) bool {
@@ -95,14 +99,20 @@ func (p *ponte) tipoDe(endereco string) string {
 		return "plataforma"
 	case mesmoSite(endereco, p.cfg.Compras):
 		return "compras"
-	case p.cfg.Login != "" && mesmoSite(endereco, p.cfg.Login):
+	case p.cfg.Portal != "" && mesmoSite(endereco, p.cfg.Portal):
 		return "portal"
+	case p.cfg.Login != "" && mesmoSite(endereco, p.cfg.Login):
+		if p.cfg.Portal == "" {
+			return "portal" // (testes) login e portal no mesmo endereço
+		}
+		return "login"
 	}
 	return ""
 }
 
 // Rodar acompanha as janelas do navegador até ele fechar.
 func (p *ponte) Rodar() error {
+	p.motor.Rodar()
 	if _, err := p.cdp.Chamar("", "Target.setDiscoverTargets", map[string]any{"discover": true}, 10*time.Second); err != nil {
 		return err
 	}
@@ -282,6 +292,25 @@ func (p *ponte) tratarEvento(m mensagemCDP) {
 		if json.Unmarshal(m.Params, &v) == nil && v.Name == "montzionRobo" {
 			go p.atender(m.SessionID, v.Payload)
 		}
+	case "Network.requestWillBeSent":
+		var v struct {
+			Request struct {
+				Headers map[string]any `json:"headers"`
+			} `json:"request"`
+		}
+		if json.Unmarshal(m.Params, &v) == nil {
+			versao, plataforma := textoDe(v.Request.Headers["X-Version-Number"]), textoDe(v.Request.Headers["X-Device-Platform"])
+			if versao != "" || plataforma != "" {
+				p.motor.mu.Lock()
+				if versao != "" {
+					p.motor.versaoSistema = versao
+				}
+				if plataforma != "" {
+					p.motor.plataforma = plataforma
+				}
+				p.motor.mu.Unlock()
+			}
+		}
 	case "Network.responseReceived":
 		var v struct {
 			RequestID string `json:"requestId"`
@@ -443,18 +472,35 @@ func mensagemErro(corpo json.RawMessage) string {
 // atender responde um pedido da página Disputas.
 func (p *ponte) atender(sessao, payload string) {
 	var pedido struct {
-		ID        int64   `json:"id"`
-		Tipo      string  `json:"tipo"`
-		Compra    string  `json:"compra"`
-		Item      int     `json:"item"`
-		Valor     float64 `json:"valor"`
-		Fase      string  `json:"fase"`
-		Atualizar bool    `json:"atualizar"`
+		ID        int64                 `json:"id"`
+		Tipo      string                `json:"tipo"`
+		Compra    string                `json:"compra"`
+		Item      int                   `json:"item"`
+		Valor     float64               `json:"valor"`
+		Fase      string                `json:"fase"`
+		Atualizar bool                  `json:"atualizar"`
+		Config    map[string]configItem `json:"config"`
+		IDs       []int64               `json:"ids"`
 	}
 	if json.Unmarshal([]byte(payload), &pedido) != nil {
 		return
 	}
-	resposta := p.executar(pedido.Tipo, pedido.Compra, pedido.Item, pedido.Valor, pedido.Fase, pedido.Atualizar)
+	var resposta any
+	switch pedido.Tipo {
+	case "painel":
+		resposta = p.motor.Painel()
+	case "configurar":
+		p.motor.Configurar(pedido.Config)
+		resposta = mapa{"ok": true}
+	case "confirmar":
+		p.motor.ConfirmarLances(pedido.IDs)
+		resposta = mapa{"ok": true}
+	case "atualizar":
+		go p.motor.atualizarLista()
+		resposta = mapa{"ok": true}
+	default:
+		resposta = p.executar(pedido.Tipo, pedido.Compra, pedido.Item, pedido.Valor, pedido.Fase, pedido.Atualizar)
+	}
 	dados, _ := json.Marshal(resposta)
 	script := fmt.Sprintf("window.__montzionRoboResposta && window.__montzionRoboResposta(%d, %s)", pedido.ID, string(dados))
 	_, _ = p.cdp.Chamar(sessao, "Runtime.evaluate", map[string]any{"expression": script}, 10*time.Second)
@@ -467,13 +513,18 @@ func (p *ponte) executar(tipo, compra string, item int, valor float64, fase stri
 	case "estado":
 		conectado := p.sessaoLogada(true) != nil
 		janela := len(p.janelasCompras("compras", "portal")) > 0
-		portal := false
-		if !conectado {
-			portal = p.abrirSalaPeloPortal()
-		}
-		return mapa{"conectado": conectado, "janela": janela, "portal": portal, "versao": versao}
+		p.motor.mu.Lock()
+		fase, aviso := p.motor.fase, p.motor.aviso
+		p.motor.mu.Unlock()
+		return mapa{"conectado": conectado, "janela": janela, "portal": fase == "entrando", "fase": fase, "aviso": aviso, "versao": versao, "motor": true}
 
 	case "entrar":
+		p.motor.mu.Lock()
+		logado := p.motor.token != ""
+		p.motor.mu.Unlock()
+		if logado && !atualizar {
+			return mapa{"ok": true, "jaLogado": true}
+		}
 		if p.abrirCompras != nil {
 			if !p.abrirCompras() {
 				return mapa{"erro": "Não foi possível abrir a janela do Compras.gov.br."}

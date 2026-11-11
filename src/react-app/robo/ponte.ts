@@ -61,9 +61,31 @@ export interface RespostaLance {
   mensagem?: string;
 }
 
+/** O que o motor do robô (dentro do aplicativo) está vendo agora. */
+export interface PainelRobo {
+  versao: string;
+  fase: "sem-login" | "aguardando-login" | "entrando" | "buscando" | "pronto" | "erro-lista";
+  aviso: string;
+  conectado: boolean;
+  tempoReal: boolean;
+  direto: boolean;
+  descartadas: number;
+  listaEm: number;
+  agora: number;
+  compras: { chave: string; info: Record<string, unknown>; lida: boolean; emDisputa: boolean; erro: string; itens: Record<string, unknown>[] }[];
+  mensagens: Record<string, { texto: string; erro?: boolean }>;
+  lances: { id: number; compra: string; item: number; valor: number; ok: boolean; mensagem: string; em: number; reacaoMs: number }[];
+  ultimoLance: { valor: number; em: number; reacaoMs: number } | null;
+}
+
 export const ponte = {
-  estado: () => chamar<EstadoPonte>("estado", {}, 8_000),
-  entrar: () => chamar<{ ok: boolean }>("entrar"),
+  estado: () => chamar<EstadoPonte & { motor?: boolean; fase?: string; aviso?: string }>("estado", {}, 8_000),
+  /** Abre a janela de login do gov.br (mostrar = abre mesmo se já estiver logado). */
+  entrar: (mostrar = false) => chamar<{ ok: boolean; jaLogado?: boolean }>("entrar", { atualizar: mostrar }),
+  painel: () => chamar<PainelRobo>("painel", {}, 5_000),
+  configurar: (config: Record<string, unknown>) => chamar<{ ok: boolean }>("configurar", { config }, 5_000),
+  confirmar: (ids: number[]) => chamar<{ ok: boolean }>("confirmar", { ids }, 5_000),
+  atualizar: () => chamar<{ ok: boolean }>("atualizar", {}, 5_000),
   /** Lista de compras em disputa do fornecedor (a página oficial carrega e o aplicativo lê). */
   compras: (atualizar: boolean) => chamar<{ compras: unknown; capturadaEm: number | null }>("compras", { atualizar }, 150_000),
   itens: (compra: string) => chamar<unknown>("itens", { compra }, 15_000),

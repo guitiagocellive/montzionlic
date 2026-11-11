@@ -80,30 +80,30 @@ Não existe cadastro público: só um administrador adiciona pessoas.
   - Filtros que o PNCP não faz (data da sessão, plataforma, UASG, CNPJ, nº, vários municípios) são aplicados aqui depois de
     baixar até 3.000 resultados por consulta; a tela avisa quando é preciso afinar a busca.
   - A pesquisa sai do navegador; só o download dos arquivos passa pelo servidor (`/api/pncp/arquivo`).
-- **Disputas / robô de lances** (Licitações → Disputas): funciona pelo aplicativo do Windows. O aplicativo abre a
-  plataforma na janela própria e, quando pedido, a janela de **login de fornecedor** do Compras.gov.br
-  (`loginPortal.asp`), onde a pessoa entra com o gov.br (a senha e o certificado não passam pela plataforma).
-  O token da sala de disputa vale só na aba onde o login terminou (muitas vezes um pop-up), então a ponte procura
-  a sessão em todas as janelas do Compras.gov.br; se alguma cair em "Acesso não autorizado", ela é levada de volta
-  ao login de fornecedor (o botão da página oficial leva ao login de governo). Fechar a janela do Compras.gov.br
-  só a esconde, para não perder o login. Depois do login o Compras.gov.br mostra a Área de Trabalho do Fornecedor
-  (portal antigo); a sala de disputa é outro sistema, então a ponte lê o menu da Área de Trabalho, acha o item da
-  sala de disputa e abre sozinha (os itens do menu ficam anotados no `montzion.log`). A lista de disputas é pedida
-  direto na aba logada, como a sala de disputa faz ao abrir o painel "Demais compras" (com o captcha invisível da
-  própria página, para compras novas e legadas), e as compras já abrem sozinhas na página Disputas.
-  Ficam de fora as compras revogadas, anuladas, desertas, fracassadas e as que já passaram da disputa (fase 4); as
-  que não têm item em disputa agora vão para "Sem disputa agora" (conferidas a cada 2 min). As consultas são uma por
-  vez, com folga (robô ligado nos segundos finais a cada 0,6 s, robô ligado a cada 3 s, compra aberta a cada 5 s),
-  para o Compras.gov.br não bloquear (erro 429). Depois do login a janela do Compras.gov.br é escondida sozinha
-  (e pop-ups do gov.br abrem nela mesma); ela só volta se precisar resolver um captcha. A ponte lê a porta real do
-  motor (`DevToolsActivePort`) e se religa sozinha, e a página Disputas sabe quando está dentro do aplicativo
-  (`window.montzionApp`). A página Disputas lista as disputas da conta
-  (pregões e dispensas), os itens com melhor lance, meu lance e cronômetro, e por item: lance mínimo, desconto
-  (%), ligar/parar, "Permitir lances com 4 casas decimais" e "Não aguardar os segundos finais para enviar
-  lances". O robô **sempre espera os 10 segundos finais**, dá o menor lance que coloca a empresa em 1º
-  (respeitando o intervalo mínimo do edital) e, se não der, vai no lance mínimo. Regra em `src/shared/robo.ts`;
-  ponte em `desktop/ponte.go` (protocolo DevTools do navegador, sem bibliotecas externas). Configuração e
-  registro dos lances ficam na plataforma (`/api/robo`).
+- **Disputas / robô de lances** (Licitações → Disputas): o robô roda **dentro do aplicativo do Windows**
+  (`desktop/motor.go`), não na página — continua dando lances mesmo com a página fechada.
+  - **Login como no Siga Pregão:** "Entrar com gov.br" abre uma janela direto no login de fornecedor do gov.br
+    (o mesmo do botão "Entrar com Gov.br" do Compras.gov.br). Quando o gov.br devolve para o Compras.gov.br, a
+    janela some e o aplicativo entra sozinho na sala de disputa (lê o menu da Área de Trabalho e abre o item da
+    sala). A página mostra os passos (login, sala de disputa, buscando disputas). A senha e o certificado não
+    passam pela plataforma.
+  - **Tempo real:** o aplicativo conecta no mesmo canal da sala oficial (STOMP sobre WebSocket em
+    `/comprasnet-websocket/socket/websocket`, tópicos `/topic/compra/{chave}` e
+    `/topic/disputa/fornec/{chave}/{cnpj}`) e recebe cada lance novo na hora. A cada aviso o robô decide e já
+    envia o lance direto ao Compras.gov.br (no simulador, ~1 ms depois do lance do concorrente; na vida real soma
+    o tempo da internet). Um tique de 100 ms cuida do cronômetro (10 segundos finais).
+  - **Sessão:** o token fica na janela escondida do Compras.gov.br; o aplicativo lê, usa nos pedidos diretos e,
+    se vencer sem a sala renovar, renova (`/comprasnet-usuario/v2/sessao/fornecedor/retoken`). Se o pedido
+    direto falhar, usa a própria janela por 5 min. Sem o tempo real, cai para consultas (0,5 s nos segundos
+    finais com robô ligado).
+  - **Lista:** só compras em disputa (fora revogadas, anuladas, desertas, fracassadas e fase 4); sem item em
+    disputa agora vão para "Sem disputa agora". A lista é pedida com o captcha invisível da própria sala.
+  - **Página:** lê o painel do aplicativo (no próprio computador, sem ir ao Compras.gov.br), manda a configuração
+    de cada item (lance mínimo, desconto, 4 casas, "Não aguardar") e registra os lances na plataforma
+    (`/api/robo`). Mostra "Tempo real"/"Consultando" e o tempo do último lance.
+  - Regra igual em `src/shared/robo.ts` e `desktop/regra.go` (com testes em `desktop/regra_test.go`):
+    **sempre espera os 10 segundos finais**, dá o menor lance que coloca a empresa em 1º (respeitando o
+    intervalo mínimo do edital) e, se não der, vai no lance mínimo.
 - **Datas** sempre pelo calendário da plataforma (`components/Calendario.tsx`): data única ou período início–fim
   com atalhos; o campo `Campo type="date"` já usa o calendário.
 - **Fornecedores** por nicho, com WhatsApp, site e catálogo.

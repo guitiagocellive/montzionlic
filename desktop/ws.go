@@ -5,6 +5,7 @@ package main
 import (
 	"bufio"
 	"crypto/rand"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/binary"
 	"errors"
@@ -23,26 +24,44 @@ type conexaoWS struct {
 	escrita sync.Mutex
 }
 
-func conectarWS(endereco string) (*conexaoWS, error) {
+func conectarWS(endereco string) (*conexaoWS, error) { return conectarWSCom(endereco, nil) }
+
+// conectarWSCom abre ws:// ou wss:// (TLS) com cabeçalhos extras (ex.: Origin, User-Agent).
+func conectarWSCom(endereco string, cabecalhos map[string]string) (*conexaoWS, error) {
 	u, err := url.Parse(endereco)
 	if err != nil {
 		return nil, err
 	}
-	if u.Scheme != "ws" {
+	if u.Scheme != "ws" && u.Scheme != "wss" {
 		return nil, fmt.Errorf("endereço não suportado: %s", endereco)
 	}
 	host := u.Host
-	if !strings.Contains(host, ":") {
-		host += ":80"
+	if u.Port() == "" {
+		if u.Scheme == "wss" {
+			host += ":443"
+		} else {
+			host += ":80"
+		}
 	}
-	conn, err := net.DialTimeout("tcp", host, 10*time.Second)
+	var conn net.Conn
+	if u.Scheme == "wss" {
+		conn, err = tls.DialWithDialer(&net.Dialer{Timeout: 10 * time.Second}, "tcp", host, &tls.Config{ServerName: u.Hostname()})
+	} else {
+		conn, err = net.DialTimeout("tcp", host, 10*time.Second)
+	}
 	if err != nil {
 		return nil, err
 	}
 	chave := make([]byte, 16)
 	_, _ = rand.Read(chave)
-	pedido := fmt.Sprintf("GET %s HTTP/1.1\r\nHost: %s\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: %s\r\nSec-WebSocket-Version: 13\r\n\r\n",
-		u.RequestURI(), u.Host, base64.StdEncoding.EncodeToString(chave))
+	extra := ""
+	for k, v := range cabecalhos {
+		if v != "" && !strings.ContainsAny(k+v, "\r\n") {
+			extra += k + ": " + v + "\r\n"
+		}
+	}
+	pedido := fmt.Sprintf("GET %s HTTP/1.1\r\nHost: %s\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: %s\r\nSec-WebSocket-Version: 13\r\n%s\r\n",
+		u.RequestURI(), u.Host, base64.StdEncoding.EncodeToString(chave), extra)
 	if _, err := conn.Write([]byte(pedido)); err != nil {
 		conn.Close()
 		return nil, err

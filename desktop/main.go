@@ -228,7 +228,9 @@ func configuracao() configPonte {
 	return configPonte{
 		Plataforma: endereco,
 		Compras:    "https://cnetmobile.estaleiro.serpro.gov.br",
-		Login:      "https://www.comprasnet.gov.br/seguro/loginPortal.asp",
+		// Login de fornecedor direto no gov.br (o mesmo do botão "Entrar com Gov.br" do Compras.gov.br).
+		Login:  "https://sso.acesso.gov.br/authorize?response_type=code&client_id=comprasnet.gov.br&scope=openid+profile+email+phone+govbr_confiabilidades&state=F&redirect_uri=https://www.comprasnet.gov.br/seguro/landing_sso.asp",
+		Portal: "https://www.comprasnet.gov.br",
 	}
 }
 

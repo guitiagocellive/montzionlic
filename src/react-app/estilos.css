@@ -9162,3 +9162,59 @@ code {
 .sem-disputa .compra-disputa {
   opacity: 0.85;
 }
+
+/* Passos do login no Compras.gov.br (página Disputas) */
+.passos-login {
+  display: grid;
+  gap: 8px;
+  margin: 6px 0 12px;
+  padding: 0;
+  list-style: none;
+  color: var(--texto-fraco);
+}
+
+.passos-login li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.passos-login li.atual {
+  color: var(--texto);
+  font-weight: 600;
+}
+
+.passos-login li.feito {
+  color: var(--texto-suave);
+}
+
+.marca-passo {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1.5px solid var(--borda-forte);
+  border-radius: 50%;
+}
+
+.marca-passo svg {
+  width: 13px;
+  height: 13px;
+}
+
+.passos-login li.feito .marca-passo {
+  border-color: var(--verde);
+  background: var(--verde-fundo);
+  color: var(--verde);
+}
+
+.passos-login li.atual .marca-passo {
+  border-color: var(--acento);
+  color: var(--acento);
+}
+
+.disputas-topo .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}

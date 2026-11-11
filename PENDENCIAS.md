@@ -38,7 +38,10 @@ Lista do que foi combinado e ainda falta fazer (ou melhorar). Atualizar sempre q
         modalidade (5 pregão, 6 dispensa) como a sala de disputa.
   - [x] Só compras em disputa (situação/fase + itens), consultas com calma (sem 429), janela do Compras escondida
         depois do login.
-  - [ ] Validar numa disputa real (os campos foram mapeados pelo código da sala de disputa; testado com
+  - [x] Robô dentro do aplicativo, em tempo real (canal STOMP da sala oficial), login direto no gov.br e
+        entrada automática na sala; segue com a página fechada.
+  - [ ] Validar numa disputa real (tempo real, renovação do token e pedido direto foram mapeados pelo código
+        da sala e testados com um Compras.gov.br simulado). (os campos foram mapeados pelo código da sala de disputa; testado com
         um Compras.gov.br simulado).
 - [ ] **Aplicativo do Windows em janela própria (WebView2)**: compilado, mas ainda não testado num Windows de
       verdade. Conferir: abre com nome/ícone do Montzion, links externos vão para o navegador, "Entrar no

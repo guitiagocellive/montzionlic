@@ -74,6 +74,7 @@ var (
 	procPostMessage        = user32.NewProc("PostMessageW")
 	procPostQuitMessage    = user32.NewProc("PostQuitMessage")
 	procGetClientRect      = user32.NewProc("GetClientRect")
+	procGetWindowRect      = user32.NewProc("GetWindowRect")
 	procLoadImage          = user32.NewProc("LoadImageW")
 	procLoadCursor         = user32.NewProc("LoadCursorW")
 	procSendMessage        = user32.NewProc("SendMessageW")
@@ -346,8 +347,23 @@ func (a *aplicativo) registrarClasse() error {
 }
 
 func (a *aplicativo) criarJanela(titulo string, maximizada bool) (uintptr, error) {
+	x, y, w, h := uintptr(cwUseDefault), uintptr(cwUseDefault), uintptr(cwUseDefault), uintptr(cwUseDefault)
+	if !maximizada && a.principal != nil {
+		// Janela de login: tamanho próprio, no centro da janela do Montzion (como no Siga Pregão).
+		var r retangulo
+		procGetWindowRect.Call(a.principal.hwnd, uintptr(unsafe.Pointer(&r)))
+		lw, lh := int32(a.escala(a.principal.hwnd, 1000)), int32(a.escala(a.principal.hwnd, 760))
+		if pw := r.direita - r.esquerda; pw > 0 && lw > pw-40 {
+			lw = pw - 40
+		}
+		if ph := r.baixo - r.topo; ph > 0 && lh > ph-40 {
+			lh = ph - 40
+		}
+		cx, cy := r.esquerda+(r.direita-r.esquerda-lw)/2, r.topo+(r.baixo-r.topo-lh)/2
+		x, y, w, h = uintptr(int64(cx)&0xffffffff), uintptr(int64(cy)&0xffffffff), uintptr(lw), uintptr(lh)
+	}
 	hwnd, _, err := procCreateWindowEx.Call(0, utf16(classeJanela), utf16(titulo), wsOverlapped,
-		cwUseDefault, cwUseDefault, cwUseDefault, cwUseDefault, 0, 0, a.instancia, 0)
+		x, y, w, h, 0, 0, a.instancia, 0)
 	if hwnd == 0 {
 		return 0, fmt.Errorf("CreateWindowEx: %v", err)
 	}
@@ -481,7 +497,7 @@ func (a *aplicativo) abrirCompras() {
 	if a.ambiente == 0 {
 		return
 	}
-	hwnd, err := a.criarJanela(nomeApp+" - Compras.gov.br", false)
+	hwnd, err := a.criarJanela(nomeApp+" - Entrar com gov.br (Compras.gov.br)", false)
 	if err != nil {
 		registrarLog("janela do Compras.gov.br: %v", err)
 		return
