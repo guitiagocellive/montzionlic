@@ -10446,3 +10446,196 @@ code {
   stroke: color-mix(in oklab, var(--texto) 55%, transparent);
   stroke-width: 1.1;
 }
+
+/* ---- Itens da licitação em bolhas que expandem ---- */
+.bolhas-itens {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bolha-item {
+  border: 1px solid var(--borda);
+  border-radius: 16px;
+  background: var(--superficie-2);
+  overflow: hidden;
+  transition: border-color 0.2s, box-shadow 0.25s, background 0.2s;
+}
+.bolha-item:hover {
+  border-color: color-mix(in oklab, var(--acento) 35%, var(--borda));
+}
+.bolha-item.aberta {
+  background: var(--cartao, var(--superficie));
+  border-color: color-mix(in oklab, var(--acento) 45%, var(--borda));
+  box-shadow: 0 12px 30px -18px rgb(0 0 0 / 45%);
+}
+.bolha-topo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.bolha-numero {
+  display: grid;
+  place-items: center;
+  flex: none;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: color-mix(in oklab, var(--acento) 14%, var(--superficie-3, var(--superficie)));
+  color: var(--texto);
+  font-size: 0.8rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.bolha-titulo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.bolha-titulo strong {
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bolha-titulo .texto-fraco {
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+.selo-me {
+  flex: none;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--verde, #16a34a) 16%, transparent);
+  color: var(--verde, #16a34a);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+.bolha-seta {
+  flex: none;
+  color: var(--texto-fraco);
+  transition: transform 0.25s var(--curva, ease);
+}
+.bolha-item.aberta .bolha-seta {
+  transform: rotate(180deg);
+}
+.bolha-corpo {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s var(--curva, ease);
+}
+.bolha-item.aberta .bolha-corpo {
+  grid-template-rows: 1fr;
+}
+.bolha-corpo > div {
+  min-height: 0;
+  overflow: hidden;
+  padding: 0 16px;
+}
+.bolha-item.aberta .bolha-corpo > div {
+  padding-bottom: 16px;
+  border-top: 1px solid var(--borda);
+}
+.bolha-numeros {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  padding: 14px 0 10px;
+}
+.bolha-numeros span,
+.bolha-rotulo {
+  display: block;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--texto-fraco);
+}
+.bolha-numeros strong {
+  font-size: 0.92rem;
+  font-variant-numeric: tabular-nums;
+}
+.bolha-descricao {
+  margin: 0 0 4px;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  color: var(--texto-suave);
+}
+.bolha-rotulo {
+  margin: 14px 0 8px;
+}
+.bolha-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.bolha-acoes .botao {
+  text-decoration: none;
+}
+.total-bolhas {
+  margin: 12px 2px 0;
+  font-size: 0.86rem;
+  text-align: right;
+  color: var(--texto-suave);
+}
+.carregando-marcas {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.resumo-marcas-item {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 10px 0 14px;
+}
+.resumo-marcas-item > div {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--superficie-2);
+}
+.resumo-marcas-item span {
+  display: block;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--texto-fraco);
+}
+.resumo-marcas-item strong {
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+}
+.marcas-item .nome-ranking svg {
+  vertical-align: -1px;
+  color: var(--texto-fraco);
+}
+.acoes-marcas-item {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+@media (max-width: 640px) {
+  .bolha-numeros {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .resumo-marcas-item {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.base-marcas {
+  margin: 0;
+  font-size: 0.84rem;
+}
+.base-marcas b {
+  color: var(--texto);
+}

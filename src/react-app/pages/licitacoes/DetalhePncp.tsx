@@ -1,5 +1,6 @@
 import {
   CalendarClock,
+  ChevronDown,
   ClipboardList,
   FolderOpen,
   ListOrdered,
@@ -14,12 +15,15 @@ import {
   Plus,
   RefreshCw,
   SquareArrowOutUpRight,
+  Tag,
+  TrendingUp,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type Conteudo, montarConteudo, Visor } from "../../components/PreviaArquivo";
 import { Modal } from "../../components/Ui";
 import { link } from "../../rota";
 import { type ArquivoPncp, detalheCompra, type ItemPncp, listarArquivos, listarItens, type ResultadoPncp, urlPrevia } from "../../pncp";
+import { MarcasDoItem, tituloDoItem } from "./MarcasDoItem";
 
 export function dataHora(iso: string | null) {
   if (!iso) return "";
@@ -161,6 +165,9 @@ function Arquivos({ carga, tentar }: { carga: Carga<ArquivoPncp[]>; tentar: () =
 
 function Itens({ carga, tentar, limite }: { carga: Carga<ItemPncp[]>; tentar: () => void; limite?: number }) {
   const [todos, setTodos] = useState(!limite);
+  const [aberto, setAberto] = useState<string | null>(null);
+  const [completo, setCompleto] = useState<Set<string>>(new Set());
+  const [marcas, setMarcas] = useState<ItemPncp | null>(null);
   if (carga.estado === "carregando") return <Carregando texto="Buscando os itens no PNCP…" />;
   if (carga.estado === "erro") return <Falha erro={carga.erro} tentar={tentar} />;
   const itens = carga.dados;
@@ -169,48 +176,85 @@ function Itens({ carga, tentar, limite }: { carga: Carga<ItemPncp[]>; tentar: ()
   const visiveis = todos || !limite ? itens : itens.slice(0, limite);
   return (
     <>
-      <div className="tabela-rolavel">
-        <table className="tabela-fin itens-pncp">
-          <thead>
-            <tr>
-              <th>Item</th>
-              <th>Descrição</th>
-              <th className="num">Qtd.</th>
-              <th>Unid.</th>
-              <th className="num">Valor ref. unit.</th>
-              <th className="num">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visiveis.map((i) => (
-              <tr key={i.numero}>
-                <td>{i.numero}</td>
-                <td>
-                  {i.descricao}
+      <div className="bolhas-itens">
+        {visiveis.map((i) => {
+          const estaAberto = aberto === i.numero;
+          const longo = i.descricao.length > 260;
+          const verTudo = completo.has(i.numero);
+          return (
+            <div key={i.numero} className={`bolha-item ${estaAberto ? "aberta" : ""}`}>
+              <button type="button" className="bolha-topo" onClick={() => setAberto(estaAberto ? null : i.numero)} aria-expanded={estaAberto}>
+                <span className="bolha-numero">{i.numero}</span>
+                <span className="bolha-titulo">
+                  <strong>{tituloDoItem(i.descricao)}</strong>
+                  <span className="texto-fraco">
+                    Qtd. {i.quantidade?.toLocaleString("pt-BR") ?? "—"}
+                    {i.unidade ? ` ${i.unidade}` : ""}
+                    {i.valorTotal ? ` · ${reais(i.valorTotal)}` : ""}
+                  </span>
+                </span>
+                {i.beneficio && <span className="selo-me">ME/EPP</span>}
+                <ChevronDown className="bolha-seta" size={18} aria-hidden="true" />
+              </button>
+              <div className="bolha-corpo">
+                <div>
+                  <div className="bolha-numeros">
+                    <div>
+                      <span>Tipo</span>
+                      <strong>{i.tipo || "—"}</strong>
+                    </div>
+                    <div>
+                      <span>Quantidade</span>
+                      <strong>
+                        {i.quantidade?.toLocaleString("pt-BR") ?? "—"} {i.unidade ?? ""}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>Unitário (ref.)</span>
+                      <strong>{reais(i.valorUnitario)}</strong>
+                    </div>
+                    <div>
+                      <span>Total (ref.)</span>
+                      <strong>{reais(i.valorTotal)}</strong>
+                    </div>
+                  </div>
+                  <p className="bolha-descricao">{longo && !verTudo ? `${i.descricao.slice(0, 260)}…` : i.descricao}</p>
+                  {longo && (
+                    <button
+                      type="button"
+                      className="botao-link sem-margem"
+                      onClick={() => setCompleto((c) => (c.has(i.numero) ? new Set([...c].filter((x) => x !== i.numero)) : new Set([...c, i.numero])))}
+                    >
+                      {verTudo ? "Mostrar menos" : "Ler descrição completa"}
+                    </button>
+                  )}
                   {i.beneficio && <span className="chip pequeno-chip">{i.beneficio}</span>}
-                </td>
-                <td className="num">{i.quantidade?.toLocaleString("pt-BR") ?? "—"}</td>
-                <td>{i.unidade ?? ""}</td>
-                <td className="num">{reais(i.valorUnitario)}</td>
-                <td className="num">{reais(i.valorTotal)}</td>
-              </tr>
-            ))}
-          </tbody>
-          {total > 0 && (
-            <tfoot>
-              <tr>
-                <td colSpan={5}>Total de referência ({itens.length} itens)</td>
-                <td className="num">{reais(total)}</td>
-              </tr>
-            </tfoot>
-          )}
-        </table>
+                  <span className="bolha-rotulo">Analisar no mercado</span>
+                  <div className="bolha-acoes">
+                    <button type="button" className="botao secundario pequeno" onClick={() => setMarcas(i)}>
+                      <Tag size={14} /> Marcas
+                    </button>
+                    <a className="botao secundario pequeno" {...link(`/licitacoes/mercado?produto=${encodeURIComponent(tituloDoItem(i.descricao))}`)}>
+                      <TrendingUp size={14} /> Preços e concorrência
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
+      {total > 0 && (
+        <p className="total-bolhas">
+          Total de referência ({itens.length} itens): <strong>{reais(total)}</strong>
+        </p>
+      )}
       {!!limite && itens.length > limite && (
         <button className="botao link pequeno" onClick={() => setTodos((t) => !t)}>
           {todos ? "Mostrar menos" : `Ver todos os ${itens.length} itens`}
         </button>
       )}
+      {marcas && <MarcasDoItem descricao={marcas.descricao} codigoCatalogo={marcas.codigoCatalogo} aoFechar={() => setMarcas(null)} />}
     </>
   );
 }

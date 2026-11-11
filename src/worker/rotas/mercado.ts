@@ -57,17 +57,20 @@ const paginaValida = (v: string | undefined) => {
 // Pesquisa de preços (Inteligência de mercado): itens vencidos de um produto do catálogo.
 rotasMercado.get("/precos", async (c) => {
   const pdm = c.req.query("pdm") ?? "";
+  // "item" = código exato do item no catálogo (CATMAT), em vez do grupo de produtos (PDM).
+  const item = c.req.query("item") ?? "";
   const pagina = paginaValida(c.req.query("pagina"));
   const inicio = c.req.query("inicio") ?? "";
   const fim = c.req.query("fim") ?? "";
-  if (!/^\d{1,7}$/.test(pdm) || !pagina || !DATA.test(inicio) || !DATA.test(fim)) return c.json({ erro: "Pesquisa inválida." }, 400);
+  const codigo = item || pdm;
+  if (!/^\d{1,9}$/.test(codigo) || !pagina || !DATA.test(inicio) || !DATA.test(fim)) return c.json({ erro: "Pesquisa inválida." }, 400);
   // "tamanho=10" só conta quantos registros existem (para ordenar os produtos do catálogo).
   const tamanho = c.req.query("tamanho") === "10" ? 10 : POR_PAGINA_MERCADO;
   return repassar(c, "/modulo-pesquisa-preco/1_consultarMaterial", {
     pagina: String(pagina),
     tamanhoPagina: String(tamanho),
-    tipo: "codigoPdm",
-    codigo: pdm,
+    tipo: item ? "codigoItemCatalogo" : "codigoPdm",
+    codigo,
     dataCompraInicio: inicio,
     dataCompraFim: fim,
   });

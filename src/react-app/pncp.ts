@@ -494,6 +494,7 @@ interface ItemCompra {
   materialOuServicoNome?: string | null;
   criterioJulgamentoNome?: string | null;
   tipoBeneficioNome?: string | null;
+  catalogoCodigoItem?: string | number | null;
 }
 
 export interface ArquivoPncp {
@@ -512,6 +513,8 @@ export interface ItemPncp {
   valorTotal: number | null;
   tipo: string;
   beneficio: string;
+  /** Código do item no catálogo do governo (CATMAT/CATSER), quando o PNCP informa. */
+  codigoCatalogo: number | null;
 }
 
 const baseCompra = (r: Pick<ResultadoPncp, "cnpj" | "ano" | "sequencial">) => `${r.cnpj}/compras/${r.ano}/${r.sequencial}`;
@@ -557,6 +560,7 @@ async function buscarItens(r: ResultadoPncp): Promise<ItemPncp[]> {
     valorTotal: i.valorTotal ?? (i.quantidade != null && i.valorUnitarioEstimado != null ? i.quantidade * i.valorUnitarioEstimado : null),
     tipo: i.materialOuServicoNome ?? "",
     beneficio: i.tipoBeneficioNome && !/sem benef|não se aplica/i.test(i.tipoBeneficioNome) ? i.tipoBeneficioNome : "",
+    codigoCatalogo: Number(i.catalogoCodigoItem) > 0 ? Number(i.catalogoCodigoItem) : null,
   }));
 }
 

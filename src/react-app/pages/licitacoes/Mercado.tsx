@@ -11,8 +11,8 @@ import { MapaMarcas } from "./MapaMarcas";
 // Inteligência de mercado: quais marcas e empresas mais vendem um produto ao governo e
 // quais estados mais compram. Dados abertos do Compras.gov.br (pesquisa de preços).
 
-type Pdm = [number, string, number, number]; // código, nome, classe, ativo
-type Catalogo = { classes: Record<string, string>; pdms: Pdm[] };
+export type Pdm = [number, string, number, number]; // código, nome, classe, ativo
+export type Catalogo = { classes: Record<string, string>; pdms: Pdm[] };
 type Candidato = { codigo: number; nome: string; classe: string; total: number };
 
 export const PERIODOS = [
@@ -33,7 +33,7 @@ export const NOMES_UF: Record<string, string> = {
 };
 
 let catalogoCache: Promise<Catalogo> | null = null;
-function carregarCatalogo() {
+export function carregarCatalogo() {
   catalogoCache ??= fetch("/dados/pdms.json").then((r) => {
     if (!r.ok) throw new Error("Não foi possível carregar o catálogo de produtos.");
     return r.json() as Promise<Catalogo>;
@@ -364,6 +364,16 @@ export function Mercado() {
 
   const resumo = useMemo(() => (registros ? resumir(registros, uf) : null), [registros, uf]);
   const geral = useMemo(() => (registros ? resumir(registros) : null), [registros]);
+
+  // Veio de outro lugar (ex.: botão "Marcas" de um item) com ?produto=...: já pesquisa.
+  useEffect(() => {
+    const produto = new URLSearchParams(window.location.search).get("produto");
+    if (produto) {
+      setTexto(produto);
+      void pesquisar(produto);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Sugestões enquanto digita (do catálogo oficial guardado na plataforma: na hora e sem custo).
   const sugestoes = useMemo(() => {
