@@ -97,6 +97,28 @@ export function palavrasDe(...textos: (string | null | undefined)[]): Set<string
   return s;
 }
 
+/**
+ * Código do modelo no texto do fornecedor ("LIV-LCS24FI-02I/LIV-..." → "LCS24FI-02I", "HJFI24C2WC/HJFE24C2C" → "HJFI24C2WC").
+ * Precisa ter letras e pelo menos 2 números; capacidade, tensão e ano (12000BTU, 220V, 2026) não contam.
+ */
+export function extrairModelo(texto: string | null | undefined, marca = ""): string {
+  if (!texto) return "";
+  const t = semAcentoMaiusculo(texto);
+  for (const bruta of t.split(/[\s/\\,;|()[\]{}:+*"'´`]+/)) {
+    const p = bruta.replace(/^[-_.]+|[-_.]+$/g, "");
+    const digitos = (p.match(/\d/g) ?? []).length;
+    const letras = (p.match(/[A-Z]/g) ?? []).length;
+    if (p.length < 5 || digitos < 2 || letras < 2) continue;
+    const junto = p.replace(/[-_.]/g, "");
+    if (/^\d+(K|BTUS?|BTUH|V|W|KW|MM|CM|ML|L|G|KG|GB|TB|MHZ|GHZ|HZ|POL)$/.test(junto)) continue;
+    if (/^(CX|PCT|C)?\d+(UN|UND|UNID|UNIDADES|PC|PCS|FL|FLS|RESMAS?)$/.test(junto)) continue; // quantidade, não modelo
+    // "LIV-LCS24FI-02I": tira o prefixo quando ele é a própria marca.
+    if (marca && p.startsWith(`${marca}-`) && p.length - marca.length - 1 >= 5) return p.slice(marca.length + 1);
+    return p;
+  }
+  return "";
+}
+
 export interface Linha {
   chave: string;
   nome: string;
@@ -107,8 +129,8 @@ export interface Linha {
   compras: number;
   /** Preço unitário mediano. */
   precoMediano: number | null;
-  /** Até 3 destaques (marcas de uma empresa, estados de uma marca...). */
-  destaques: { nome: string; valor: number }[];
+  /** Até 3 destaques (marcas de uma empresa, estados de uma marca...), por número de vitórias. */
+  destaques: { nome: string; valor: number; compras: number }[];
   /** CNPJ (só nas empresas). */
   cnpj?: string;
 }
@@ -123,6 +145,8 @@ export interface Resumo {
   marcas: Linha[];
   empresas: Linha[];
   estados: Linha[];
+  /** Modelos (código informado pelo fornecedor); destaques = marca. */
+  modelos: Linha[];
   /** Registros sem marca identificável. */
   semMarca: number;
 }
@@ -133,7 +157,7 @@ interface Acumulado {
   quantidade: number;
   compras: Set<string>;
   precos: number[];
-  sub: Map<string, number>;
+  sub: Map<string, { valor: number; compras: Set<string> }>;
   cnpj?: string;
 }
 
@@ -178,6 +202,7 @@ export function resumir(registros: RegistroPreco[], uf = ""): Resumo {
   const marcas = new Map<string, Acumulado>();
   const empresas = new Map<string, Acumulado>();
   const estados = new Map<string, Acumulado>();
+  const modelos = new Map<string, Acumulado>();
   const compras = new Set<string>();
   const cacheProduto = new Map<string, Set<string>>();
   let valorTotal = 0;
@@ -192,7 +217,12 @@ export function resumir(registros: RegistroPreco[], uf = ""): Resumo {
     a.quantidade += qtd;
     a.compras.add(compra);
     if (preco != null && preco > 0) a.precos.push(preco);
-    if (sub) a.sub.set(sub, (a.sub.get(sub) ?? 0) + valor);
+    if (sub) {
+      let x = a.sub.get(sub);
+      if (!x) a.sub.set(sub, (x = { valor: 0, compras: new Set() }));
+      x.valor += valor;
+      x.compras.add(compra);
+    }
   };
 
   for (const r of registros) {
@@ -225,6 +255,8 @@ export function resumir(registros: RegistroPreco[], uf = ""): Resumo {
     // Filiais da mesma empresa (mesma raiz do CNPJ) contam juntas.
     somar(empresas, cnpj.length === 14 ? cnpj.slice(0, 8) : cnpj || empresa, empresa, valor, qtd, preco, compra, marca, cnpj || undefined);
     if (estado) somar(estados, estado, estado, valor, qtd, preco, compra, marca);
+    const modelo = extrairModelo(r.marca, marca);
+    if (modelo) somar(modelos, modelo.replace(/[-_.]/g, ""), modelo, valor, qtd, preco, compra, marca);
   }
 
   const lista = (mapa: Map<string, Acumulado>): Linha[] =>
@@ -237,9 +269,9 @@ export function resumir(registros: RegistroPreco[], uf = ""): Resumo {
         compras: a.compras.size,
         precoMediano: mediana(a.precos),
         destaques: [...a.sub.entries()]
-          .sort((x, y) => y[1] - x[1])
-          .slice(0, 3)
-          .map(([nome, valor]) => ({ nome, valor })),
+          .map(([nome, x]) => ({ nome, valor: x.valor, compras: x.compras.size }))
+          .sort((x, y) => y.compras - x.compras || y.valor - x.valor)
+          .slice(0, 3),
         ...(a.cnpj ? { cnpj: a.cnpj } : {}),
       }))
       .sort((a, b) => b.valor - a.valor || b.compras - a.compras);
@@ -253,6 +285,7 @@ export function resumir(registros: RegistroPreco[], uf = ""): Resumo {
     marcas: lista(marcas),
     empresas: lista(empresas),
     estados: lista(estados),
+    modelos: lista(modelos),
     semMarca,
   };
 }
