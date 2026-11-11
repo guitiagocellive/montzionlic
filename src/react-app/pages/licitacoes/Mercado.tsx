@@ -15,7 +15,7 @@ type Pdm = [number, string, number, number]; // código, nome, classe, ativo
 type Catalogo = { classes: Record<string, string>; pdms: Pdm[] };
 type Candidato = { codigo: number; nome: string; classe: string; total: number };
 
-const PERIODOS = [
+export const PERIODOS = [
   { meses: 3, rotulo: "3 meses" },
   { meses: 6, rotulo: "6 meses" },
   { meses: 12, rotulo: "12 meses" },
@@ -25,7 +25,7 @@ const POR_PAGINA = 500;
 const LIMITE_PAGINAS = 40; // até 20 mil registros por pesquisa (os mais recentes)
 const MOSTRAR = 15;
 
-const NOMES_UF: Record<string, string> = {
+export const NOMES_UF: Record<string, string> = {
   AC: "Acre", AL: "Alagoas", AP: "Amapá", AM: "Amazonas", BA: "Bahia", CE: "Ceará", DF: "Distrito Federal",
   ES: "Espírito Santo", GO: "Goiás", MA: "Maranhão", MT: "Mato Grosso", MS: "Mato Grosso do Sul", MG: "Minas Gerais",
   PA: "Pará", PB: "Paraíba", PR: "Paraná", PE: "Pernambuco", PI: "Piauí", RJ: "Rio de Janeiro", RN: "Rio Grande do Norte",
@@ -42,9 +42,9 @@ function carregarCatalogo() {
   return catalogoCache;
 }
 
-const dataIso = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+export const dataIso = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 /** Últimos N meses começando no dia 1º do mês (ex.: 12 meses em 11/11/2026 → 01/11/2025 a 11/11/2026). */
-function intervalo(meses: number): [string, string] {
+export function intervalo(meses: number): [string, string] {
   const fim = new Date();
   const inicio = new Date(fim.getFullYear(), fim.getMonth() - meses, 1);
   return [dataIso(inicio), dataIso(fim)];
@@ -64,7 +64,7 @@ async function consultar(pdm: number, pagina: number, [inicio, fim]: [string, st
 }
 
 /** Executa tarefas com no máximo `n` ao mesmo tempo. */
-async function emLotes<T, R>(lista: T[], n: number, tarefa: (x: T) => Promise<R>): Promise<R[]> {
+export async function emLotes<T, R>(lista: T[], n: number, tarefa: (x: T) => Promise<R>): Promise<R[]> {
   const saida: R[] = new Array(lista.length);
   let proximo = 0;
   await Promise.all(
@@ -78,11 +78,11 @@ async function emLotes<T, R>(lista: T[], n: number, tarefa: (x: T) => Promise<R>
   return saida;
 }
 
-const valorCurto = (v: number) =>
+export const valorCurto = (v: number) =>
   v >= 1e9 ? `R$ ${formatarNumero(Math.round(v / 1e8) / 10)} bi` : v >= 1e6 ? `R$ ${formatarNumero(Math.round(v / 1e5) / 10)} mi` : v >= 1e4 ? `R$ ${formatarNumero(Math.round(v / 1e3))} mil` : formatarMoeda(v);
-const cnpjFormatado = (c?: string) => (c && c.length === 14 ? c.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5") : c ?? "");
+export const cnpjFormatado = (c?: string) => (c && c.length === 14 ? c.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5") : c ?? "");
 
-function Ranking({
+export function Ranking({
   titulo,
   icone,
   linhas,
@@ -191,7 +191,7 @@ const MESES_CURTOS = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "S
 const MESES_LONGOS = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 
 /** Valor homologado por mês, do início ao fim do período (meses sem compra entram zerados). */
-function GraficoMeses({ porMes, de, ate }: { porMes: { mes: string; valor: number; compras: number }[]; de: string; ate: string }) {
+export function GraficoMeses({ porMes, de, ate }: { porMes: { mes: string; valor: number; compras: number }[]; de: string; ate: string }) {
   const [sobre, setSobre] = useState<number | null>(null);
   const meses = useMemo(() => {
     const mapa = new Map(porMes.map((m) => [m.mes, m]));
@@ -266,9 +266,9 @@ function GraficoMeses({ porMes, de, ate }: { porMes: { mes: string; valor: numbe
 }
 
 type Angulo = "correspondencias" | "estados" | "marcas" | "empresas";
-type Periodo = { meses: number | null; de: string; ate: string };
+export type Periodo = { meses: number | null; de: string; ate: string };
 
-const periodoDe = (meses: number): Periodo => {
+export const periodoDe = (meses: number): Periodo => {
   const [de, ate] = intervalo(meses);
   return { meses, de, ate };
 };

@@ -10158,3 +10158,178 @@ code {
   background: color-mix(in oklab, var(--mapa-1) 38%, transparent);
   box-shadow: inset 0 0 0 1px var(--mapa-1);
 }
+
+/* ---------------- Análise de empresas ---------------- */
+.cabecalho-empresa {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 18px 0 10px;
+}
+.cabecalho-empresa > .texto-fraco {
+  width: 100%;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.68rem;
+}
+.cabecalho-empresa strong {
+  font-size: 0.98rem;
+}
+.abas-empresa {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 6px 0 16px;
+}
+.abas-empresa button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 14px;
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  background: var(--cartao, var(--superficie));
+  color: var(--texto-suave);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.abas-empresa button.ativa {
+  background: var(--acento);
+  border-color: var(--acento);
+  color: #fff;
+}
+.bloco-empresa {
+  margin-bottom: 14px;
+}
+.bloco-empresa h3,
+.ficha-empresa h3,
+.grafico-pizza h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--texto-suave);
+}
+.numeros-empresa {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  border-radius: var(--raio-sm);
+  background: var(--superficie-2);
+  overflow: hidden;
+}
+.numero-empresa {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px 12px;
+  text-align: center;
+}
+.numero-empresa + .numero-empresa {
+  box-shadow: -1px 0 0 var(--borda);
+}
+.numero-empresa strong {
+  font-size: 1.25rem;
+  font-variant-numeric: tabular-nums;
+}
+.numero-empresa span {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--texto-fraco);
+}
+.numero-empresa.verde strong {
+  color: var(--verde, #16a34a);
+}
+.numero-empresa.fraco strong {
+  color: var(--texto-fraco);
+}
+.grade-empresa {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.graficos-empresa {
+  margin-top: 14px;
+}
+.ficha-empresa dl {
+  display: grid;
+  grid-template-columns: minmax(120px, auto) 1fr;
+  gap: 8px 14px;
+  margin: 0;
+  font-size: 0.86rem;
+}
+.ficha-empresa dt {
+  color: var(--texto-fraco);
+}
+.ficha-empresa dd {
+  margin: 0;
+  font-weight: 600;
+}
+.pizza-corpo {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+.pizza-corpo svg {
+  width: 150px;
+  height: 150px;
+  flex: none;
+  transform: rotate(0deg);
+}
+.pizza-corpo circle {
+  transition: stroke-dasharray 0.6s var(--curva, ease);
+}
+.pizza-legenda {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.84rem;
+}
+.pizza-legenda span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pizza-legenda i {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+.pizza-legenda b {
+  margin-left: auto;
+  padding-left: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.correspondencia.cancelada {
+  opacity: 0.6;
+}
+.correspondencia-meta a {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--acento);
+}
+.nota-fonte-empresa {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+}
+@media (max-width: 900px) {
+  .grade-empresa {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .pizza-corpo svg {
+    width: 120px;
+    height: 120px;
+  }
+}

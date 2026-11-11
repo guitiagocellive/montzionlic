@@ -1,5 +1,6 @@
 import {
   BellRing,
+  Building2,
   Bot,
   CalendarDays,
   ChartColumnIncreasing,
@@ -56,6 +57,7 @@ export const AREAS: Area[] = [
       { caminho: "/licitacoes", rotulo: "Quadro de licitações", icone: KanbanSquare, modulo: "licitacoes" },
       { caminho: "/licitacoes/buscar", rotulo: "Buscar licitações", icone: FileSearch, modulo: "licitacoes" },
       { caminho: "/licitacoes/mercado", rotulo: "Inteligência de mercado", icone: TrendingUp, modulo: "licitacoes" },
+      { caminho: "/licitacoes/empresas", rotulo: "Análise de empresas", icone: Building2, modulo: "licitacoes" },
       { caminho: "/disputas", rotulo: "Disputas (robô de lances)", icone: Bot, modulo: "licitacoes" },
       { caminho: "/licitacoes/painel", rotulo: "Painel de licitações", icone: LayoutDashboard, modulo: "licitacoes" },
       { caminho: "/fornecedores", rotulo: "Fornecedores", icone: Truck, modulo: "fornecedores" },

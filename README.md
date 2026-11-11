@@ -64,6 +64,13 @@ Não existe cadastro público: só um administrador adiciona pessoas.
 - **Orçamento automático:** preço de venda = custo com frete ÷ (1 − impostos − lucro).
 - **IA gratuita (Workers AI):** lê edital/termo de referência (PDF, imagem, Word, Excel), resume,
   preenche os dados e importa os itens. Limite grátis diário (~8 a 10 editais).
+- **Análise de empresas:** Licitações → Análise de empresas (como no Siga Pregão). Digite o CNPJ de um concorrente (ou
+  o seu) e o período (últimos 12 meses por padrão): cadastro (razão social, cidade, porte, CNAE, se pode licitar),
+  **vitórias** (itens vencidos, licitações, órgãos, cancelados), **valores** (homologado, compras diretas e registrado
+  em atas), **vitórias por modalidade**, mapa e gráfico por mês, produtos que mais vence, órgãos que mais compram dela
+  (com nome), estados e a lista dos itens vencidos com link para o PNCP. Fonte: resultados oficiais do PNCP (todas as
+  plataformas que publicam lá) e cadastro de fornecedores do Compras.gov.br; a base aberta só traz as vitórias
+  (disputas perdidas, desclassificações e inabilitações não são publicadas).
 - **Inteligência de mercado:** Licitações → Inteligência de mercado (no estilo da Análise de Mercado do Siga Pregão).
   Ao digitar, aparecem **sugestões** do catálogo oficial do governo; o período já vem nos **últimos 12 meses** (atalhos
   3/6/24 meses ou datas no calendário). Mostra o **mapa do Brasil** (marca que mais vence em cada estado, ou volume de
