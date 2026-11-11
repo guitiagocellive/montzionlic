@@ -6,6 +6,7 @@ export interface RegistroPreco {
   idCompra: number | string;
   idItemCompra?: number | string;
   dataCompra?: string | null;
+  dataResultado?: string | null;
   niFornecedor?: string | null;
   nomeFornecedor?: string | null;
   marca?: string | null;
@@ -82,6 +83,8 @@ export function normalizarMarca(texto: string | null | undefined, palavrasDoProd
     if (MARCAS_CURTAS.has(p)) return p;
     if (p.length < 3) continue;
     if (NAO_E_MARCA.has(p) || palavrasDoProduto.has(p) || /^(INVERT|ESPECIFIC|CONFORM|REFRIGER|DESCRI)/.test(p)) continue;
+    // Palavra do produto cortada pelo fornecedor ("MICROCOMPUTA" de "MICROCOMPUTADOR").
+    if (p.length >= 6 && [...palavrasDoProduto].some((w) => w.startsWith(p))) continue;
     const digitos = (p.match(/\d/g) ?? []).length;
     if (digitos >= 2 || (digitos === 1 && p.length <= 5)) continue; // código de modelo (HJQ24000, PDFE48C, 12K...)
     if (!/[A-Z]/.test(p)) continue;
@@ -145,6 +148,8 @@ export interface Resumo {
   marcas: Linha[];
   empresas: Linha[];
   estados: Linha[];
+  /** Valor homologado e licitações por mês ("2026-03"), pela data do resultado. */
+  porMes: { mes: string; valor: number; compras: number }[];
   /** Modelos (código informado pelo fornecedor); destaques = marca. */
   modelos: Linha[];
   /** Registros sem marca identificável. */
@@ -203,6 +208,7 @@ export function resumir(registros: RegistroPreco[], uf = ""): Resumo {
   const empresas = new Map<string, Acumulado>();
   const estados = new Map<string, Acumulado>();
   const modelos = new Map<string, Acumulado>();
+  const meses = new Map<string, { valor: number; compras: Set<string> }>();
   const compras = new Set<string>();
   const cacheProduto = new Map<string, Set<string>>();
   let valorTotal = 0;
@@ -255,6 +261,13 @@ export function resumir(registros: RegistroPreco[], uf = ""): Resumo {
     // Filiais da mesma empresa (mesma raiz do CNPJ) contam juntas.
     somar(empresas, cnpj.length === 14 ? cnpj.slice(0, 8) : cnpj || empresa, empresa, valor, qtd, preco, compra, marca, cnpj || undefined);
     if (estado) somar(estados, estado, estado, valor, qtd, preco, compra, marca);
+    const mes = (r.dataResultado || r.dataCompra || "").slice(0, 7);
+    if (/^\d{4}-\d{2}$/.test(mes)) {
+      let m = meses.get(mes);
+      if (!m) meses.set(mes, (m = { valor: 0, compras: new Set() }));
+      m.valor += valor;
+      m.compras.add(compra);
+    }
     const modelo = extrairModelo(r.marca, marca);
     if (modelo) somar(modelos, modelo.replace(/[-_.]/g, ""), modelo, valor, qtd, preco, compra, marca);
   }
@@ -286,6 +299,7 @@ export function resumir(registros: RegistroPreco[], uf = ""): Resumo {
     empresas: lista(empresas),
     estados: lista(estados),
     modelos: lista(modelos),
+    porMes: [...meses.entries()].map(([mes, m]) => ({ mes, valor: m.valor, compras: m.compras.size })).sort((a, b) => a.mes.localeCompare(b.mes)),
     semMarca,
   };
 }

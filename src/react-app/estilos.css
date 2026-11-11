@@ -9899,3 +9899,234 @@ code {
 .ajuda-defender[open] summary {
   margin-bottom: 8px;
 }
+
+/* ---- Mercado v3: mapa refinado + gráfico por mês ---- */
+[data-tema="escuro"] {
+  --mapa-baixo: #1b2a45;
+  --mapa-meio: #2a78d6;
+  --mapa-alto: #b7d3f6;
+  --mapa-vazio: #1e1e24;
+}
+[data-tema="claro"] {
+  --mapa-baixo: #dceafc;
+  --mapa-meio: #5598e7;
+  --mapa-alto: #184f95;
+  --mapa-vazio: #ededf1;
+}
+.painel-mercado {
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 24px;
+}
+.mapa-marcas {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mapa-cabecalho {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.mapa-desenho {
+  max-width: 520px;
+  padding: 4px 8px 0;
+}
+.estado-mapa {
+  stroke: var(--mapa-borda);
+  stroke-width: 0.9;
+  stroke-linejoin: round;
+  transition: fill 0.35s ease;
+}
+.estado-mapa.com-dados:hover {
+  opacity: 1;
+}
+.contorno-mapa {
+  fill: none;
+  stroke: var(--texto);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+.contorno-mapa.ativo {
+  stroke: var(--acento);
+  stroke-width: 2.4;
+}
+.dica-mapa.esquerda {
+  transform: translate(calc(-100% - 12px), 12px);
+}
+.dica-mapa strong .texto-fraco {
+  font-weight: 500;
+  font-size: 0.74rem;
+}
+.posicao-dica {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--superficie-2);
+  font-size: 0.66rem;
+  font-weight: 600;
+}
+.legenda-mapa {
+  gap: 6px;
+}
+.degrade-mapa {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.76rem;
+}
+.degrade-mapa i {
+  flex: 1;
+  max-width: 260px;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--mapa-baixo), var(--mapa-meio), var(--mapa-alto));
+  box-shadow: 0 0 0 1px var(--borda);
+}
+.marcas-mapa {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+.marcas-mapa .item-legenda {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.marcas-mapa .item-legenda .texto-fraco {
+  margin-left: 2px;
+  font-weight: 400;
+}
+.lado-mercado {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.grafico-meses {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.grafico-meses-topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+.destaque-mes {
+  font-size: 0.84rem;
+}
+.destaque-mes b {
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+}
+.barras-meses {
+  display: grid;
+  gap: 4px;
+  height: 180px;
+  padding-top: 6px;
+  border-bottom: 1px solid var(--borda);
+}
+.coluna-mes {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: default;
+}
+.trilho-mes {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+.coluna-mes.ativa .trilho-mes {
+  background: color-mix(in oklab, var(--mapa-1) 10%, transparent);
+}
+.barra-mes {
+  width: 100%;
+  max-width: 28px;
+  border-radius: 4px 4px 1px 1px;
+  background: var(--mapa-1);
+  transition: height 0.5s var(--curva, ease);
+}
+.coluna-mes.consolidando .barra-mes {
+  background: color-mix(in oklab, var(--mapa-1) 38%, transparent);
+  box-shadow: inset 0 0 0 1px var(--mapa-1);
+}
+.rotulo-mes {
+  height: 18px;
+  margin-top: 4px;
+  font-size: 0.62rem;
+  letter-spacing: 0.02em;
+  color: var(--texto-fraco);
+  text-align: center;
+  overflow: hidden;
+}
+.coluna-mes.ativa .rotulo-mes {
+  color: var(--texto);
+  font-weight: 600;
+}
+.nota-consolidando {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+.nota-consolidando i {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  margin-top: 2px;
+  border-radius: 3px;
+  background: color-mix(in oklab, var(--mapa-1) 38%, transparent);
+  box-shadow: inset 0 0 0 1px var(--mapa-1);
+}
+.detalhe-mes {
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 1000px) {
+  .painel-mercado {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.como-contamos {
+  margin-top: 16px;
+  padding: 12px 16px;
+  border-radius: var(--raio-sm);
+  border: 1px solid var(--borda);
+  background: var(--cartao, var(--superficie));
+}
+.como-contamos summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.como-contamos ul {
+  margin: 10px 0 2px;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--texto-suave);
+}
+.barras-meses {
+  height: 210px;
+}

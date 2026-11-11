@@ -70,7 +70,10 @@ Não existe cadastro público: só um administrador adiciona pessoas.
   compras), o valor total homologado e os **ângulos de análise**: **Correspondências** (as compras encontradas, com
   órgão, vencedor, marca e preço), **Estados**, **Marcas** (e os modelos mais vencedores) e **Empresas** (com CNPJ),
   por vitórias ou valor homologado e com o preço unitário mediano. Clicar num estado (no mapa ou na lista) filtra
-  marcas, empresas e correspondências. Cada lista baixa em CSV.
+  marcas, empresas e correspondências. Cada lista baixa em CSV. Ao lado do mapa, o **gráfico do valor homologado por
+  mês** (meses recentes "em consolidação") e o valor total. O bloco "Como os números são calculados" explica por que
+  outras plataformas podem mostrar valores diferentes (busca por palavra solta, participantes em vez de vencedores,
+  outras plataformas de compra).
   - Fonte: dados abertos do Compras.gov.br (pesquisa de preços), grátis e sem login; entram as compras feitas pelo
     Compras.gov.br (federal e estados/municípios que usam). O servidor só repassa e guarda as respostas por 12 h; a
     soma é feita no navegador (cabe no plano grátis). Analisa até 20 mil itens (os mais recentes) por pesquisa.

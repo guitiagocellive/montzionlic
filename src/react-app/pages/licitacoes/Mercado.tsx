@@ -1,6 +1,6 @@
 import { ArrowRight, Building2, Download, FileSearch, Info, Loader2, MapPin, Search, Tag, TrendingUp, X } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { buscarNoCatalogo, type Linha, type RegistroPreco, resumir, semRepetidos } from "../../../shared/mercado";
+import { buscarNoCatalogo, type Linha, type RegistroPreco, resumir, semAcentoMaiusculo, semRepetidos } from "../../../shared/mercado";
 import { dataBr, SeletorIntervalo } from "../../components/Calendario";
 import { baixarCsv } from "../../components/Periodo";
 import { useFecharAoClicarFora } from "../../components/useFecharAoClicarFora";
@@ -187,6 +187,84 @@ function Ranking({
   );
 }
 
+const MESES_CURTOS = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
+const MESES_LONGOS = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+
+/** Valor homologado por mês, do início ao fim do período (meses sem compra entram zerados). */
+function GraficoMeses({ porMes, de, ate }: { porMes: { mes: string; valor: number; compras: number }[]; de: string; ate: string }) {
+  const [sobre, setSobre] = useState<number | null>(null);
+  const meses = useMemo(() => {
+    const mapa = new Map(porMes.map((m) => [m.mes, m]));
+    const lista: { mes: string; valor: number; compras: number }[] = [];
+    let [a, m] = de.slice(0, 7).split("-").map(Number);
+    const [af, mf] = ate.slice(0, 7).split("-").map(Number);
+    while ((a < af || (a === af && m <= mf)) && lista.length < 60) {
+      const chave = `${a}-${String(m).padStart(2, "0")}`;
+      lista.push(mapa.get(chave) ?? { mes: chave, valor: 0, compras: 0 });
+      m++;
+      if (m > 12) {
+        m = 1;
+        a++;
+      }
+    }
+    return lista;
+  }, [porMes, de, ate]);
+  if (!meses.length) return null;
+  const max = Math.max(1, ...meses.map((m) => m.valor));
+  const pico = meses.reduce((p, m, i) => (m.valor > meses[p].valor ? i : p), 0);
+  // Meses recentes ainda recebem resultados e atas: os valores tendem a crescer.
+  const hoje = new Date();
+  const limite = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}`;
+  const anterior = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+  const limiteAnterior = `${anterior.getFullYear()}-${String(anterior.getMonth() + 1).padStart(2, "0")}`;
+  const consolidando = (mes: string) => mes === limite || mes === limiteAnterior;
+  const temConsolidando = meses.some((m) => consolidando(m.mes));
+  const pular = meses.length > 14 ? 2 : 1;
+  const nome = (mes: string) => {
+    const [a, m] = mes.split("-").map(Number);
+    return { curto: MESES_CURTOS[m - 1], longo: `${MESES_LONGOS[m - 1]} de ${a}`, ano: a };
+  };
+  const ativo = sobre ?? pico;
+  const m = meses[ativo];
+
+  return (
+    <div className="grafico-meses">
+      <div className="grafico-meses-topo">
+        <span className="texto-fraco pequeno">Valor homologado por mês</span>
+        <span className="destaque-mes">
+          <b>{valorCurto(m.valor)}</b> <span className="texto-fraco">em {nome(m.mes).longo}{sobre == null && m.valor > 0 ? " (pico)" : ""}</span>
+        </span>
+      </div>
+      <div className="barras-meses" style={{ gridTemplateColumns: `repeat(${meses.length}, minmax(0, 1fr))` }} onMouseLeave={() => setSobre(null)}>
+        {meses.map((x, i) => (
+          <button
+            key={x.mes}
+            type="button"
+            className={`coluna-mes ${i === ativo ? "ativa" : ""} ${consolidando(x.mes) ? "consolidando" : ""}`}
+            onMouseEnter={() => setSobre(i)}
+            onFocus={() => setSobre(i)}
+            onBlur={() => setSobre(null)}
+            aria-label={`${nome(x.mes).longo}: ${formatarMoeda(x.valor)}, ${formatarNumero(x.compras)} licitações`}
+          >
+            <span className="trilho-mes">
+              <span className="barra-mes" style={{ height: `${x.valor > 0 ? Math.max(2, (x.valor / max) * 100) : 0}%` }} />
+            </span>
+            <span className="rotulo-mes">{i % pular === 0 || i === meses.length - 1 ? nome(x.mes).curto : ""}</span>
+          </button>
+        ))}
+      </div>
+      <span className="texto-fraco pequeno detalhe-mes">
+        {formatarNumero(m.compras)} licitações em {nome(m.mes).longo}
+      </span>
+      {temConsolidando && (
+        <span className="nota-consolidando texto-fraco">
+          <i aria-hidden="true" /> Meses em consolidação: os valores tendem a crescer à medida que as compras são homologadas e as atas ficam disponíveis.
+        </span>
+      )}
+    </div>
+  );
+}
+
 type Angulo = "correspondencias" | "estados" | "marcas" | "empresas";
 type Periodo = { meses: number | null; de: string; ate: string };
 
@@ -364,9 +442,11 @@ export function Mercado() {
         .sort((a, b) => b.total - a.total);
       setCandidatos(lista);
       const maior = lista[0]?.total ?? 0;
-      const marcados = forcado
-        ? [forcado[0]]
-        : lista.filter((c, i) => c.total > 0 && (i === 0 || c.total >= maior * 0.25)).slice(0, 4).map((c) => c.codigo);
+      // O catálogo do governo tem produtos repetidos com outra grafia ("TECLADO MICROCOMPUTADOR" e
+      // "Teclado Microcomputador"): entram juntos com o escolhido.
+      const mesmoNome = (a: string, b: string) => semAcentoMaiusculo(a).replace(/[^A-Z0-9]/g, "") === semAcentoMaiusculo(b).replace(/[^A-Z0-9]/g, "");
+      const base = forcado ? lista.filter((c) => c.codigo === forcado[0]) : lista.filter((c, i) => c.total > 0 && (i === 0 || c.total >= maior * 0.25)).slice(0, 4);
+      const marcados = [...new Set([...base, ...lista.filter((c) => c.total > 0 && base.some((b) => mesmoNome(b.nome, c.nome)))].map((c) => c.codigo))];
       setEscolhidos(marcados);
       await analisar(lista, marcados, p, id);
     } catch (err) {
@@ -427,7 +507,7 @@ export function Mercado() {
   const termo = info?.produtos.length === 1 ? info.produtos[0] : texto.trim();
   const ANGULOS: { chave: Angulo; nome: string; icone: ReactNode; valor: number; legenda: string }[] = resumo
     ? [
-        { chave: "correspondencias", nome: "Correspondências", icone: <FileSearch />, valor: resumo.compras, legenda: `licitações com ${formatarNumero(resumo.registros)} itens vencidos` },
+        { chave: "correspondencias", nome: "Correspondências", icone: <FileSearch />, valor: resumo.registros, legenda: `itens disputados e vencidos em ${formatarNumero(resumo.compras)} licitações` },
         { chave: "estados", nome: "Estados", icone: <MapPin />, valor: geral?.estados.length ?? 0, legenda: "estados compraram" },
         { chave: "marcas", nome: "Marcas", icone: <Tag />, valor: resumo.marcas.length, legenda: `marcas vencedoras · ${pctSemMarca}% sem marca identificável` },
         { chave: "empresas", nome: "Empresas", icone: <Building2 />, valor: resumo.empresas.length, legenda: "empresas vencedoras" },
@@ -604,12 +684,15 @@ export function Mercado() {
 
               <section className="cartao painel-mercado entrar" style={{ ["--i" as string]: 2 }}>
                 <MapaMarcas estados={geral.estados} ativo={uf} aoEscolher={(x) => setUf(uf === x ? "" : x)} />
+                <div className="lado-mercado">
+                <GraficoMeses porMes={resumo.porMes} de={periodo.de} ate={periodo.ate} />
                 <div className="total-mercado">
                   <span className="texto-fraco pequeno">Valor total homologado{uf ? ` em ${NOMES_UF[uf] ?? uf}` : ""}</span>
                   <strong className="texto-gradiente">{formatarMoeda(resumo.valor)}</strong>
                   <span className="texto-fraco pequeno">
                     {formatarNumero(resumo.compras)} licitações · {formatarNumero(resumo.quantidade)} unidades · {dataBr(periodo.de)} a {dataBr(periodo.ate)}
                   </span>
+                </div>
                 </div>
               </section>
 
@@ -711,6 +794,34 @@ export function Mercado() {
                   />
                 )}
               </div>
+
+              <details className="como-contamos">
+                <summary>
+                  <Info size={15} aria-hidden="true" /> Como os números são calculados (e por que podem diferir de outras plataformas)
+                </summary>
+                <ul>
+                  <li>
+                    <b>Produto, não palavra solta:</b> a análise usa os produtos do catálogo oficial do governo marcados acima ({info.produtos.join(", ") || "—"}).
+                    Plataformas que procuram a palavra em qualquer descrição também contam itens que só citam o produto — por exemplo, um
+                    computador "com teclado e mouse" entra numa busca por "teclado". Por isso os valores delas podem ser bem maiores.
+                  </li>
+                  <li>
+                    <b>Só quem venceu:</b> empresas e marcas são as <b>vencedoras</b> de cada item. Outras plataformas costumam mostrar todas as
+                    participantes (quem só deu lance), o que dá números muito maiores.
+                  </li>
+                  <li>
+                    <b>Valor homologado:</b> preço vencedor × quantidade de cada item, pela data do resultado. Inclui as quantidades
+                    registradas em atas (registro de preços).
+                  </li>
+                  <li>
+                    <b>Fonte:</b> dados abertos oficiais do Compras.gov.br (governo federal e estados e municípios que usam a plataforma).
+                    Compras feitas só em outras plataformas (BLL, Licitanet, Portal de Compras Públicas…) não entram.
+                  </li>
+                  <li>
+                    <b>Período:</b> {dataBr(periodo.de)} a {dataBr(periodo.ate)}. Para comparar com outra plataforma, use o mesmo período nas duas.
+                  </li>
+                </ul>
+              </details>
 
               <p className="explicacao fonte-mercado">
                 <Info aria-hidden="true" />
