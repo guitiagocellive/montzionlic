@@ -9127,3 +9127,38 @@ code {
     display: none;
   }
 }
+
+/* Compras sem disputa acontecendo agora (recolhidas) */
+.sem-disputa {
+  margin-top: 16px;
+}
+
+.sem-disputa > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 4px;
+  font-weight: 600;
+  color: var(--texto-suave);
+  cursor: pointer;
+  list-style: none;
+}
+
+.sem-disputa > summary::-webkit-details-marker {
+  display: none;
+}
+
+.sem-disputa > summary .seta {
+  width: 16px;
+  height: 16px;
+  transform: rotate(-90deg);
+  transition: transform 0.2s var(--curva);
+}
+
+.sem-disputa[open] > summary .seta {
+  transform: none;
+}
+
+.sem-disputa .compra-disputa {
+  opacity: 0.85;
+}

@@ -234,7 +234,7 @@ func configuracao() configPonte {
 
 // Liga a ponte do robô de lances ao motor das janelas. Na janela própria fica tentando (e se religa se
 // cair) enquanto o aplicativo estiver aberto; no modo navegador para quando o navegador fecha.
-func ligarPonte(arquivoPorta string, porta int, abrirCompras func() bool, sempre bool) {
+func ligarPonte(arquivoPorta string, porta int, abrirCompras func() bool, esconderCompras func(), sempre bool) {
 	for tentativa := 0; ; tentativa++ {
 		ws, real, err := esperarDevTools(arquivoPorta, porta, 60*time.Second)
 		if err != nil {
@@ -245,6 +245,7 @@ func ligarPonte(arquivoPorta string, porta int, abrirCompras func() bool, sempre
 			registrarLog("ponte do robô ligada (porta %d)", real)
 			p := novaPonte(configuracao(), cdp)
 			p.abrirCompras = abrirCompras
+			p.esconderCompras = esconderCompras
 			if err := p.Rodar(); err != nil {
 				registrarLog("ponte do robô parou: %v", err)
 			} else {
@@ -293,7 +294,7 @@ func abrir() {
 	err = janelaNativa(configuracao(), porta, func() {
 		registrarLog("janela própria aberta")
 		if comPonte {
-			go ligarPonte(arquivoPorta, porta, pedirJanelaCompras, true)
+			go ligarPonte(arquivoPorta, porta, pedirJanelaCompras, pedirEsconderCompras, true)
 		}
 	})
 	if err == nil {
@@ -348,7 +349,7 @@ func abrirModoNavegador(comPonte bool) {
 		_ = exec.Command(navegador, "--app="+endereco, "--start-maximized").Start()
 		return
 	}
-	ligarPonte(filepath.Join(perfil, "DevToolsActivePort"), porta, nil, false)
+	ligarPonte(filepath.Join(perfil, "DevToolsActivePort"), porta, nil, nil, false)
 }
 
 func main() {

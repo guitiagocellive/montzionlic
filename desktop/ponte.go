@@ -65,6 +65,9 @@ type ponte struct {
 	menuVisto  map[string]bool      // endereços do portal cujo menu já foi anotado no registro
 	// Janela própria do aplicativo: abre/foca a janela nativa do Compras.gov.br (nil = aba do navegador).
 	abrirCompras func() bool
+	// Esconde a janela do Compras.gov.br depois do login (nil = não dá para esconder).
+	esconderCompras func()
+	estavaLogado    bool // para esconder a janela só na hora em que o login acontece
 }
 
 var (
@@ -235,12 +238,20 @@ func (p *ponte) sessaoLogada(verificar bool) *sessaoAlvo {
 				registrarLog("ponte: sessão da sala de disputa encontrada em %s", a.url)
 			}
 			p.logada = a.alvo
+			esconder := !p.estavaLogado && p.esconderCompras != nil
+			p.estavaLogado = true
 			p.mu.Unlock()
+			if esconder {
+				// Login feito: a janela do Compras.gov.br sai da tela e o robô segue com ela escondida.
+				p.esconderCompras()
+				registrarLog("ponte: login feito; janela do Compras.gov.br escondida")
+			}
 			return a
 		}
 	}
 	p.mu.Lock()
 	p.logada = ""
+	p.estavaLogado = false
 	p.mu.Unlock()
 	return nil
 }
@@ -420,6 +431,9 @@ func mensagemErro(corpo json.RawMessage) string {
 		}
 	}
 	s := strings.TrimSpace(string(corpo))
+	if strings.HasPrefix(s, "<") { // página HTML de erro: fica só o texto
+		s = strings.Join(strings.Fields(regexp.MustCompile(`<[^>]*>`).ReplaceAllString(s, " ")), " ")
+	}
 	if len(s) > 200 {
 		s = s[:200]
 	}
@@ -512,7 +526,10 @@ func (p *ponte) executar(tipo, compra string, item int, valor float64, fase stri
 			return mapa{"erro": err.Error()}
 		}
 		if status == 401 || status == 403 {
-			return mapa{"erro": "Sessão do Compras.gov.br expirada: entre de novo na janela do Compras.gov.br."}
+			return mapa{"erro": "Sessão do Compras.gov.br expirada: clique em Entrar no Compras.gov.br."}
+		}
+		if status == 429 {
+			return mapa{"erro": "O Compras.gov.br pediu para ir mais devagar (muitas consultas seguidas). Tentando de novo em instantes.", "devagar": true}
 		}
 		if status != 200 {
 			return mapa{"erro": fmt.Sprintf("O Compras.gov.br respondeu %d: %s", status, mensagemErro(corpo))}
@@ -739,6 +756,10 @@ func (p *ponte) buscarLista(a *sessaoAlvo) (json.RawMessage, error) {
 		}
 		ultimoErro = strings.Join(v.Erros, " | ")
 		time.Sleep(time.Second)
+	}
+	// Pode ser um desafio do captcha: mostra a janela do Compras.gov.br para a pessoa resolver.
+	if p.abrirCompras != nil {
+		p.abrirCompras()
 	}
 	return nil, fmt.Errorf("o Compras.gov.br não devolveu a lista de disputas (%s). Se aparecer um desafio do captcha na janela do Compras.gov.br, resolva e clique em atualizar", ultimoErro)
 }

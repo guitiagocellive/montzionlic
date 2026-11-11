@@ -90,7 +90,12 @@ Não existe cadastro público: só um administrador adiciona pessoas.
   (portal antigo); a sala de disputa é outro sistema, então a ponte lê o menu da Área de Trabalho, acha o item da
   sala de disputa e abre sozinha (os itens do menu ficam anotados no `montzion.log`). A lista de disputas é pedida
   direto na aba logada, como a sala de disputa faz ao abrir o painel "Demais compras" (com o captcha invisível da
-  própria página, para compras novas e legadas), e as compras já abrem sozinhas na página Disputas. A ponte lê a porta real do
+  própria página, para compras novas e legadas), e as compras já abrem sozinhas na página Disputas.
+  Ficam de fora as compras revogadas, anuladas, desertas, fracassadas e as que já passaram da disputa (fase 4); as
+  que não têm item em disputa agora vão para "Sem disputa agora" (conferidas a cada 2 min). As consultas são uma por
+  vez, com folga (robô ligado nos segundos finais a cada 0,6 s, robô ligado a cada 3 s, compra aberta a cada 5 s),
+  para o Compras.gov.br não bloquear (erro 429). Depois do login a janela do Compras.gov.br é escondida sozinha
+  (e pop-ups do gov.br abrem nela mesma); ela só volta se precisar resolver um captcha. A ponte lê a porta real do
   motor (`DevToolsActivePort`) e se religa sozinha, e a página Disputas sabe quando está dentro do aplicativo
   (`window.montzionApp`). A página Disputas lista as disputas da conta
   (pregões e dispensas), os itens com melhor lance, meu lance e cronômetro, e por item: lance mínimo, desconto

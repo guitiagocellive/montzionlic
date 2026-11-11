@@ -39,6 +39,8 @@ const relogio = (seg: number) => {
   return `${p(Math.floor(s / 3600))}:${p(Math.floor((s % 3600) / 60))}:${p(s % 60)}`;
 };
 
+const FOLGA_MS = 600; // tempo mínimo entre duas consultas ao Compras.gov.br
+
 const textoNumero = (v: number | null | undefined) => (v == null ? "" : String(v).replace(".", ","));
 
 export function Disputas({ usuario }: { usuario: Usuario }) {
@@ -55,6 +57,7 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
   const [textos, setTextos] = useState<Record<string, string>>({});
   const [mensagens, setMensagens] = useState<Record<string, { texto: string; erro?: boolean }>>({});
   const [agora, setAgora] = useState(Date.now());
+  const [descartadas, setDescartadas] = useState(0);
 
   // Estado que o laço do robô lê sem recriar o intervalo.
   const ref = useRef({ leituras, config, compras, abertas });
@@ -63,6 +66,10 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
   const lendo = useRef(new Set<string>());
   const enviandoAte = useRef(new Map<string, number>());
   const ultimaLeitura = useRef(new Map<string, number>());
+  const mexidas = useRef(new Set<string>()); // compras que a pessoa abriu/fechou (não abrimos/fechamos sozinhos)
+  const esperarAte = useRef(new Map<string, number>()); // compra -> quando pode consultar de novo (depois de 429)
+  const pausaGeral = useRef(0);
+  const ultimoPedido = useRef(0);
 
   // A ponte pode aparecer um pouco depois da página carregar.
   useEffect(() => {
@@ -75,12 +82,13 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
     setCarregandoCompras(true);
     try {
       const r = await ponte.compras(atualizar);
-      const lista = listaDe(r.compras)
+      const todas = listaDe(r.compras)
         .map(lerCompra)
         .filter((x): x is CompraDisputa => !!x);
+      // Fora: revogadas, anuladas, desertas, fracassadas e as que já passaram da disputa (pela situação/fase da compra).
+      const lista = todas.filter((c) => !c.encerrada);
+      setDescartadas(todas.length - lista.length);
       setCompras(lista);
-      // Como o Siga Pregão: já entra nas disputas (abre as compras e lê os itens sem precisar clicar).
-      setAbertas((atual) => (atual.size ? atual : new Set(lista.slice(0, 4).map((c) => c.chave))));
       if (lista.length) {
         const cfg = await api<{ itens: Record<string, ConfigItemRobo> }>(`/robo/itens?compras=${encodeURIComponent(lista.map((c) => c.chave).join(","))}`);
         setConfig((atual) => ({ ...cfg.itens, ...atual }));
@@ -135,9 +143,19 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
       const leitura = { itens, lidoEm: Date.now() };
       ultimaLeitura.current.set(chave, leitura.lidoEm);
       setLeituras((l) => ({ ...l, [chave]: leitura }));
+      // Como o Siga Pregão: compra com disputa acontecendo já abre sozinha (a não ser que a pessoa tenha fechado).
+      if (itens.length > 0 && !mexidas.current.has(chave)) setAbertas((s) => (s.has(chave) ? s : new Set(s).add(chave)));
       await agir(chave, leitura);
     } catch (e) {
-      setLeituras((l) => ({ ...l, [chave]: { ...(l[chave] ?? { itens: [], lidoEm: 0 }), erro: mensagemDeErro(e) } }));
+      const msg = mensagemDeErro(e);
+      if (/devagar|429/i.test(msg)) {
+        // O Compras.gov.br limitou: espera antes de consultar de novo. Com o robô ligado a espera é curta
+        // (não dá para perder os segundos finais); nas outras compras, 15 s e uma pausa geral de 5 s.
+        const roboLigado = Object.entries(ref.current.config).some(([k, v]) => v.ligado && k.startsWith(`${chave}:`));
+        esperarAte.current.set(chave, Date.now() + (roboLigado ? 1500 : 15000));
+        if (!roboLigado) pausaGeral.current = Date.now() + 5000;
+      }
+      setLeituras((l) => ({ ...l, [chave]: { ...(l[chave] ?? { itens: [], lidoEm: 0 }), erro: msg } }));
     } finally {
       lendo.current.delete(chave);
     }
@@ -173,21 +191,32 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
     }
   }
 
-  // Laço: com robô ligado, lê a cada segundo (e a cada 0,4 s perto do fim); abertas na tela a cada segundo;
-  // as outras a cada 15 s.
+  // Laço: consulta o Compras.gov.br com calma para não ser bloqueado (erro 429). Um pedido por vez, com
+  // folga entre eles; robô ligado nos segundos finais a cada 0,6 s, robô ligado a cada 3 s, compra em disputa aberta
+  // na tela a cada 5 s, fechada a cada 15 s, e compra sem disputa agora a cada 2 min.
   useEffect(() => {
     if (!estado?.conectado) return;
     const t = setInterval(() => {
-      setAgora(Date.now());
+      const agoraMs = Date.now();
+      setAgora(agoraMs);
       const { compras: lista, config: cfg, abertas: ab, leituras: ls } = ref.current;
+      if (agoraMs < pausaGeral.current || agoraMs - ultimoPedido.current < FOLGA_MS) return;
+      let melhor: { chave: string; atraso: number; prioridade: number } | null = null;
       for (const c of lista ?? []) {
+        if ((esperarAte.current.get(c.chave) ?? 0) > agoraMs || lendo.current.has(c.chave)) continue;
         const ligado = Object.entries(cfg).some(([k, v]) => v.ligado && k.startsWith(`${c.chave}:`));
         const l = ls[c.chave];
+        const emDisputa = !!l && l.itens.length > 0;
         const pertoDoFim =
-          ligado &&
-          !!l?.itens.some((i) => i.fase === "AL" || (i.restanteSeg != null && i.restanteSeg - (Date.now() - l.lidoEm) / 1000 <= SEGUNDOS_FINAIS + 5));
-        const intervalo = pertoDoFim ? 400 : ligado || ab.has(c.chave) ? 1000 : 15000;
-        if (Date.now() - (ultimaLeitura.current.get(c.chave) ?? 0) >= intervalo) lerCompraAgora(c.chave);
+          ligado && !!l?.itens.some((i) => i.fase === "AL" || (i.restanteSeg != null && i.restanteSeg - (agoraMs - l.lidoEm) / 1000 <= SEGUNDOS_FINAIS + 5));
+        const [intervalo, prioridade] = pertoDoFim ? [600, 4] : ligado ? [3000, 3] : !l ? [0, 2] : emDisputa ? (ab.has(c.chave) ? [5000, 1] : [15000, 1]) : [120000, 0];
+        const atraso = agoraMs - (ultimaLeitura.current.get(c.chave) ?? 0) - intervalo;
+        if (atraso < 0) continue;
+        if (!melhor || prioridade > melhor.prioridade || (prioridade === melhor.prioridade && atraso > melhor.atraso)) melhor = { chave: c.chave, atraso, prioridade };
+      }
+      if (melhor) {
+        ultimoPedido.current = agoraMs;
+        lerCompraAgora(melhor.chave);
       }
     }, 200);
     return () => clearInterval(t);
@@ -216,6 +245,163 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
   }
 
   const visiveis = useMemo(() => (compras ?? []).filter((c) => (aba === "pregao" ? c.modalidade !== "dispensa" : c.modalidade === "dispensa")), [compras, aba]);
+  // "Em disputa agora" = a sala de disputa devolveu itens em disputa; sem itens = nada acontecendo nesta compra agora.
+  const ativas = visiveis.filter((c) => !leituras[c.chave] || leituras[c.chave].itens.length > 0 || (!!leituras[c.chave].erro && !leituras[c.chave].lidoEm));
+  const semDisputa = visiveis.filter((c) => !ativas.includes(c));
+
+  const cartaoCompra = (c: CompraDisputa) => {
+    const aberta = abertas.has(c.chave);
+    const leitura = leituras[c.chave];
+    const itens = leitura?.itens ?? [];
+    const robo = Object.entries(config).some(([k, v]) => v.ligado && k.startsWith(`${c.chave}:`));
+    const emLances = itens.some((i) => EM_DISPUTA.has(i.fase));
+    const abaAtual = abaItens[c.chave] ?? (emLances ? "disputa" : itens.some((i) => abaDoItem(i.fase) === "aguardando") ? "aguardando" : "disputa");
+    const conta = (a: string) => itens.filter((i) => abaDoItem(i.fase) === a).length;
+    return (
+      <article key={c.chave} className={`compra-disputa ${aberta ? "aberta" : ""}`}>
+        <button
+          className="compra-disputa-topo"
+          onClick={() =>
+            setAbertas((s) => {
+              mexidas.current.add(c.chave);
+              const n = new Set(s);
+              if (n.has(c.chave)) n.delete(c.chave);
+              else {
+                n.add(c.chave);
+                lerCompraAgora(c.chave);
+              }
+              return n;
+            })
+          }
+          aria-expanded={aberta}
+        >
+          <span>
+            <strong>
+              {c.titulo}
+              {c.uasg && ` | UASG ${c.uasg}`}
+              {c.orgao && ` - ${c.orgao}`}
+            </strong>
+            <span className="chips-compra">
+              {c.modoDisputa && <span className="chip">{c.modoDisputa}</span>}
+              {!leitura && <span className="chip">Verificando…</span>}
+              {emLances && <span className="chip azul">Itens em fase de lances</span>}
+              {robo && <span className="chip verde">Robô ligado</span>}
+            </span>
+          </span>
+          <ChevronDown className="seta" />
+        </button>
+
+        {aberta && (
+          <div className="compra-disputa-corpo">
+            <div className="segmentado pequeno abas-itens-disputa">
+              {[
+                ["aguardando", "Aguardando disputa"],
+                ["disputa", "Em disputa"],
+                ["encerrados", "Encerrados"],
+              ].map(([a, nome]) => (
+                <button key={a} className={abaAtual === a ? "ativo" : ""} onClick={() => setAbaItens((s) => ({ ...s, [c.chave]: a }))}>
+                  {nome} ({conta(a)})
+                </button>
+              ))}
+            </div>
+            {leitura?.erro && <p className="alerta erro">{leitura.erro}</p>}
+            {!leitura && (
+              <p className="texto-fraco carregando-linha">
+                <RefreshCw className="girando" /> Lendo os itens…
+              </p>
+            )}
+            {itens
+              .filter((i) => abaDoItem(i.fase) === abaAtual)
+              .map((i) => {
+                const k = `${c.chave}:${i.numero}`;
+                const cfg = config[k] ?? ITEM_ROBO_PADRAO;
+                const restante = i.restanteSeg == null ? null : i.restanteSeg - (agora - (leitura?.lidoEm ?? agora)) / 1000;
+                const situacao = i.situacao === "G" ? "ganhando" : i.situacao === "E" ? "empatado" : i.situacao === "P" ? "perdendo" : "";
+                const nosso = i.melhorLance != null && i.nossoLance != null && i.melhorLance >= i.nossoLance;
+                const msg = mensagens[k];
+                return (
+                  <div key={k} className={`item-disputa ${situacao} ${cfg.ligado ? "robo-ligado" : ""}`}>
+                    <div className="item-disputa-titulo">
+                      <strong>
+                        ITEM {i.numero}
+                        {i.descricao && ` - ${i.descricao}`}
+                      </strong>
+                      {situacao && <span className={`selo-situacao ${situacao}`}>{situacao.toUpperCase()}</span>}
+                    </div>
+                    <div className="item-disputa-grade">
+                      <label className="campo">
+                        <span>lance mínimo (R$)</span>
+                        <span className="entrada">
+                          <input
+                            inputMode="decimal"
+                            value={textos[`${k}:minimo`] ?? textoNumero(cfg.minimo)}
+                            onChange={(e) => {
+                              setTextos((t) => ({ ...t, [`${k}:minimo`]: e.target.value }));
+                              mudarItem(k, { minimo: paraNumero(e.target.value) });
+                            }}
+                            aria-label={`Lance mínimo do item ${i.numero}`}
+                          />
+                        </span>
+                      </label>
+                      <label className="campo">
+                        <span>desconto (%)</span>
+                        <span className="entrada">
+                          <input
+                            inputMode="decimal"
+                            value={textos[`${k}:desconto`] ?? textoNumero(cfg.desconto)}
+                            onChange={(e) => {
+                              setTextos((t) => ({ ...t, [`${k}:desconto`]: e.target.value }));
+                              const n = paraNumero(e.target.value);
+                              if (n != null && n >= 0 && n <= 50) mudarItem(k, { desconto: n });
+                            }}
+                            aria-label={`Desconto do item ${i.numero}`}
+                          />
+                        </span>
+                      </label>
+                      <div className="valor-disputa">
+                        <span>Melhor lance</span>
+                        <strong className={nosso ? "texto-verde" : "texto-perigo"}>
+                          {moeda(i.melhorLance, cfg.quatroCasas)} <em className={`selo-quem ${nosso ? "voce" : ""}`}>{nosso ? "VOCÊ" : "CONCORRENTE"}</em>
+                        </strong>
+                      </div>
+                      <div className="valor-disputa">
+                        <span>Meu lance</span>
+                        <strong className={nosso ? "texto-verde" : "texto-perigo"}>{moeda(i.nossoLance, cfg.quatroCasas)}</strong>
+                      </div>
+                      <div className={`cronometro-disputa ${restante != null && restante <= SEGUNDOS_FINAIS ? "final" : ""}`}>
+                        {i.fase === "AL" ? "aleatório" : restante != null ? relogio(restante) : "—"}
+                      </div>
+                      <button
+                        className={`botao-robo ${cfg.ligado ? "ligado" : ""}`}
+                        onClick={() => alternarRobo(k, i)}
+                        aria-label={cfg.ligado ? `Parar o robô no item ${i.numero}` : `Ligar o robô no item ${i.numero}`}
+                        title={cfg.ligado ? "Parar o robô" : "Ligar o robô"}
+                      >
+                        {cfg.ligado ? <Square /> : <Play />}
+                      </button>
+                    </div>
+                    <div className="item-disputa-opcoes">
+                      <label>
+                        <input type="checkbox" checked={cfg.quatroCasas} onChange={(e) => mudarItem(k, { quatroCasas: e.target.checked })} /> Permitir lances com 4 casas decimais
+                      </label>
+                      <label>
+                        <input type="checkbox" checked={cfg.naoAguardar} onChange={(e) => mudarItem(k, { naoAguardar: e.target.checked })} /> Não aguardar os segundos finais para
+                        enviar lances
+                      </label>
+                    </div>
+                    <div className="item-disputa-rodape">
+                      <span className="texto-fraco pequeno">{FASES[i.fase] ?? i.fase}</span>
+                      <span className={`mensagem-robo ${msg?.erro ? "erro" : ""}`}>{msg?.texto ?? (cfg.ligado ? "Robô ligado" : "Robô parado")}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            {leitura && itens.filter((i) => abaDoItem(i.fase) === abaAtual).length === 0 && <p className="texto-fraco pequeno">Nenhum item aqui.</p>}
+          </div>
+        )}
+      </article>
+    );
+  };
 
   if (!pode)
     return (
@@ -286,7 +472,7 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
                 Se o Compras.gov.br não abrir sozinho a área do fornecedor, abra a <strong>sala de disputa</strong> por lá. O Montzion
                 acha a sessão em qualquer janela ou aba do Compras.gov.br.
               </li>
-              <li>Deixe essa janela aberta (pode minimizar ou fechar no X: ela só fica escondida). As disputas aparecem aqui sozinhas.</li>
+              <li>Pronto: assim que o login termina, a janela do Compras.gov.br some sozinha e o robô continua trabalhando escondido. As disputas aparecem aqui.</li>
             </ol>
             <button className="botao acento" onClick={() => ponte.entrar().catch((e) => avisar(mensagemDeErro(e), "erro"))}>
               <LogIn /> {estado?.janela ? "Mostrar a janela do Compras.gov.br" : "Entrar no Compras.gov.br"}
@@ -316,166 +502,26 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
             <p className="texto-fraco carregando-linha">
               <RefreshCw className="girando" /> Buscando suas disputas no Compras.gov.br…
             </p>
-          ) : visiveis.length === 0 ? (
+          ) : ativas.length === 0 ? (
             <section className="cartao">
-              <Vazio icone={<TriangleAlert />} titulo={`Nenhuma ${aba === "pregao" ? "disputa de pregão" : "dispensa"} em andamento`}>
-                Quando uma disputa sua começar no Compras.gov.br, ela aparece aqui. Use o botão de atualizar.
+              <Vazio icone={<TriangleAlert />} titulo={`Nenhuma ${aba === "pregao" ? "disputa de pregão" : "dispensa"} acontecendo agora`}>
+                Quando uma disputa sua começar no Compras.gov.br, ela aparece aqui sozinha (o robô confere de tempos em tempos).
+                {descartadas > 0 && ` ${descartadas} compra(s) já encerrada(s), revogada(s) ou deserta(s) ficaram de fora.`}
               </Vazio>
             </section>
           ) : (
             <div className="lista-disputas">
-              {visiveis.map((c) => {
-                const aberta = abertas.has(c.chave);
-                const leitura = leituras[c.chave];
-                const itens = leitura?.itens ?? [];
-                const robo = Object.entries(config).some(([k, v]) => v.ligado && k.startsWith(`${c.chave}:`));
-                const emLances = itens.some((i) => EM_DISPUTA.has(i.fase));
-                const abaAtual = abaItens[c.chave] ?? (emLances ? "disputa" : itens.some((i) => abaDoItem(i.fase) === "aguardando") ? "aguardando" : "disputa");
-                const conta = (a: string) => itens.filter((i) => abaDoItem(i.fase) === a).length;
-                return (
-                  <article key={c.chave} className={`compra-disputa ${aberta ? "aberta" : ""}`}>
-                    <button
-                      className="compra-disputa-topo"
-                      onClick={() =>
-                        setAbertas((s) => {
-                          const n = new Set(s);
-                          if (n.has(c.chave)) n.delete(c.chave);
-                          else {
-                            n.add(c.chave);
-                            lerCompraAgora(c.chave);
-                          }
-                          return n;
-                        })
-                      }
-                      aria-expanded={aberta}
-                    >
-                      <span>
-                        <strong>
-                          {c.titulo}
-                          {c.uasg && ` | UASG ${c.uasg}`}
-                          {c.orgao && ` - ${c.orgao}`}
-                        </strong>
-                        <span className="chips-compra">
-                          {c.modoDisputa && <span className="chip">{c.modoDisputa}</span>}
-                          {emLances && <span className="chip azul">Itens em fase de lances</span>}
-                          {robo && <span className="chip verde">Robô ligado</span>}
-                        </span>
-                      </span>
-                      <ChevronDown className="seta" />
-                    </button>
-
-                    {aberta && (
-                      <div className="compra-disputa-corpo">
-                        <div className="segmentado pequeno abas-itens-disputa">
-                          {[
-                            ["aguardando", "Aguardando disputa"],
-                            ["disputa", "Em disputa"],
-                            ["encerrados", "Encerrados"],
-                          ].map(([a, nome]) => (
-                            <button key={a} className={abaAtual === a ? "ativo" : ""} onClick={() => setAbaItens((s) => ({ ...s, [c.chave]: a }))}>
-                              {nome} ({conta(a)})
-                            </button>
-                          ))}
-                        </div>
-                        {leitura?.erro && <p className="alerta erro">{leitura.erro}</p>}
-                        {!leitura && (
-                          <p className="texto-fraco carregando-linha">
-                            <RefreshCw className="girando" /> Lendo os itens…
-                          </p>
-                        )}
-                        {itens
-                          .filter((i) => abaDoItem(i.fase) === abaAtual)
-                          .map((i) => {
-                            const k = `${c.chave}:${i.numero}`;
-                            const cfg = config[k] ?? ITEM_ROBO_PADRAO;
-                            const restante = i.restanteSeg == null ? null : i.restanteSeg - (agora - (leitura?.lidoEm ?? agora)) / 1000;
-                            const situacao = i.situacao === "G" ? "ganhando" : i.situacao === "E" ? "empatado" : i.situacao === "P" ? "perdendo" : "";
-                            const nosso = i.melhorLance != null && i.nossoLance != null && i.melhorLance >= i.nossoLance;
-                            const msg = mensagens[k];
-                            return (
-                              <div key={k} className={`item-disputa ${situacao} ${cfg.ligado ? "robo-ligado" : ""}`}>
-                                <div className="item-disputa-titulo">
-                                  <strong>
-                                    ITEM {i.numero}
-                                    {i.descricao && ` - ${i.descricao}`}
-                                  </strong>
-                                  {situacao && <span className={`selo-situacao ${situacao}`}>{situacao.toUpperCase()}</span>}
-                                </div>
-                                <div className="item-disputa-grade">
-                                  <label className="campo">
-                                    <span>lance mínimo (R$)</span>
-                                    <span className="entrada">
-                                      <input
-                                        inputMode="decimal"
-                                        value={textos[`${k}:minimo`] ?? textoNumero(cfg.minimo)}
-                                        onChange={(e) => {
-                                          setTextos((t) => ({ ...t, [`${k}:minimo`]: e.target.value }));
-                                          mudarItem(k, { minimo: paraNumero(e.target.value) });
-                                        }}
-                                        aria-label={`Lance mínimo do item ${i.numero}`}
-                                      />
-                                    </span>
-                                  </label>
-                                  <label className="campo">
-                                    <span>desconto (%)</span>
-                                    <span className="entrada">
-                                      <input
-                                        inputMode="decimal"
-                                        value={textos[`${k}:desconto`] ?? textoNumero(cfg.desconto)}
-                                        onChange={(e) => {
-                                          setTextos((t) => ({ ...t, [`${k}:desconto`]: e.target.value }));
-                                          const n = paraNumero(e.target.value);
-                                          if (n != null && n >= 0 && n <= 50) mudarItem(k, { desconto: n });
-                                        }}
-                                        aria-label={`Desconto do item ${i.numero}`}
-                                      />
-                                    </span>
-                                  </label>
-                                  <div className="valor-disputa">
-                                    <span>Melhor lance</span>
-                                    <strong className={nosso ? "texto-verde" : "texto-perigo"}>
-                                      {moeda(i.melhorLance, cfg.quatroCasas)} <em className={`selo-quem ${nosso ? "voce" : ""}`}>{nosso ? "VOCÊ" : "CONCORRENTE"}</em>
-                                    </strong>
-                                  </div>
-                                  <div className="valor-disputa">
-                                    <span>Meu lance</span>
-                                    <strong className={nosso ? "texto-verde" : "texto-perigo"}>{moeda(i.nossoLance, cfg.quatroCasas)}</strong>
-                                  </div>
-                                  <div className={`cronometro-disputa ${restante != null && restante <= SEGUNDOS_FINAIS ? "final" : ""}`}>
-                                    {i.fase === "AL" ? "aleatório" : restante != null ? relogio(restante) : "—"}
-                                  </div>
-                                  <button
-                                    className={`botao-robo ${cfg.ligado ? "ligado" : ""}`}
-                                    onClick={() => alternarRobo(k, i)}
-                                    aria-label={cfg.ligado ? `Parar o robô no item ${i.numero}` : `Ligar o robô no item ${i.numero}`}
-                                    title={cfg.ligado ? "Parar o robô" : "Ligar o robô"}
-                                  >
-                                    {cfg.ligado ? <Square /> : <Play />}
-                                  </button>
-                                </div>
-                                <div className="item-disputa-opcoes">
-                                  <label>
-                                    <input type="checkbox" checked={cfg.quatroCasas} onChange={(e) => mudarItem(k, { quatroCasas: e.target.checked })} /> Permitir lances com 4 casas decimais
-                                  </label>
-                                  <label>
-                                    <input type="checkbox" checked={cfg.naoAguardar} onChange={(e) => mudarItem(k, { naoAguardar: e.target.checked })} /> Não aguardar os segundos finais para
-                                    enviar lances
-                                  </label>
-                                </div>
-                                <div className="item-disputa-rodape">
-                                  <span className="texto-fraco pequeno">{FASES[i.fase] ?? i.fase}</span>
-                                  <span className={`mensagem-robo ${msg?.erro ? "erro" : ""}`}>{msg?.texto ?? (cfg.ligado ? "Robô ligado" : "Robô parado")}</span>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        {leitura && itens.filter((i) => abaDoItem(i.fase) === abaAtual).length === 0 && <p className="texto-fraco pequeno">Nenhum item aqui.</p>}
-                      </div>
-                    )}
-                  </article>
-                );
-              })}
+              {ativas.map(cartaoCompra)}
             </div>
+          )}
+          {compras !== null && semDisputa.length > 0 && (
+            <details className="sem-disputa">
+              <summary>
+                <ChevronDown className="seta" /> Sem disputa agora ({semDisputa.length})
+                <span className="texto-fraco pequeno"> · o robô confere de novo a cada 2 minutos</span>
+              </summary>
+              <div className="lista-disputas">{semDisputa.map(cartaoCompra)}</div>
+            </details>
           )}
         </>
       )}

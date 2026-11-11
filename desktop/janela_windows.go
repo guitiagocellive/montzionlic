@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"syscall"
 	"unsafe"
@@ -39,6 +40,7 @@ const (
 	wmGetMinMax   = 0x0024
 	wmApp         = 0x8000
 	wmAbrirCompra = wmApp + 1
+	wmEsconder    = wmApp + 2
 	wsOverlapped  = 0x00CF0000 // WS_OVERLAPPEDWINDOW
 	cwUseDefault  = 0x80000000
 	swHide        = 0
@@ -264,6 +266,11 @@ func (a *aplicativo) procedimento(hwnd, msg, wParam, lParam uintptr) uintptr {
 	case wmAbrirCompra:
 		a.abrirCompras()
 		return 0
+	case wmEsconder:
+		if a.compras != nil {
+			procShowWindow.Call(a.compras.hwnd, swHide)
+		}
+		return 0
 	case wmClose:
 		if j != nil && j == a.compras {
 			// Fechar a janela do Compras.gov.br só a esconde: o login (que vale só nesta janela) continua.
@@ -417,6 +424,22 @@ func (a *aplicativo) ligarWeb(j *janelaWeb) {
 				if !a.interno(endereco) {
 					metodo(args, 8, 1) // put_Cancel(TRUE)
 					abrirNoNavegador(endereco)
+				}
+				return 0
+			}), uintptr(unsafe.Pointer(&token)))
+		}
+		if !j.principal {
+			// Pop-ups do Compras.gov.br/gov.br abrem na própria janela do Compras (que pode estar escondida),
+			// para a sessão ficar sempre num lugar só e nenhuma janela nova aparecer na tela.
+			metodo(web, 44, novoManipulador(func(_, args uintptr) uintptr { // add_NewWindowRequested
+				var p uintptr
+				metodo(args, 3, uintptr(unsafe.Pointer(&p))) // get_Uri
+				endereco := textoCOM(p)
+				if u, err := url.Parse(endereco); err == nil && (u.Scheme == "https" || u.Scheme == "http") &&
+					(strings.HasSuffix(u.Hostname(), ".gov.br") || mesmoSite(endereco, a.configura.Compras)) {
+					metodo(args, 6, 1)              // put_Handled(TRUE)
+					metodo(web, 5, utf16(endereco)) // Navigate
+					registrarLog("janela do Compras: pop-up aberto na mesma janela: %s", endereco)
 				}
 				return 0
 			}), uintptr(unsafe.Pointer(&token)))
@@ -594,6 +617,13 @@ func janelaNativa(cfg configPonte, portaDepuracao int, aoAbrir func()) error {
 		return fmt.Errorf("%w: %v", errSemWebView2, app.falhaAntes)
 	}
 	return nil
+}
+
+// Pedido da ponte: esconde a janela do Compras.gov.br (ela continua logada e trabalhando).
+func pedirEsconderCompras() {
+	if app != nil && app.principal != nil {
+		procPostMessage.Call(app.principal.hwnd, wmEsconder, 0, 0)
+	}
 }
 
 // Pedido vindo de outra goroutine (a ponte do robô): abre a janela do Compras.gov.br.

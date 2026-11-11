@@ -204,7 +204,15 @@ export interface CompraDisputa {
   orgao: string;
   modalidade: string; // "pregao" | "dispensa" | outro
   modoDisputa: string;
+  /** Pela situação/fase que o Compras.gov.br informa, a disputa já acabou (ou a compra foi revogada etc.). */
+  encerrada: boolean;
+  ano: number;
 }
+
+// Situação da compra (SituacaoCompraFaseExternaEnum): revogada, anulada, fracassada e deserta não têm mais disputa.
+const SITUACOES_SEM_DISPUTA = new Set(["RE", "AN", "FR", "DE"]);
+// Fase da compra (FaseCompraFaseExternaEnum): 4 = seleção de fornecedores (disputa já passou), 5 e 6 = ainda nem publicada.
+const FASES_SEM_DISPUTA = new Set(["4", "5", "6"]);
 
 // Códigos de modalidade do Compras.gov.br (ModalidadeCompraEnum da sala de disputa).
 const NOMES_MODALIDADE: Record<string, string> = {
@@ -248,5 +256,7 @@ export function lerCompra(b: Record<string, unknown>): CompraDisputa | null {
     orgao: String(b.nomeUasg ?? b.orgao ?? b.nomeOrgao ?? ""),
     modalidade: dispensa ? "dispensa" : "pregao",
     modoDisputa: String(b.descricaoModoDisputa ?? b.modoDisputa ?? ""),
+    encerrada: SITUACOES_SEM_DISPUTA.has(String(b.situacaoCompraFaseExterna ?? "")) || FASES_SEM_DISPUTA.has(String(b.faseCompraFaseExterna ?? "")),
+    ano: Number(ano) || 0,
   };
 }
