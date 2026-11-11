@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Linha } from "../../../shared/mercado";
 import { formatarMoeda, formatarNumero } from "../../formato";
 
@@ -36,6 +36,8 @@ export function MapaMarcas({ estados, ativo, aoEscolher }: { estados: Linha[]; a
   const [dica, setDica] = useState<{ uf: string; x: number; y: number } | null>(null);
   const [modo, setModo] = useState<"volume" | "lider">("volume");
   const caixa = useRef<HTMLDivElement>(null);
+  const svg = useRef<SVGSVGElement>(null);
+  const [etiqueta, setEtiqueta] = useState<{ uf: string; x: number; y: number; escala: number } | null>(null);
 
   useEffect(() => {
     carregarMapa().then(setMapa, () => setErro(true));
@@ -66,6 +68,18 @@ export function MapaMarcas({ estados, ativo, aoEscolher }: { estados: Linha[]; a
     };
   }, [estados]);
 
+  // Posição da etiqueta do estado escolhido (em cima do estado, em % do desenho).
+  useLayoutEffect(() => {
+    if (!ativo || !mapa || !svg.current) return setEtiqueta(null);
+    const el = svg.current.querySelector<SVGPathElement>(`path[data-uf="${ativo}"]`);
+    if (!el) return setEtiqueta(null);
+    const b = el.getBBox();
+    const [, , w, h] = mapa.viewBox.split(/\s+/).map(Number);
+    // Estados pequenos (DF, SE, AL...) crescem mais ao subir, para o relevo aparecer.
+    const escala = Math.min(3.2, Math.max(1.08, 70 / Math.max(b.width, b.height)));
+    setEtiqueta({ uf: ativo, x: ((b.x + b.width / 2) / w) * 100, y: ((b.y + b.height - b.height * escala) / h) * 100, escala });
+  }, [ativo, mapa]);
+
   if (erro) return null;
   if (!mapa) return <div className="mapa-marcas carregando-mapa" aria-hidden="true" />;
 
@@ -95,10 +109,13 @@ export function MapaMarcas({ estados, ativo, aoEscolher }: { estados: Linha[]; a
       </div>
 
       <div className="mapa-desenho" ref={caixa} onMouseLeave={() => setDica(null)}>
-        <svg viewBox={mapa.viewBox} role="img" aria-label="Mapa do Brasil por estado">
+        <svg ref={svg} viewBox={mapa.viewBox} role="img" aria-label="Mapa do Brasil por estado" className={ativo ? "com-ativo" : ""}>
           <defs>
             <filter id="sombra-mapa" x="-10%" y="-10%" width="120%" height="120%">
-              <feDropShadow dx="0" dy="6" stdDeviation="8" floodColor="#000" floodOpacity="0.28" />
+              <feDropShadow dx="0" dy="10" stdDeviation="14" floodColor="#000" floodOpacity="0.22" />
+            </filter>
+            <filter id="desfoque-3d" x="-30%" y="-30%" width="160%" height="160%">
+              <feGaussianBlur stdDeviation="6" />
             </filter>
           </defs>
           <g filter="url(#sombra-mapa)">
@@ -119,10 +136,26 @@ export function MapaMarcas({ estados, ativo, aoEscolher }: { estados: Linha[]; a
               </path>
             ))}
           </g>
-          {/* Contorno por cima: estado escolhido e o que está sob o mouse. */}
-          {ativo && mapa.estados[ativo] && <path d={mapa.estados[ativo].d} className="contorno-mapa ativo" />}
+          {/* Contorno do estado sob o mouse. */}
           {realce && realce !== ativo && mapa.estados[realce] && <path d={mapa.estados[realce].d} className="contorno-mapa" />}
+          {/* Estado escolhido "nasce" em 3D: camadas da lateral crescem por baixo e o topo sobe. */}
+          {ativo && mapa.estados[ativo] && (
+            <g key={ativo} className="estado-3d" style={{ "--escala": etiqueta?.uf === ativo ? etiqueta.escala : 1.08 } as CSSProperties}>
+              <path d={mapa.estados[ativo].d} className="sombra-3d" />
+              <path d={mapa.estados[ativo].d} fill={corDe(ativo)} className="lado-3d" />
+              <path d={mapa.estados[ativo].d} fill={corDe(ativo)} className="topo-3d" />
+            </g>
+          )}
         </svg>
+        {etiqueta && porUf.get(etiqueta.uf) && (
+          <div key={etiqueta.uf} className="etiqueta-3d" style={{ left: `${etiqueta.x}%`, top: `${etiqueta.y}%` }}>
+            <strong>{mapa.estados[etiqueta.uf]?.nome}</strong>
+            <span>
+              {formatarNumero(porUf.get(etiqueta.uf)!.compras)} licitações
+              {porUf.get(etiqueta.uf)!.destaques[0] ? ` · ${porUf.get(etiqueta.uf)!.destaques[0].nome}` : ""}
+            </span>
+          </div>
+        )}
         {dica && (
           <div className={`dica-mapa ${dica.x > (caixa.current?.clientWidth ?? 0) * 0.6 ? "esquerda" : ""}`} style={{ left: dica.x, top: dica.y }} role="tooltip">
             <strong>
