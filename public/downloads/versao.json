@@ -1,9 +1,9 @@
 {
-  "versao": "3.0.3",
+  "versao": "3.0.4",
   "data": "2026-11-11",
   "novidades": [
-    "Robô: entra na sala de disputa direto pela chave que o portal do Compras.gov.br gera (compras-id), sem depender do clique no menu.",
-    "Robô: não desiste depois de 2 tentativas e registra cada passo no montzion.log.",
-    "Instalador sem PowerShell nem comandos escondidos."
+    "Robô: quando o Compras.gov.br pede para escolher a empresa/perfil depois do login, a janela aparece na hora com o aviso; depois da escolha o robô entra sozinho.",
+    "Robô: entra na sala de disputa pela chave do portal (compras-id), sem depender do clique no menu.",
+    "Página Disputas: botão \"Copiar diagnóstico\" (sem senhas, chaves nem CPF) para mandar ao suporte."
   ]
 }

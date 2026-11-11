@@ -14,6 +14,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -52,19 +54,20 @@ type sessaoAlvo struct {
 }
 
 type ponte struct {
-	cfg        configPonte
-	cdp        *clienteCDP
-	mu         sync.Mutex
-	alvos      map[string]*sessaoAlvo // targetId -> sessão
-	ligando    map[string]bool
-	pedidos    map[string]bool // requestId da lista de disputas
-	lista      json.RawMessage
-	listaEm    time.Time
-	novaLista  chan struct{}
-	logada     string               // targetId da janela com a sessão da sala de disputa (o token fica em cada aba)
-	tentouSala map[string]time.Time // portal -> última vez que a ponte tentou abrir a sala de disputa
-	tentativas map[string]int       // portal -> quantas vezes tentou (alterna entre os itens mais prováveis do menu)
-	menuVisto  map[string]bool      // endereços do portal cujo menu já foi anotado no registro
+	cfg               configPonte
+	cdp               *clienteCDP
+	mu                sync.Mutex
+	alvos             map[string]*sessaoAlvo // targetId -> sessão
+	ligando           map[string]bool
+	pedidos           map[string]bool // requestId da lista de disputas
+	lista             json.RawMessage
+	listaEm           time.Time
+	novaLista         chan struct{}
+	logada            string               // targetId da janela com a sessão da sala de disputa (o token fica em cada aba)
+	tentouSala        map[string]time.Time // portal -> última vez que a ponte tentou abrir a sala de disputa
+	tentativas        map[string]int       // portal -> quantas vezes tentou (alterna entre os itens mais prováveis do menu)
+	portalPedeEscolha bool                 // a página do portal pede para escolher empresa/perfil
+	menuVisto         map[string]bool      // endereços do portal cujo menu já foi anotado no registro
 	// Janela própria do aplicativo: abre/foca a janela nativa do Compras.gov.br (nil = aba do navegador).
 	abrirCompras func() bool
 	// Esconde a janela do Compras.gov.br depois do login (nil = não dá para esconder).
@@ -208,6 +211,11 @@ func (p *ponte) prepararSessao(sessao, tipo string) {
 		_, _ = p.cdp.Chamar(sessao, "Network.enable", map[string]any{"maxResourceBufferSize": 8 << 20, "maxTotalBufferSize": 32 << 20}, 10*time.Second)
 	}
 }
+
+var numerosLongos = regexp.MustCompile(`\d[\d.\-/]{6,}\d`)
+
+// mascararNumeros esconde CPF, CNPJ e outros números longos de um texto (para o registro).
+func mascararNumeros(t string) string { return numerosLongos.ReplaceAllString(t, "•••") }
 
 // semValores tira os valores dos parâmetros de um endereço (para o registro não guardar chaves de sessão).
 func semValores(endereco string) string {
@@ -521,6 +529,8 @@ func (p *ponte) atender(sessao, payload string) {
 	case "atualizar":
 		go p.motor.atualizarLista()
 		resposta = mapa{"ok": true}
+	case "diagnostico":
+		resposta = mapa{"texto": diagnostico()}
 	default:
 		resposta = p.executar(pedido.Tipo, pedido.Compra, pedido.Item, pedido.Valor, pedido.Fase, pedido.Atualizar)
 	}
@@ -685,7 +695,19 @@ const scriptMenuPortal = `(() => {
   };
   visitar(window, 0);
   window.__montzionSala = acoes;
-  return JSON.stringify({ url: location.href, itens, chave: chaves[0] || "" });
+  // A página pede para escolher empresa/perfil? (o portal faz isso com quem representa uma empresa)
+  let pedeEscolha = false, texto = "";
+  const olhar = (w, prof) => {
+    try {
+      const d = w.document;
+      const t = (d.body && d.body.innerText) || "";
+      if (!texto && t.trim()) texto = t.replace(/\s+/g, " ").trim().slice(0, 400);
+      if (/selecion|escolh|represent/i.test(t) && /empresa|fornecedor|perfil|cnpj/i.test(t) && (d.querySelector("select, input[type=radio], table a, form") || /selecion/i.test(t))) pedeEscolha = true;
+      if (prof < 4) for (let i = 0; i < w.frames.length; i++) olhar(w.frames[i], prof + 1);
+    } catch (e) {}
+  };
+  olhar(window, 0);
+  return JSON.stringify({ url: location.href, titulo: document.title, texto, pedeEscolha, itens, chave: chaves[0] || "" });
 })()`
 
 type itemMenu struct {
@@ -735,9 +757,12 @@ func (p *ponte) abrirSalaPeloPortal() bool {
 			continue
 		}
 		var v struct {
-			URL   string     `json:"url"`
-			Itens []itemMenu `json:"itens"`
-			Chave string     `json:"chave"`
+			URL         string     `json:"url"`
+			Itens       []itemMenu `json:"itens"`
+			Chave       string     `json:"chave"`
+			Titulo      string     `json:"titulo"`
+			Texto       string     `json:"texto"`
+			PedeEscolha bool       `json:"pedeEscolha"`
 		}
 		if json.Unmarshal([]byte(saida), &v) != nil {
 			continue
@@ -773,15 +798,19 @@ func (p *ponte) abrirSalaPeloPortal() bool {
 		visto := p.menuVisto[v.URL]
 		p.menuVisto[v.URL] = true
 		p.mu.Unlock()
+		p.mu.Lock()
+		p.portalPedeEscolha = v.PedeEscolha
+		p.mu.Unlock()
 		if !visto {
 			var linhas []string
 			for i, it := range v.Itens {
 				if i >= 120 {
 					break
 				}
-				linhas = append(linhas, it.Texto+" -> "+it.Link)
+				linhas = append(linhas, it.Texto+" -> "+semValores(it.Link))
 			}
-			registrarLog("ponte: área do fornecedor em %s; itens do menu: %s", v.URL, strings.Join(linhas, " | "))
+			registrarLog("ponte: área do fornecedor em %s; título %q; texto %q; pede escolha: %v; chave da sala: %v; itens do menu: %s",
+				semValores(v.URL), v.Titulo, mascararNumeros(v.Texto), v.PedeEscolha, v.Chave != "", strings.Join(linhas, " | "))
 		}
 		if melhor < 0 {
 			continue
@@ -876,4 +905,26 @@ func (p *ponte) buscarLista(a *sessaoAlvo) (json.RawMessage, error) {
 		p.abrirCompras()
 	}
 	return nil, fmt.Errorf("o Compras.gov.br não devolveu a lista de disputas (%s). Se aparecer um desafio do captcha na janela do Compras.gov.br, resolva e clique em atualizar", ultimoErro)
+}
+
+var (
+	chaveNoTexto = regexp.MustCompile(`(?i)(compras-id|cnet-id|token|code|state|captcha)(=|%3D|":\s*")[^&\s"']+`)
+	jwtNoTexto   = regexp.MustCompile(`eyJ[\w-]+\.[\w-]+\.[\w-]+`)
+)
+
+// diagnostico devolve as últimas linhas do registro, sem chaves, tokens nem números de documentos,
+// para a pessoa copiar e mandar ao suporte.
+func diagnostico() string {
+	dados, err := os.ReadFile(filepath.Join(pastaInstalacao(), "montzion.log"))
+	if err != nil {
+		return "Sem registro: " + err.Error()
+	}
+	linhas := strings.Split(strings.ReplaceAll(string(dados), "\r\n", "\n"), "\n")
+	if len(linhas) > 160 {
+		linhas = linhas[len(linhas)-160:]
+	}
+	t := strings.Join(linhas, "\n")
+	t = jwtNoTexto.ReplaceAllString(t, "[token]")
+	t = chaveNoTexto.ReplaceAllString(t, "$1$2[oculto]")
+	return fmt.Sprintf("Montzion %s — diagnóstico do robô\n%s", versao, mascararNumeros(t))
 }

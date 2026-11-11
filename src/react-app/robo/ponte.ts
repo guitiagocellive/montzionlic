@@ -86,6 +86,8 @@ export const ponte = {
   configurar: (config: Record<string, unknown>) => chamar<{ ok: boolean }>("configurar", { config }, 5_000),
   confirmar: (ids: number[]) => chamar<{ ok: boolean }>("confirmar", { ids }, 5_000),
   atualizar: () => chamar<{ ok: boolean }>("atualizar", {}, 5_000),
+  /** Últimas linhas do registro do aplicativo, sem chaves nem documentos (para mandar ao suporte). */
+  diagnostico: () => chamar<{ texto: string }>("diagnostico", {}, 10_000),
   /** Lista de compras em disputa do fornecedor (a página oficial carrega e o aplicativo lê). */
   compras: (atualizar: boolean) => chamar<{ compras: unknown; capturadaEm: number | null }>("compras", { atualizar }, 150_000),
   itens: (compra: string) => chamar<unknown>("itens", { compra }, 15_000),

@@ -455,7 +455,7 @@ func (a *aplicativo) ligarWeb(j *janelaWeb) {
 					(strings.HasSuffix(u.Hostname(), ".gov.br") || mesmoSite(endereco, a.configura.Compras)) {
 					metodo(args, 6, 1)              // put_Handled(TRUE)
 					metodo(web, 5, utf16(endereco)) // Navigate
-					registrarLog("janela do Compras: pop-up aberto na mesma janela: %s", endereco)
+					registrarLog("janela do Compras: pop-up aberto na mesma janela: %s", semValores(endereco))
 				}
 				return 0
 			}), uintptr(unsafe.Pointer(&token)))

@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Download, LogIn, Play, RefreshCw, Square, TriangleAlert, Zap } from "lucide-react";
+import { Check, ChevronDown, ClipboardCopy, Download, LogIn, Play, RefreshCw, Square, TriangleAlert, Zap } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { podeEditar, podeVer } from "../../shared/permissoes";
 import { type CompraDisputa, type ConfigItemRobo, FASES, ITEM_ROBO_PADRAO, type ItemDisputa, lerCompra, lerItemDisputa, SEGUNDOS_FINAIS } from "../../shared/robo";
@@ -48,6 +48,7 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
   const [config, setConfig] = useState<Record<string, ConfigItemRobo>>({});
   const [textos, setTextos] = useState<Record<string, string>>({});
   const [entrando, setEntrando] = useState(false);
+  const [entrandoDesde, setEntrandoDesde] = useState<number | null>(null);
   const mexidas = useRef(new Set<string>());
   const configCarregada = useRef(new Set<string>());
   const lancesEnviados = useRef(new Set<number>());
@@ -171,6 +172,24 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
     if (!cfg.ligado && !(cfg.minimo && cfg.minimo > 0)) return avisar("Informe o lance mínimo antes de ligar o robô.", "erro");
     if (!cfg.ligado && item.nossoLance != null && cfg.minimo! > item.nossoLance) avisar("O lance mínimo está acima do seu lance atual: o robô não vai baixar.", "erro");
     mudarItem(k, { ligado: !cfg.ligado });
+  }
+
+  // Quanto tempo está em "Entrando na sala de disputa" (depois de 20 s aparecem as ajudas).
+  const faseAtual = painel?.fase ?? "sem-login";
+  useEffect(() => {
+    if (faseAtual !== "entrando") return setEntrandoDesde(null);
+    setEntrandoDesde((d) => d ?? Date.now());
+  }, [faseAtual]);
+
+  async function copiarDiagnostico() {
+    try {
+      const { texto } = await ponte.diagnostico();
+      await navigator.clipboard.writeText(texto);
+      avisar("Diagnóstico copiado. Cole na conversa com o suporte (não tem senhas, chaves nem CPF).");
+    } catch (e) {
+      const msg = mensagemDeErro(e);
+      avisar(/desconhecido/i.test(msg) ? "Atualize o aplicativo para copiar o diagnóstico." : msg, "erro");
+    }
   }
 
   async function entrar(mostrar = false) {
@@ -420,7 +439,7 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
               {passo(false, fase === "buscando", "Buscando as disputas que estão acontecendo")}
             </ol>
             {painel?.aviso && <p className={fase === "erro-lista" ? "alerta erro" : "texto-suave"}>{painel.aviso}</p>}
-            {(fase === "erro-lista" || /janela/i.test(painel?.aviso ?? "")) && (
+            {(fase === "erro-lista" || /janela/i.test(painel?.aviso ?? "") || (fase === "entrando" && entrandoDesde != null && agora - entrandoDesde > 20_000)) && (
               <div className="linha-acoes">
                 {fase === "erro-lista" && (
                   <button className="botao acento" onClick={() => ponte.atualizar().catch((e) => avisar(mensagemDeErro(e), "erro"))}>
@@ -429,6 +448,9 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
                 )}
                 <button className="botao secundario" onClick={() => entrar(true)}>
                   Mostrar a janela do Compras.gov.br
+                </button>
+                <button className="botao secundario" onClick={copiarDiagnostico}>
+                  <ClipboardCopy /> Copiar diagnóstico
                 </button>
               </div>
             )}

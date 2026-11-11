@@ -267,6 +267,21 @@ func (m *motor) verLogin() {
 			registrarLog("robô: login no gov.br feito; janela escondida, entrando na sala de disputa")
 		}
 		m.p.abrirSalaPeloPortal()
+		// O portal pediu para escolher a empresa/perfil: mostra a janela na hora (escondida, ninguém escolhe).
+		m.p.mu.Lock()
+		pedeEscolha := m.p.portalPedeEscolha
+		m.p.mu.Unlock()
+		if pedeEscolha {
+			if !mostrou && m.p.abrirCompras != nil {
+				m.mu.Lock()
+				m.mostrouPortal = true
+				m.mu.Unlock()
+				m.p.abrirCompras()
+				registrarLog("robô: o portal pede para escolher a empresa/perfil; janela do Compras.gov.br mostrada")
+			}
+			m.definirFase("entrando", "O Compras.gov.br está pedindo para escolher a empresa (ou perfil). Escolha na janela que abriu: o robô segue sozinho depois.")
+			return
+		}
 		// Se a sala não abrir sozinha em 40 s, mostra a janela (uma vez) para a pessoa abrir pelo menu;
 		// o robô continua tentando e segue sozinho assim que a sala tiver sessão.
 		if !mostrou && time.Since(desde) > 40*time.Second && m.p.abrirCompras != nil {
