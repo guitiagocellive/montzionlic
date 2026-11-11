@@ -86,14 +86,15 @@ Não existe cadastro público: só um administrador adiciona pessoas.
   - Filtros que o PNCP não faz (data da sessão, plataforma, UASG, CNPJ, nº, vários municípios) são aplicados aqui depois de
     baixar até 3.000 resultados por consulta; a tela avisa quando é preciso afinar a busca.
   - A pesquisa sai do navegador; só o download dos arquivos passa pelo servidor (`/api/pncp/arquivo`).
-- **Robô de lances** (aba "Robô de lances" na licitação): valor mínimo por item (sugerido pelo orçamento com um
-  lucro mínimo, com aviso quando fica abaixo do custo + impostos), quanto baixar a cada lance (R$ ou %) e lance
-  fechado. Por padrão o robô espera os **30 segundos finais** do cronômetro e só então dá o menor lance que coloca a
-  empresa em 1º; se não der sem passar do mínimo, dá o mínimo (melhor colocação possível). A opção "Não aguardar os
-  segundos finais para enviar o lance" faz ele cobrir assim que perde o 1º lugar. A regra fica em
-  `src/shared/robo.ts` e nunca envia abaixo do mínimo. O **simulador** testa tudo numa disputa de mentira (aberto com
-  prorrogação de 2 min, hora fixa, aberto e fechado) e compara as estratégias. A ligação com o Compras.gov.br (pelo
-  aplicativo do Windows) é a próxima fase.
+- **Disputas / robô de lances** (Licitações → Disputas): funciona pelo aplicativo do Windows. O aplicativo abre o
+  navegador com um perfil só do Montzion e, quando pedido, a janela do Compras.gov.br, onde a pessoa entra com o
+  gov.br (a senha e o certificado não passam pela plataforma). A página Disputas lista as disputas da conta
+  (pregões e dispensas), os itens com melhor lance, meu lance e cronômetro, e por item: lance mínimo, desconto
+  (%), ligar/parar, "Permitir lances com 4 casas decimais" e "Não aguardar os segundos finais para enviar
+  lances". O robô **sempre espera os 10 segundos finais**, dá o menor lance que coloca a empresa em 1º
+  (respeitando o intervalo mínimo do edital) e, se não der, vai no lance mínimo. Regra em `src/shared/robo.ts`;
+  ponte em `desktop/ponte.go` (protocolo DevTools do navegador, sem bibliotecas externas). Configuração e
+  registro dos lances ficam na plataforma (`/api/robo`).
 - **Fornecedores** por nicho, com WhatsApp, site e catálogo.
 - **Calendário** e **Painel** com números reais.
 

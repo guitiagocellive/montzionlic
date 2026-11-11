@@ -1,69 +1,62 @@
-// Robô de lances: a regra de decisão (igual no simulador e, depois, na sala de disputa do Compras.gov.br).
+// Robô de lances do Compras.gov.br: a regra de decisão de cada item.
 //
-// Padrão: espera os segundos finais do cronômetro do item e só então dá o menor lance que coloca a empresa
-// em 1º lugar. Se não der para ser 1º sem passar do valor mínimo, dá o valor mínimo (melhor colocação
-// possível) e para. Nunca envia abaixo do mínimo.
-// Com "Não aguardar os segundos finais", dá o lance assim que perde o 1º lugar.
+// Sempre espera os 10 segundos finais do cronômetro do item para dar lance (para não comer margem
+// nem atiçar o concorrente antes da hora). Aí dá o menor lance que coloca a empresa em 1º.
+// Se não der para ser 1º sem passar do lance mínimo, dá o lance mínimo (melhor colocação possível).
+// Nunca envia abaixo do lance mínimo.
+// "Não aguardar os segundos finais" faz ele cobrir assim que perde o 1º lugar.
 
+/** Segundos finais em que o robô começa a dar lances. */
+export const SEGUNDOS_FINAIS = 10;
+
+/** Configuração do robô para um item (guardada na plataforma). */
 export interface ConfigItemRobo {
-  ativo: boolean;
-  /** Valor mínimo (por unidade). Abaixo disso o robô nunca vai. */
+  ligado: boolean;
+  /** Lance mínimo (valor do item na disputa). Abaixo disso o robô nunca vai. */
   minimo: number | null;
-  /** Quanto baixar a cada lance: em reais ou em % do melhor lance. */
-  reducaoTipo: "valor" | "percentual";
-  reducao: number;
-  /** Lance da etapa fechada (modo aberto e fechado). Vazio = o valor mínimo. */
-  lanceFechado: number | null;
-}
-
-export interface ConfigRobo {
-  /** Segundos finais do cronômetro em que o robô começa a dar lances (padrão 30). */
-  segundosFinais: number;
-  /** Liga = dá lance assim que perde o 1º lugar, sem esperar os segundos finais. */
+  /** Quanto baixar do melhor lance a cada lance (%). O intervalo mínimo do edital sempre é respeitado. */
+  desconto: number;
   naoAguardar: boolean;
-  /** Lucro mínimo (%) usado para sugerir o valor mínimo a partir do orçamento. */
-  lucroMinimo: number;
-  itens: Record<string, ConfigItemRobo>;
+  /** Lances com 4 casas decimais (senão, centavos). */
+  quatroCasas: boolean;
 }
 
-export const CONFIG_ROBO_PADRAO: ConfigRobo = { segundosFinais: 30, naoAguardar: false, lucroMinimo: 0, itens: {} };
+export const ITEM_ROBO_PADRAO: ConfigItemRobo = { ligado: false, minimo: null, desconto: 0.5, naoAguardar: false, quatroCasas: false };
 
-export const ITEM_ROBO_PADRAO: ConfigItemRobo = { ativo: true, minimo: null, reducaoTipo: "valor", reducao: 0.01, lanceFechado: null };
+/** Fases do item no Compras.gov.br (FaseItemEnum). */
+export const FASES: Record<string, string> = {
+  AS: "Aguardando abertura da sessão",
+  AP: "Pendente da análise de propostas",
+  F: "Aguardando disputa",
+  AA: "Aguardando abertura",
+  LS: "Abertura suspensa",
+  LA: "Etapa aberta",
+  AL: "Etapa aberta (encerramento aleatório)",
+  LF: "Etapa fechada",
+  AF: "Aguardando disputa fechada",
+  FE: "Aguardando encerramento",
+  RA: "Aguardando decisão sobre reinício",
+  AM: "Aguardando desempate ME/EPP",
+  DM: "Em desempate ME/EPP",
+  DF: "Em disputa final",
+  E: "Disputa encerrada",
+};
 
-/**
- * Etapas da disputa de um item:
- * - aguardando: ainda não começou;
- * - aberta: lances abertos com cronômetro (o fim pode ser prorrogado);
- * - aleatoria: fim aleatório, sem cronômetro (modo aberto e fechado);
- * - fechada: lance final fechado (modo aberto e fechado);
- * - encerrada.
- */
-export type FaseDisputa = "aguardando" | "aberta" | "aleatoria" | "fechada" | "encerrada";
-
+/** O que o robô sabe de cada item, lido da sala de disputa. */
 export interface EstadoItem {
-  fase: FaseDisputa;
-  /** Tempo restante no cronômetro do item, em milissegundos (null quando não há cronômetro). */
-  restanteMs: number | null;
+  fase: string; // código do FaseItemEnum
+  /** Segundos que faltam no cronômetro (null quando não há cronômetro). */
+  restanteSeg: number | null;
   melhorLance: number | null;
   nossoLance: number | null;
-  somosPrimeiro: boolean;
-  /** Na etapa fechada: o lance fechado já foi enviado? */
-  fechadoEnviado?: boolean;
+  /** G = ganhando, E = empatado, P = perdendo. */
+  situacao: string | null;
+  /** Intervalo mínimo entre lances exigido no edital. */
+  variacaoMinima: number | null;
+  tipoVariacao: "V" | "P" | null;
 }
 
-export type TipoDecisao =
-  | "inativo"
-  | "sem-minimo"
-  | "sem-proposta"
-  | "encerrado"
-  | "aguardando-inicio"
-  | "primeiro"
-  | "esperando-final"
-  | "lance"
-  | "minimo"
-  | "no-minimo"
-  | "fechado"
-  | "fechado-enviado";
+export type TipoDecisao = "desligado" | "sem-minimo" | "aguardando-fase" | "ganhando" | "aguardando-final" | "lance" | "minimo" | "no-minimo" | "fechada" | "sem-proposta";
 
 export interface Decisao {
   acao: "aguardar" | "enviar";
@@ -72,86 +65,165 @@ export interface Decisao {
   motivo: string;
 }
 
-/** Arredonda para baixo em centavos (o lance nunca sobe por arredondamento). */
-export function centavosAbaixo(v: number): number {
-  return Math.floor(v * 100 + 1e-6) / 100;
+const casas = (quatro: boolean) => (quatro ? 10_000 : 100);
+
+/** Arredonda para baixo (o lance nunca sobe por arredondamento). */
+export function arredondarAbaixo(v: number, quatro = false) {
+  const f = casas(quatro);
+  return Math.floor(v * f + 1e-6) / f;
 }
 
-/** Arredonda para cima em centavos (o mínimo nunca desce por arredondamento). */
-export function centavosAcima(v: number): number {
-  return Math.ceil(v * 100 - 1e-6) / 100;
+/** Arredonda para cima (o mínimo nunca desce por arredondamento). */
+export function arredondarAcima(v: number, quatro = false) {
+  const f = casas(quatro);
+  return Math.ceil(v * f - 1e-6) / f;
 }
 
-const reais = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const reais = (v: number, quatro = false) =>
+  v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: quatro ? 4 : 2, maximumFractionDigits: quatro ? 4 : 2 });
 
-/** Próximo lance para cobrir o melhor lance. */
-export function lanceParaCobrir(melhor: number, item: Pick<ConfigItemRobo, "reducaoTipo" | "reducao">): number {
-  const reducao = Math.max(item.reducao || 0, 0);
-  const alvo = item.reducaoTipo === "percentual" ? melhor * (1 - reducao / 100) : melhor - reducao;
-  // Sempre baixa pelo menos 1 centavo.
-  return Math.min(centavosAbaixo(alvo), centavosAbaixo(melhor - 0.01));
+/** Quanto precisa baixar a partir de um valor, respeitando o intervalo mínimo do edital. */
+export function passoMinimo(base: number, estado: Pick<EstadoItem, "variacaoMinima" | "tipoVariacao">, quatro: boolean) {
+  const menor = 1 / casas(quatro);
+  if (!estado.variacaoMinima || estado.variacaoMinima <= 0) return menor;
+  const v = estado.tipoVariacao === "P" ? (base * estado.variacaoMinima) / 100 : estado.variacaoMinima;
+  return Math.max(arredondarAcima(v, quatro), menor);
 }
 
-export function decidir(estado: EstadoItem, item: ConfigItemRobo | undefined, geral: Pick<ConfigRobo, "segundosFinais" | "naoAguardar">): Decisao {
-  if (!item || !item.ativo) return { acao: "aguardar", tipo: "inativo", motivo: "Robô desligado neste item" };
-  if (item.minimo == null || !(item.minimo > 0)) return { acao: "aguardar", tipo: "sem-minimo", motivo: "Sem valor mínimo: o robô não age" };
-  const minimo = centavosAcima(item.minimo);
-  if (estado.fase === "encerrada") return { acao: "aguardar", tipo: "encerrado", motivo: "Disputa encerrada" };
-  if (estado.fase === "aguardando") return { acao: "aguardar", tipo: "aguardando-inicio", motivo: "Aguardando o início da disputa" };
-  if (estado.nossoLance == null) return { acao: "aguardar", tipo: "sem-proposta", motivo: "Sem proposta nossa neste item" };
+const FASES_DE_LANCE = new Set(["LA", "AL", "DF", "LF"]);
 
-  // Etapa fechada: um único lance, sem ver os outros.
-  if (estado.fase === "fechada") {
-    if (estado.fechadoEnviado) return { acao: "aguardar", tipo: "fechado-enviado", motivo: "Lance fechado já enviado" };
-    const desejado = item.lanceFechado != null && item.lanceFechado >= minimo ? centavosAbaixo(item.lanceFechado) : minimo;
-    if (desejado >= estado.nossoLance) return { acao: "aguardar", tipo: "fechado-enviado", motivo: "Nosso lance já é o melhor que dá para a etapa fechada" };
-    return { acao: "enviar", tipo: "fechado", valor: desejado, motivo: `Lance fechado de ${reais(desejado)}` };
+export function decidir(estado: EstadoItem, item: ConfigItemRobo | undefined): Decisao {
+  if (!item?.ligado) return { acao: "aguardar", tipo: "desligado", motivo: "Robô parado neste item" };
+  if (item.minimo == null || !(item.minimo > 0)) return { acao: "aguardar", tipo: "sem-minimo", motivo: "Informe o lance mínimo para o robô agir" };
+  const q = item.quatroCasas;
+  const minimo = arredondarAcima(item.minimo, q);
+  if (!FASES_DE_LANCE.has(estado.fase)) return { acao: "aguardar", tipo: "aguardando-fase", motivo: FASES[estado.fase] ?? "Aguardando a fase de lances" };
+  if (estado.nossoLance == null) return { acao: "aguardar", tipo: "sem-proposta", motivo: "Sem lance nosso neste item" };
+
+  // Etapa fechada: lance único, sem ver os outros. Vai no mínimo.
+  if (estado.fase === "LF") {
+    if (minimo >= estado.nossoLance) return { acao: "aguardar", tipo: "fechada", motivo: "Etapa fechada: nosso lance já está no mínimo" };
+    return { acao: "enviar", tipo: "fechada", valor: minimo, motivo: `Etapa fechada: lance único no mínimo (${reais(minimo, q)})` };
   }
 
-  if (estado.somosPrimeiro) return { acao: "aguardar", tipo: "primeiro", motivo: "Em 1º lugar" };
+  if (estado.situacao === "G") return { acao: "aguardar", tipo: "ganhando", motivo: "Ganhando" };
 
-  // Espera os segundos finais (só quando há cronômetro; no fim aleatório não dá para saber o fim).
-  const janela = Math.max(geral.segundosFinais || 0, 1) * 1000;
-  if (!geral.naoAguardar && estado.fase === "aberta" && estado.restanteMs != null && estado.restanteMs > janela) {
-    return { acao: "aguardar", tipo: "esperando-final", motivo: `Esperando os ${geral.segundosFinais} segundos finais` };
+  // Espera os 10 segundos finais (no encerramento aleatório não há cronômetro: qualquer segundo pode ser o último).
+  if (!item.naoAguardar && estado.fase === "LA" && estado.restanteSeg != null && estado.restanteSeg > SEGUNDOS_FINAIS) {
+    return { acao: "aguardar", tipo: "aguardando-final", motivo: `Aguardando entrar nos últimos ${SEGUNDOS_FINAIS} segundos para enviar lance` };
   }
 
-  if (estado.nossoLance <= minimo) return { acao: "aguardar", tipo: "no-minimo", motivo: "Já está no valor mínimo: melhor colocação possível" };
+  if (estado.nossoLance <= minimo) return { acao: "aguardar", tipo: "no-minimo", motivo: "No lance mínimo: melhor colocação possível" };
 
   const melhor = estado.melhorLance ?? estado.nossoLance;
-  const alvo = lanceParaCobrir(melhor, item);
-  if (alvo >= minimo) {
-    if (alvo >= estado.nossoLance) return { acao: "aguardar", tipo: "primeiro", motivo: "Em 1º lugar" };
-    return { acao: "enviar", tipo: "lance", valor: alvo, motivo: `Cobrindo o melhor lance (${reais(melhor)}) com ${reais(alvo)}` };
+  // Cobrir o melhor: desconto escolhido, nunca menos que o intervalo do edital.
+  const desconto = arredondarAcima((melhor * Math.max(item.desconto || 0, 0)) / 100, q);
+  const alvo = arredondarAbaixo(melhor - Math.max(desconto, passoMinimo(melhor, estado, q)), q);
+  if (alvo >= minimo && alvo < estado.nossoLance) {
+    return { acao: "enviar", tipo: "lance", valor: alvo, motivo: `Cobrindo o melhor lance (${reais(melhor, q)}) com ${reais(alvo, q)}` };
   }
-  return { acao: "enviar", tipo: "minimo", valor: minimo, motivo: `Não dá para ser 1º acima do mínimo: lance no mínimo (${reais(minimo)})` };
+  // Não dá para ser 1º acima do mínimo: vai no mínimo, se ele ainda baixa o nosso lance o suficiente.
+  if (minimo <= arredondarAbaixo(estado.nossoLance - passoMinimo(estado.nossoLance, estado, q), q)) {
+    return { acao: "enviar", tipo: "minimo", valor: minimo, motivo: `Não dá para ser 1º acima do mínimo: lance no mínimo (${reais(minimo, q)})` };
+  }
+  return { acao: "aguardar", tipo: "no-minimo", motivo: "No lance mínimo: melhor colocação possível" };
 }
 
-/** Lê a configuração salva (completa com os padrões e descarta valores inválidos). */
-export function normalizarConfig(bruto: unknown): ConfigRobo {
-  const b = (bruto && typeof bruto === "object" ? bruto : {}) as Partial<ConfigRobo>;
-  const numero = (v: unknown, padrao: number, min = 0, max = Infinity) => {
-    const n = typeof v === "number" ? v : Number(v);
-    return Number.isFinite(n) ? Math.min(Math.max(n, min), max) : padrao;
-  };
-  const itens: Record<string, ConfigItemRobo> = {};
-  for (const [id, v] of Object.entries(b.itens && typeof b.itens === "object" ? b.itens : {})) {
-    if (!/^\d+$/.test(id) || !v || typeof v !== "object") continue;
-    const i = v as Partial<ConfigItemRobo>;
-    const minimo = i.minimo == null || (i.minimo as unknown) === "" ? null : numero(i.minimo, 0, 0);
-    const fechado = i.lanceFechado == null || (i.lanceFechado as unknown) === "" ? null : numero(i.lanceFechado, 0, 0);
-    itens[id] = {
-      ativo: i.ativo !== false,
-      minimo: minimo && minimo > 0 ? minimo : null,
-      reducaoTipo: i.reducaoTipo === "percentual" ? "percentual" : "valor",
-      reducao: numero(i.reducao, 0.01, 0, i.reducaoTipo === "percentual" ? 50 : 1e9),
-      lanceFechado: fechado && fechado > 0 ? fechado : null,
-    };
-  }
+/** Lê a configuração salva de um item (completa com os padrões e descarta valores inválidos). */
+export function normalizarItem(bruto: unknown): ConfigItemRobo {
+  const b = (bruto && typeof bruto === "object" ? bruto : {}) as Partial<ConfigItemRobo>;
+  const num = (v: unknown) => (typeof v === "number" ? v : Number(v));
+  const minimo = b.minimo == null || (b.minimo as unknown) === "" ? null : num(b.minimo);
+  const desconto = num(b.desconto);
   return {
-    segundosFinais: Math.round(numero(b.segundosFinais, 30, 3, 600)),
+    ligado: b.ligado === true,
+    minimo: minimo != null && Number.isFinite(minimo) && minimo > 0 ? minimo : null,
+    desconto: Number.isFinite(desconto) && desconto >= 0 && desconto <= 50 ? desconto : ITEM_ROBO_PADRAO.desconto,
     naoAguardar: b.naoAguardar === true,
-    lucroMinimo: numero(b.lucroMinimo, 0, -50, 90),
-    itens,
+    quatroCasas: b.quatroCasas === true,
+  };
+}
+
+// ---------------- Leitura dos dados do Compras.gov.br ----------------
+
+const numero = (v: unknown): number | null => {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && v.trim() && Number.isFinite(Number(v))) return Number(v);
+  return null;
+};
+
+const valorDe = (v: unknown): number | null => {
+  if (v && typeof v === "object") {
+    const o = v as Record<string, unknown>;
+    return numero(o.valorCalculado) ?? numero(o.valorInformado);
+  }
+  return numero(v);
+};
+
+export interface ItemDisputa extends EstadoItem {
+  numero: number;
+  descricao: string;
+  quantidade: number | null;
+  valorEstimado: number | null;
+}
+
+/** Converte um item vindo de /comprasnet-disputa/v1/compras/{compra}/itens/em-disputa. */
+export function lerItemDisputa(bruto: Record<string, unknown>): ItemDisputa {
+  const tipo = String(bruto.tipoVariacaoMinimaEntreLances ?? "").toUpperCase();
+  return {
+    numero: numero(bruto.numero) ?? 0,
+    descricao: String(bruto.descricao ?? bruto.descricaoDetalhada ?? bruto.identificacao ?? ""),
+    quantidade: numero(bruto.quantidade),
+    valorEstimado: numero(bruto.valorEstimado),
+    fase: String(bruto.fase ?? ""),
+    restanteSeg: numero(bruto.tempoRestanteEmSegundos),
+    melhorLance: valorDe(bruto.melhorValorGeral),
+    nossoLance: valorDe(bruto.melhorValorFornecedor),
+    situacao: bruto.situacaoParticipanteDisputa == null ? null : String(bruto.situacaoParticipanteDisputa),
+    variacaoMinima: numero(bruto.variacaoMinimaEntreLances),
+    tipoVariacao: tipo === "P" || tipo === "V" ? (tipo as "P" | "V") : null,
+  };
+}
+
+/** A resposta pode vir como lista ou dentro de um objeto (paginação). */
+export function listaDe(bruto: unknown): Record<string, unknown>[] {
+  if (Array.isArray(bruto)) return bruto as Record<string, unknown>[];
+  if (bruto && typeof bruto === "object") {
+    for (const k of ["itens", "content", "data", "registros", "resultado", "compras"]) {
+      const v = (bruto as Record<string, unknown>)[k];
+      if (Array.isArray(v)) return v as Record<string, unknown>[];
+    }
+  }
+  return [];
+}
+
+export interface CompraDisputa {
+  chave: string;
+  titulo: string;
+  uasg: string;
+  orgao: string;
+  modalidade: string; // "pregao" | "dispensa" | outro
+  modoDisputa: string;
+}
+
+/** Converte uma compra vinda da lista de disputas do fornecedor. */
+export function lerCompra(b: Record<string, unknown>): CompraDisputa | null {
+  const chave = String(b.chaveCompra ?? b.chave ?? b.id ?? "");
+  if (!chave) return null;
+  const mod = String(b.modalidade ?? b.modalidadeCompra ?? "").toUpperCase();
+  const textoMod = String(b.descricaoModalidade ?? b.modalidadeDescricao ?? "");
+  const dispensa = /DISPENSA/i.test(textoMod) || mod === "8" || mod === "DISPENSA" || mod === "D";
+  const pregao = /PREG/i.test(textoMod) || mod === "5" || mod === "6" || mod === "PREGAO" || mod === "P";
+  const numeroCompra = b.numeroCompra ?? b.numero;
+  const ano = b.anoCompra ?? b.ano;
+  const id = String(b.identificacao ?? (numeroCompra ? `${numeroCompra}${ano ? `/${ano}` : ""}` : chave));
+  const nomeMod = dispensa ? "Dispensa eletrônica" : pregao ? "Pregão eletrônico" : textoMod || "Compra";
+  return {
+    chave,
+    titulo: /^(dispensa|preg|concorr)/i.test(id) ? id : `${nomeMod} ${id}`,
+    uasg: String(b.numeroUasg ?? b.uasg ?? b.codigoUasg ?? ""),
+    orgao: String(b.nomeUasg ?? b.orgao ?? b.nomeOrgao ?? ""),
+    modalidade: dispensa ? "dispensa" : pregao ? "pregao" : "outra",
+    modoDisputa: String(b.descricaoModoDisputa ?? b.modoDisputa ?? ""),
   };
 }

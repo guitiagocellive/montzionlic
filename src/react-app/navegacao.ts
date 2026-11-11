@@ -1,5 +1,6 @@
 import {
   BellRing,
+  Bot,
   CalendarDays,
   ChartColumnIncreasing,
   FilePlus2,
@@ -53,6 +54,7 @@ export const AREAS: Area[] = [
     funcoes: [
       { caminho: "/licitacoes", rotulo: "Quadro de licitações", icone: KanbanSquare, modulo: "licitacoes" },
       { caminho: "/licitacoes/buscar", rotulo: "Buscar licitações", icone: FileSearch, modulo: "licitacoes" },
+      { caminho: "/disputas", rotulo: "Disputas (robô de lances)", icone: Bot, modulo: "licitacoes" },
       { caminho: "/licitacoes/painel", rotulo: "Painel de licitações", icone: LayoutDashboard, modulo: "licitacoes" },
       { caminho: "/fornecedores", rotulo: "Fornecedores", icone: Truck, modulo: "fornecedores" },
     ],

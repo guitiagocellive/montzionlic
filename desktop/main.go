@@ -10,6 +10,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,10 +22,8 @@ import (
 
 const (
 	endereco   = "https://montzion.com.br"
-	nomeApp    = "Montzion"
 	chaveReg   = `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\Montzion`
 	semJanela  = 0x08000000 // CREATE_NO_WINDOW
-	versao     = "1.1.0"
 	mbOK       = 0x00000000
 	mbIconInfo = 0x00000040
 	mbYesNo    = 0x00000004
@@ -37,19 +36,6 @@ var (
 	shell32 = syscall.NewLazyDLL("shell32.dll")
 	ole32   = syscall.NewLazyDLL("ole32.dll")
 )
-
-// Registro do que aconteceu (para descobrir erros em computadores de clientes):
-// %LOCALAPPDATA%\Montzion\montzion.log
-func registrarLog(formato string, args ...any) {
-	pasta := pastaInstalacao()
-	_ = os.MkdirAll(pasta, 0o755)
-	f, err := os.OpenFile(filepath.Join(pasta, "montzion.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-	fmt.Fprintf(f, "%s v%s  %s\r\n", time.Now().Format("2006-01-02 15:04:05"), versao, fmt.Sprintf(formato, args...))
-}
 
 type guid struct {
 	d1     uint32
@@ -84,10 +70,6 @@ func oculto(nome string, args ...string) *exec.Cmd {
 	cmd := exec.Command(nome, args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: semJanela}
 	return cmd
-}
-
-func pastaInstalacao() string {
-	return filepath.Join(os.Getenv("LOCALAPPDATA"), nomeApp)
 }
 
 func atalhos() []string {
@@ -216,9 +198,9 @@ func procurar(caminhos ...string) string {
 }
 
 // Abre a plataforma numa janela própria (modo aplicativo do Edge/Chrome).
-func abrir() {
+func procurarNavegador() string {
 	pf, pf86, local := os.Getenv("ProgramFiles"), os.Getenv("ProgramFiles(x86)"), os.Getenv("LOCALAPPDATA")
-	navegador := procurar(
+	return procurar(
 		filepath.Join(pf86, `Microsoft\Edge\Application\msedge.exe`),
 		filepath.Join(pf, `Microsoft\Edge\Application\msedge.exe`),
 		filepath.Join(local, `Microsoft\Edge\Application\msedge.exe`),
@@ -226,19 +208,71 @@ func abrir() {
 		filepath.Join(pf86, `Google\Chrome\Application\chrome.exe`),
 		filepath.Join(local, `Google\Chrome\Application\chrome.exe`),
 	)
-	if navegador != "" {
-		err := exec.Command(navegador, "--app="+endereco, "--start-maximized").Start()
+}
+
+// Trava: só um Montzion por vez controla o navegador (a ponte do robô).
+const portaTrava = "127.0.0.1:47811"
+
+func portaLivre() int {
+	for p := 9333; p < 9400; p++ {
+		l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", p))
 		if err == nil {
-			return
+			l.Close()
+			return p
 		}
-		registrarLog("não abriu %s: %v", navegador, err)
-	} else {
-		registrarLog("Edge/Chrome não encontrados; abrindo no navegador padrão")
 	}
-	// Sem Edge/Chrome: abre no navegador padrão.
-	if err := oculto("rundll32.exe", "url.dll,FileProtocolHandler", endereco).Start(); err != nil {
-		registrarLog("não abriu o navegador padrão: %v", err)
-		mensagem("Não foi possível abrir o navegador.\n\nAbra "+endereco+" no seu navegador.", mbOK|mbIconInfo)
+	return 9333
+}
+
+// Abre a plataforma numa janela própria (Edge/Chrome com um perfil só do Montzion) e liga a ponte do
+// robô de lances, que fica rodando enquanto o navegador estiver aberto.
+func abrir() {
+	navegador := procurarNavegador()
+	if navegador == "" {
+		registrarLog("Edge/Chrome não encontrados; abrindo no navegador padrão")
+		if err := oculto("rundll32.exe", "url.dll,FileProtocolHandler", endereco).Start(); err != nil {
+			registrarLog("não abriu o navegador padrão: %v", err)
+			mensagem("Não foi possível abrir o navegador.\n\nAbra "+endereco+" no seu navegador.", mbOK|mbIconInfo)
+		}
+		return
+	}
+	perfil := filepath.Join(pastaInstalacao(), "Navegador")
+	trava, err := net.Listen("tcp", portaTrava)
+	if err != nil {
+		// O Montzion já está aberto: só abre mais uma janela no mesmo navegador.
+		if err := exec.Command(navegador, "--user-data-dir="+perfil, "--app="+endereco).Start(); err != nil {
+			registrarLog("não abriu outra janela: %v", err)
+		}
+		return
+	}
+	defer trava.Close()
+	porta := portaLivre()
+	cmd := exec.Command(navegador,
+		fmt.Sprintf("--remote-debugging-port=%d", porta),
+		"--user-data-dir="+perfil,
+		"--no-first-run",
+		"--no-default-browser-check",
+		"--app="+endereco,
+		"--start-maximized",
+	)
+	if err := cmd.Start(); err != nil {
+		registrarLog("não abriu %s: %v", navegador, err)
+		_ = exec.Command(navegador, "--app="+endereco, "--start-maximized").Start()
+		return
+	}
+	ws, err := enderecoDevTools(porta, 25*time.Second)
+	if err != nil {
+		registrarLog("robô de lances indisponível: %v", err)
+		return
+	}
+	cdp, err := conectarCDP(ws)
+	if err != nil {
+		registrarLog("robô de lances indisponível: %v", err)
+		return
+	}
+	registrarLog("ponte do robô ligada (porta %d)", porta)
+	if err := novaPonte(configPonte{Plataforma: endereco, Compras: "https://cnetmobile.estaleiro.serpro.gov.br"}, cdp).Rodar(); err != nil {
+		registrarLog("ponte do robô parou: %v", err)
 	}
 }
 

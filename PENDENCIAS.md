@@ -23,13 +23,14 @@ Lista do que foi combinado e ainda falta fazer (ou melhorar). Atualizar sempre q
 
 ## A fazer
 
-- [ ] **2. Robô de lances (sala de lances)**
-  - [x] Fase 1: aba "Robô de lances" na licitação (valor mínimo por item, sugestão pelo orçamento, redução,
-        lance fechado, "Não aguardar os segundos finais para enviar o lance", padrão 30 s finais) e simulador
-        (aberto com prorrogação, hora fixa, aberto e fechado) com comparação das estratégias.
-  - [ ] Fase 2: mapear a sala de disputa do Compras.gov.br numa sessão real (robô só observando).
-  - [ ] Fase 3: robô no aplicativo do Windows (janela onde a pessoa entra no gov.br; modo observação →
-        com confirmação → automático), registrando os lances na plataforma.
+- [ ] **2. Robô de lances** (Licitações → Disputas)
+  - [x] Página Disputas central (como o Siga Pregão): lista as disputas da conta do Compras.gov.br, itens com
+        lance mínimo, desconto (%), melhor lance, meu lance, cronômetro, ligar/parar por item, "Permitir lances
+        com 4 casas decimais" e "Não aguardar os segundos finais para enviar lances".
+  - [x] Sempre espera os 10 segundos finais; cobre até o lance mínimo; no fim vai no mínimo.
+  - [x] Ponte no aplicativo do Windows (janela do Compras.gov.br logada pela própria pessoa no gov.br).
+  - [ ] Validar numa disputa real (os campos foram mapeados pelo código da sala de disputa; testado com
+        um Compras.gov.br simulado).
 - [ ] **6. Links diretos para emitir certidões** na Documentação (Receita/PGFN, FGTS, TST, Estado,
       Município), com o aviso de vencimento levando ao site certo.
 - [ ] **7. Busca geral (Ctrl+K)** — achar licitação, empenho ou fornecedor pelo número, órgão ou produto.
