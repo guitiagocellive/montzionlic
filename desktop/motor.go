@@ -85,6 +85,7 @@ type motor struct {
 	buscandoLista  bool
 	entrandoDesde  time.Time
 	escondeuPortal bool
+	mostrouPortal  bool // já mostrou a janela do Compras para a pessoa abrir a sala sozinha
 
 	httpc        *http.Client
 	diretoAte    time.Time // até quando usar a janela em vez do pedido direto
@@ -255,7 +256,9 @@ func (m *motor) verLogin() {
 	desde := m.entrandoDesde
 	if !janelas {
 		m.escondeuPortal = false
+		m.mostrouPortal = false
 	}
+	mostrou := m.mostrouPortal
 	m.mu.Unlock()
 	switch {
 	case portalLogado:
@@ -263,15 +266,21 @@ func (m *motor) verLogin() {
 			m.p.esconderCompras()
 			registrarLog("robô: login no gov.br feito; janela escondida, entrando na sala de disputa")
 		}
-		m.definirFase("entrando", "Login feito. Entrando na sala de disputa…")
 		m.p.abrirSalaPeloPortal()
-		// Se a sala não abrir sozinha, mostra a janela de novo para a pessoa abrir pelo menu.
-		if time.Since(desde) > 30*time.Second && m.p.abrirCompras != nil {
+		// Se a sala não abrir sozinha em 40 s, mostra a janela (uma vez) para a pessoa abrir pelo menu;
+		// o robô continua tentando e segue sozinho assim que a sala tiver sessão.
+		if !mostrou && time.Since(desde) > 40*time.Second && m.p.abrirCompras != nil {
 			m.mu.Lock()
-			m.entrandoDesde = time.Now()
+			m.mostrouPortal = true
 			m.mu.Unlock()
 			m.p.abrirCompras()
-			m.definirFase("entrando", "Não consegui abrir a sala de disputa sozinho: na janela do Compras.gov.br, clique em Compras e abra a sala de disputa.")
+			registrarLog("robô: a sala de disputa não abriu sozinha em 40 s; janela do Compras.gov.br mostrada")
+			mostrou = true
+		}
+		if mostrou {
+			m.definirFase("entrando", "Não consegui abrir a sala de disputa sozinho. Na janela do Compras.gov.br, abra a sala de disputa (menu Compras → Acompanhar/Disputa): o robô segue sozinho assim que ela abrir.")
+		} else {
+			m.definirFase("entrando", "Login feito. Entrando na sala de disputa…")
 		}
 	case janelas:
 		m.definirFase("aguardando-login", "Entre com a sua conta gov.br na janela que abriu.")

@@ -1,9 +1,9 @@
 {
-  "versao": "3.0.1",
+  "versao": "3.0.2",
   "data": "2026-11-11",
   "novidades": [
-    "Instalador refeito para não ser confundido com ameaça pelo antivírus do Windows (sem PowerShell nem comandos escondidos).",
-    "Dados da empresa e da versão no arquivo (Propriedades → Detalhes).",
-    "Robô de lances em tempo real e login direto no gov.br (da versão 3.0)."
+    "Robô: corrigido o travamento em \"Entrando na sala de disputa\" (a sala abre na mesma janela sem perder a sessão do portal e o robô não desiste depois de 2 tentativas).",
+    "Instalador sem PowerShell nem comandos escondidos, para o antivírus do Windows não confundir com ameaça.",
+    "Dados da empresa e da versão no arquivo (Propriedades → Detalhes)."
   ]
 }

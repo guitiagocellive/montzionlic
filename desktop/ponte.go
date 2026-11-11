@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -62,7 +63,7 @@ type ponte struct {
 	novaLista  chan struct{}
 	logada     string               // targetId da janela com a sessão da sala de disputa (o token fica em cada aba)
 	tentouSala map[string]time.Time // portal -> última vez que a ponte tentou abrir a sala de disputa
-	tentativas map[string]int       // portal -> quantas vezes tentou (no máximo 2, para não abrir janelas sem parar)
+	tentativas map[string]int       // portal -> quantas vezes tentou (alterna entre os itens mais prováveis do menu)
 	menuVisto  map[string]bool      // endereços do portal cujo menu já foi anotado no registro
 	// Janela própria do aplicativo: abre/foca a janela nativa do Compras.gov.br (nil = aba do navegador).
 	abrirCompras func() bool
@@ -151,6 +152,9 @@ func (p *ponte) verAlvo(t infoAlvo) {
 	if atual != nil && tipo == "compras" && semSessao.MatchString(t.URL) && p.cfg.Login != "" && atual.url != t.URL {
 		go p.irParaLogin(atual.sessao)
 	}
+	if atual != nil && atual.url != t.URL && tipo != "plataforma" {
+		registrarLog("ponte: janela do Compras.gov.br em %s", semValores(t.URL))
+	}
 	if atual != nil {
 		atual.url = t.URL
 		if tipo != "" && atual.tipo != tipo {
@@ -203,6 +207,25 @@ func (p *ponte) prepararSessao(sessao, tipo string) {
 	} else if tipo == "compras" {
 		_, _ = p.cdp.Chamar(sessao, "Network.enable", map[string]any{"maxResourceBufferSize": 8 << 20, "maxTotalBufferSize": 32 << 20}, 10*time.Second)
 	}
+}
+
+// semValores tira os valores dos parâmetros de um endereço (para o registro não guardar chaves de sessão).
+func semValores(endereco string) string {
+	u, err := url.Parse(endereco)
+	if err != nil {
+		return "(endereço inválido)"
+	}
+	q := u.Query()
+	nomes := make([]string, 0, len(q))
+	for k := range q {
+		nomes = append(nomes, k+"=…")
+	}
+	sort.Strings(nomes)
+	u.RawQuery, u.Fragment = "", ""
+	if len(nomes) > 0 {
+		return u.String() + "?" + strings.Join(nomes, "&")
+	}
+	return u.String()
 }
 
 // Leva a janela sem sessão para o login de fornecedor (em vez do login de governo da página oficial).
@@ -621,6 +644,13 @@ const scriptMenuPortal = `(() => {
   const visitar = (w, prof) => {
     let d;
     try { d = w.document; void d.body; } catch (e) { return; }
+    // A sala de disputa precisa receber a sessão do portal (às vezes por formulário). Abrir em janela nova
+    // perde esses dados no aplicativo: tudo passa a abrir na própria janela.
+    try {
+      w.open = (u) => { window.top.location.href = new URL(String(u || ""), w.location.href).href; return null; };
+      for (const f of d.forms) f.target = "_top";
+      for (const a of d.querySelectorAll("a[target]")) a.target = "_top";
+    } catch (e) {}
     try {
       for (const k of Object.keys(w)) {
         if (!/^Menu\d+(_\d+)*$/.test(k)) continue;
@@ -630,7 +660,7 @@ const scriptMenuPortal = `(() => {
         if (!link) continue;
         add(m[0], link, () => {
           if (/^javascript:/i.test(link)) { w.eval(link.slice(11)); return; }
-          w.open(new URL(link, w.location.href).href, "_blank");
+          window.top.location.href = new URL(link, w.location.href).href;
         });
       }
     } catch (e) {}
@@ -686,7 +716,7 @@ func (p *ponte) abrirSalaPeloPortal() bool {
 		p.mu.Lock()
 		ultima, vezes := p.tentouSala[a.alvo], p.tentativas[a.alvo]
 		p.mu.Unlock()
-		if time.Since(ultima) < 30*time.Second || vezes >= 2 {
+		if time.Since(ultima) < 20*time.Second {
 			continue
 		}
 		saida, err := p.avaliar(a.sessao, scriptMenuPortal, 5*time.Second)
@@ -700,11 +730,20 @@ func (p *ponte) abrirSalaPeloPortal() bool {
 		if json.Unmarshal([]byte(saida), &v) != nil {
 			continue
 		}
-		melhor, nota := -1, 2
+		// Itens que parecem levar à sala, do mais provável ao menos; cada tentativa usa o próximo.
+		var candidatos []int
 		for i, it := range v.Itens {
-			if n := notaSala(it); n > nota {
-				melhor, nota = i, n
+			if notaSala(it) > 2 {
+				candidatos = append(candidatos, i)
 			}
+		}
+		sort.SliceStable(candidatos, func(x, y int) bool { return notaSala(v.Itens[candidatos[x]]) > notaSala(v.Itens[candidatos[y]]) })
+		if len(candidatos) > 3 {
+			candidatos = candidatos[:3]
+		}
+		melhor := -1
+		if len(candidatos) > 0 {
+			melhor = candidatos[vezes%len(candidatos)]
 		}
 		p.mu.Lock()
 		visto := p.menuVisto[v.URL]
@@ -727,7 +766,7 @@ func (p *ponte) abrirSalaPeloPortal() bool {
 		p.tentouSala[a.alvo] = time.Now()
 		p.tentativas[a.alvo]++
 		p.mu.Unlock()
-		registrarLog("ponte: abrindo a sala de disputa pelo menu: %s -> %s", v.Itens[melhor].Texto, v.Itens[melhor].Link)
+		registrarLog("ponte: abrindo a sala de disputa pelo menu (tentativa %d): %s -> %s", vezes+1, v.Itens[melhor].Texto, semValores(v.Itens[melhor].Link))
 		_, _ = p.avaliar(a.sessao, fmt.Sprintf("(window.__montzionSala && window.__montzionSala[%d] && window.__montzionSala[%d](), 'ok')", melhor, melhor), 5*time.Second)
 	}
 	return logado
