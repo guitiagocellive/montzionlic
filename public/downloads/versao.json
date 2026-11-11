@@ -1,9 +1,9 @@
 {
-  "versao": "3.0.2",
+  "versao": "3.0.3",
   "data": "2026-11-11",
   "novidades": [
-    "Robô: corrigido o travamento em \"Entrando na sala de disputa\" (a sala abre na mesma janela sem perder a sessão do portal e o robô não desiste depois de 2 tentativas).",
-    "Instalador sem PowerShell nem comandos escondidos, para o antivírus do Windows não confundir com ameaça.",
-    "Dados da empresa e da versão no arquivo (Propriedades → Detalhes)."
+    "Robô: entra na sala de disputa direto pela chave que o portal do Compras.gov.br gera (compras-id), sem depender do clique no menu.",
+    "Robô: não desiste depois de 2 tentativas e registra cada passo no montzion.log.",
+    "Instalador sem PowerShell nem comandos escondidos."
   ]
 }

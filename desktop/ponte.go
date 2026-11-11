@@ -639,7 +639,7 @@ var paginaDeLogin = regexp.MustCompile(`(?i)/seguro/loginPortal|acesso\.gov\.br`
 // Lê os itens do menu da Área de Trabalho (o menu é montado em listas JavaScript "MenuN" nos quadros da
 // página) e os links da página. Guarda em window.__montzionSala uma função para abrir cada um.
 const scriptMenuPortal = `(() => {
-  const itens = [], acoes = [];
+  const itens = [], acoes = [], chaves = [];
   const add = (texto, link, f) => { itens.push({ texto: String(texto || "").replace(/\s+/g, " ").trim().slice(0, 90), link: String(link || "").slice(0, 300) }); acoes.push(f); };
   const visitar = (w, prof) => {
     let d;
@@ -670,11 +670,22 @@ const scriptMenuPortal = `(() => {
         add(el.innerText || el.title || el.value, link, () => el.click());
       }
     } catch (e) {}
+    // A chave da sala de disputa (compras-id) vem dentro do link que o portal monta para o sistema novo.
+    try {
+      const html = d.documentElement.innerHTML;
+      for (const m of html.matchAll(/compras-id(?:=|%3D)([A-Za-z0-9._~%-]{8,})/gi)) chaves.push(decodeURIComponent(m[1]));
+      for (const k of Object.keys(w)) {
+        if (!/^Menu\d+(_\d+)*$/.test(k)) continue;
+        const link = String((w[k] && w[k][1]) || "");
+        const m = /compras-id(?:=|%3D)([A-Za-z0-9._~%-]{8,})/i.exec(link);
+        if (m) chaves.push(decodeURIComponent(m[1]));
+      }
+    } catch (e) {}
     if (prof < 4) for (let i = 0; i < w.frames.length; i++) visitar(w.frames[i], prof + 1);
   };
   visitar(window, 0);
   window.__montzionSala = acoes;
-  return JSON.stringify({ url: location.href, itens });
+  return JSON.stringify({ url: location.href, itens, chave: chaves[0] || "" });
 })()`
 
 type itemMenu struct {
@@ -726,8 +737,21 @@ func (p *ponte) abrirSalaPeloPortal() bool {
 		var v struct {
 			URL   string     `json:"url"`
 			Itens []itemMenu `json:"itens"`
+			Chave string     `json:"chave"`
 		}
 		if json.Unmarshal([]byte(saida), &v) != nil {
+			continue
+		}
+		// Caminho direto: o portal já traz a chave da sala (compras-id) em algum link. A sala troca essa
+		// chave pela sessão do fornecedor sozinha (como acontece quando a pessoa clica no menu).
+		if v.Chave != "" && vezes%2 == 0 {
+			p.mu.Lock()
+			p.tentouSala[a.alvo] = time.Now()
+			p.tentativas[a.alvo]++
+			p.mu.Unlock()
+			destino := p.cfg.paginaDisputas() + "?compras-id=" + url.QueryEscape(v.Chave)
+			registrarLog("ponte: chave da sala de disputa encontrada no portal; abrindo a sala direto (tentativa %d)", vezes+1)
+			_, _ = p.cdp.Chamar(a.sessao, "Page.navigate", mapa{"url": destino}, 10*time.Second)
 			continue
 		}
 		// Itens que parecem levar à sala, do mais provável ao menos; cada tentativa usa o próximo.
