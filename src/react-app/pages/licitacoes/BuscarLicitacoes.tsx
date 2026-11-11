@@ -1,6 +1,8 @@
 import {
   CalendarClock,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ExternalLink,
   FileSearch,
   FolderOpen,
@@ -19,6 +21,7 @@ import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { podeEditar } from "../../../shared/permissoes";
 import type { LicitacaoResumo, Usuario } from "../../../shared/tipos";
 import { api, mensagemDeErro } from "../../api";
+import { SeletorIntervalo } from "../../components/Calendario";
 import { avisar, Interruptor, Modal, Vazio } from "../../components/Ui";
 import { useFecharAoClicarFora } from "../../components/useFecharAoClicarFora";
 import { link, navegar } from "../../rota";
@@ -45,7 +48,7 @@ import { DetalhePncp, dataHora, type EtapaPncp, reais } from "./DetalhePncp";
 import { EscolherItensPncp } from "./EscolherItensPncp";
 
 const CHAVE_FILTROS = "montzion:busca-pncp";
-const POR_TELA = 30;
+const POR_PAGINA = 20; // licitações por página
 
 function lerFiltros(): FiltrosBusca {
   try {
@@ -195,7 +198,6 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
   const [resposta, setResposta] = useState<RespostaBusca | null>(null);
   const [usados, setUsados] = useState<FiltrosBusca | null>(null);
   const [pagina, setPagina] = useState(1);
-  const [mostrar, setMostrar] = useState(POR_TELA);
   const [buscando, setBuscando] = useState(false);
   const [erro, setErro] = useState("");
   const [noQuadro, setNoQuadro] = useState<Record<string, number>>({});
@@ -225,7 +227,10 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
   const mudar = (novo: Partial<FiltrosBusca>) => setFiltros((f) => ({ ...f, ...novo }));
   const alternar = (lista: string[], valor: string) => (lista.includes(valor) ? lista.filter((x) => x !== valor) : [...lista, valor]);
 
-  async function buscar(pag = 1, f = filtros) {
+  const topoResultados = useRef<HTMLDivElement>(null);
+  const subirParaResultados = () => topoResultados.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+
+  async function buscar(pag = 1, f = filtros): Promise<RespostaBusca | null> {
     setBuscando(true);
     setErro("");
     try {
@@ -234,16 +239,15 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
       /* sem armazenamento */
     }
     try {
-      const r = await buscarLicitacoes(f, pag);
+      const r = await buscarLicitacoes(f, pag, POR_PAGINA);
       setUsados(f);
       setPagina(pag);
-      if (pag === 1) setMostrar(POR_TELA);
-      setResposta((atual) =>
-        pag === 1 || !atual ? r : { ...r, itens: [...atual.itens, ...r.itens.filter((i) => !atual.itens.some((x) => x.id === i.id))] },
-      );
+      setResposta(r); // cada página substitui a anterior (nada de lista infinita)
+      return r;
     } catch (err) {
       setErro(mensagemDeErro(err));
       if (pag === 1) setResposta({ itens: [], total: 0, varredura: false });
+      return null;
     } finally {
       setBuscando(false);
     }
@@ -304,17 +308,36 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
 
   const avancados = filtrosAvancados(filtros);
   const resultados = resposta?.itens ?? null;
-  const visiveis = resposta?.varredura ? (resultados ?? []).slice(0, mostrar) : resultados ?? [];
+  // Páginas: na varredura tudo já veio e só fatiamos; na busca direta cada página vem do PNCP.
+  const totalPaginas = resposta ? Math.max(1, Math.ceil((resposta.varredura ? resposta.itens.length : resposta.total) / POR_PAGINA)) : 1;
+  const visiveis = resposta?.varredura ? (resultados ?? []).slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA) : resultados ?? [];
   const posAberto = detalhe && resultados ? resultados.findIndex((x) => x.id === detalhe) : -1;
   const aberto = posAberto >= 0 ? resultados![posAberto] : null;
+  const posGeral = posAberto < 0 ? -1 : resposta?.varredura ? posAberto : (pagina - 1) * POR_PAGINA + posAberto;
+  const totalGeral = resposta ? (resposta.varredura ? resposta.itens.length : resposta.total) : 0;
   function irPara(pos: number) {
-    if (!resultados?.[pos]) return;
-    setDetalhe(resultados[pos].id); // mantém a etapa (dados, itens ou arquivos) ao passar para a próxima
-    if (resposta?.varredura && pos >= mostrar) setMostrar(pos + 1);
-    // Chegando no fim do que já veio do PNCP: busca a próxima página.
-    if (!resposta?.varredura && pos >= resultados.length - 2 && resultados.length < (resposta?.total ?? 0) && !buscando) buscar(pagina + 1);
+    if (!resultados) return;
+    if (resultados[pos]) {
+      setDetalhe(resultados[pos].id); // mantém a etapa (dados, itens ou arquivos) ao passar para a próxima
+      if (resposta?.varredura) setPagina(Math.floor(pos / POR_PAGINA) + 1);
+      return;
+    }
+    // Passou do fim (ou do começo) da página que veio do PNCP: carrega a vizinha.
+    if (resposta?.varredura || buscando) return;
+    const destino = pos < 0 ? pagina - 1 : pagina + 1;
+    if (destino < 1 || destino > totalPaginas) return;
+    buscar(destino).then((r) => {
+      const lista = r?.itens ?? [];
+      const alvo = pos < 0 ? lista[lista.length - 1] : lista[0];
+      if (alvo) setDetalhe(alvo.id);
+    });
   }
-  const temMais = resposta ? (resposta.varredura ? mostrar < resposta.itens.length : resposta.itens.length < resposta.total) : false;
+  function irParaPagina(n: number) {
+    if (n < 1 || n > totalPaginas || n === pagina || buscando) return;
+    if (resposta?.varredura) setPagina(n);
+    else buscar(n);
+    subirParaResultados();
+  }
 
   // Mudar a ordem na tela reordena o que já veio (sem nova busca) quando já está tudo carregado.
   function mudarOrdem(ordem: FiltrosBusca["ordem"]) {
@@ -334,7 +357,7 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
         ? `${base} entre as ${resposta.analisadas!.toLocaleString("pt-BR")} mais recentes de ${resposta.existentes!.toLocaleString("pt-BR")}. Para ver todas, marque estados ou use palavra-chave.`
         : base;
     }
-    return `${resposta.total.toLocaleString("pt-BR")} resultado(s) · mostrando ${resposta.itens.length}`;
+    return `${resposta.total.toLocaleString("pt-BR")} resultado(s) · página ${pagina} de ${totalPaginas.toLocaleString("pt-BR")}`;
   }
 
   const marcarTodos = (k: "ufs" | "plataformas" | "modalidades", todos: string[]) => mudar({ [k]: todos } as Partial<FiltrosBusca>);
@@ -402,9 +425,14 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
         </label>
         {filtros.sessao === "periodo" && (
           <span className="datas-barra">
-            <input type="date" value={filtros.sessaoDe} onChange={(e) => mudar({ sessaoDe: e.target.value })} aria-label="Sessão a partir de" />
-            até
-            <input type="date" value={filtros.sessaoAte} onChange={(e) => mudar({ sessaoAte: e.target.value })} aria-label="Sessão até" />
+            <SeletorIntervalo
+              de={filtros.sessaoDe}
+              ate={filtros.sessaoAte}
+              rotulo="Datas da sessão"
+              placeholder="Início e fim da sessão"
+              abrirAoMontar={!filtros.sessaoDe && !filtros.sessaoAte}
+              aoMudar={(de, ate) => (de && ate ? mudarEBuscar({ sessao: "periodo", sessaoDe: de, sessaoAte: ate }) : mudar({ sessaoDe: de, sessaoAte: ate }))}
+            />
           </span>
         )}
         <button className="botao acento botao-buscar" disabled={buscando}>
@@ -453,7 +481,7 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
         </section>
       ) : (
         <>
-          <div className="barra-resultados">
+          <div className="barra-resultados" ref={topoResultados}>
             <p className="texto-fraco pequeno resumo-busca">
               {buscando && <Loader2 className="girando" size={13} />} {resumoBusca()}
             </p>
@@ -552,13 +580,7 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
               );
             })}
           </div>
-          {temMais && (
-            <div className="carregar-mais">
-              <button className="botao secundario" onClick={() => (resposta?.varredura ? setMostrar((m) => m + POR_TELA) : buscar(pagina + 1))} disabled={buscando}>
-                {buscando ? "Carregando…" : "Carregar mais"}
-              </button>
-            </div>
-          )}
+          {totalPaginas > 1 && <Paginacao pagina={pagina} total={totalPaginas} aoIr={irParaPagina} ocupado={buscando} />}
           {Object.values(noQuadro).length > 0 && (
             <p className="texto-fraco pequeno" style={{ textAlign: "center" }}>
               As licitações adicionadas ficam em{" "}
@@ -607,13 +629,16 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
                   ))}
                 </select>
               </label>
-              <label className="campo">
+              <div className="campo">
                 <span>Intervalo</span>
-                <span className="datas-avancada">
-                  <input type="date" value={filtros.sessaoDe} onChange={(e) => mudar({ sessao: "periodo", sessaoDe: e.target.value })} aria-label="Intervalo de" />
-                  <input type="date" value={filtros.sessaoAte} onChange={(e) => mudar({ sessao: "periodo", sessaoAte: e.target.value })} aria-label="Intervalo até" />
-                </span>
-              </label>
+                <SeletorIntervalo
+                  de={filtros.sessaoDe}
+                  ate={filtros.sessaoAte}
+                  rotulo="Intervalo da sessão"
+                  placeholder="Início e fim"
+                  aoMudar={(de, ate) => mudar({ sessao: de || ate ? "periodo" : filtros.sessao === "periodo" ? "" : filtros.sessao, sessaoDe: de, sessaoAte: ate })}
+                />
+              </div>
               <label className="campo">
                 <span>Tipo de item</span>
                 <select value={filtros.tipoItem} onChange={(e) => mudar({ tipoItem: e.target.value as FiltrosBusca["tipoItem"] })} aria-label="Tipo de item">
@@ -778,12 +803,50 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
           ocupado={!!importando && importando.id !== aberto.id}
           aoImportar={() => setEscolhendo(aberto)}
           aoFechar={() => setDetalhe(null)}
-          anterior={posAberto > 0 ? () => irPara(posAberto - 1) : undefined}
-          proxima={posAberto >= 0 && posAberto < (resultados?.length ?? 0) - 1 ? () => irPara(posAberto + 1) : undefined}
-          posicao={posAberto >= 0 ? `${posAberto + 1} de ${resposta?.varredura ? resultados!.length : resposta!.total}` : undefined}
+          anterior={posGeral > 0 ? () => irPara(posAberto - 1) : undefined}
+          proxima={posGeral >= 0 && posGeral < totalGeral - 1 ? () => irPara(posAberto + 1) : undefined}
+          posicao={posGeral >= 0 ? `${posGeral + 1} de ${totalGeral.toLocaleString("pt-BR")}` : undefined}
         />
       )}
       {escolhendo && <EscolherItensPncp resultado={escolhendo} aoConfirmar={(itens) => importar(escolhendo, itens)} aoFechar={() => setEscolhendo(null)} />}
     </>
+  );
+}
+
+/** Números das páginas com reticências: 1 … 4 5 [6] 7 8 … 40 */
+function numerosPaginas(atual: number, total: number): (number | "…")[] {
+  const set = new Set([1, total, atual - 2, atual - 1, atual, atual + 1, atual + 2].filter((n) => n >= 1 && n <= total));
+  const lista = [...set].sort((a, b) => a - b);
+  const saida: (number | "…")[] = [];
+  lista.forEach((n, i) => {
+    if (i > 0 && n - lista[i - 1] > 1) saida.push("…");
+    saida.push(n);
+  });
+  return saida;
+}
+
+function Paginacao({ pagina, total, aoIr, ocupado }: { pagina: number; total: number; aoIr: (n: number) => void; ocupado: boolean }) {
+  return (
+    <nav className="paginacao" aria-label="Páginas de resultados">
+      <button className="pag-seta" onClick={() => aoIr(pagina - 1)} disabled={pagina <= 1 || ocupado} aria-label="Página anterior">
+        <ChevronLeft /> <span>Anterior</span>
+      </button>
+      <div className="pag-numeros">
+        {numerosPaginas(pagina, total).map((n, i) =>
+          n === "…" ? (
+            <span key={`r${i}`} className="pag-reticencias">
+              …
+            </span>
+          ) : (
+            <button key={n} className={n === pagina ? "ativa" : ""} onClick={() => aoIr(n)} disabled={ocupado && n !== pagina} aria-label={`Página ${n}`} aria-current={n === pagina ? "page" : undefined}>
+              {n}
+            </button>
+          ),
+        )}
+      </div>
+      <button className="pag-seta" onClick={() => aoIr(pagina + 1)} disabled={pagina >= total || ocupado} aria-label="Próxima página">
+        <span>Próxima</span> <ChevronRight />
+      </button>
+    </nav>
   );
 }

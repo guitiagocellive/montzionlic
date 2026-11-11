@@ -8384,11 +8384,16 @@ code {
   color: var(--texto-fraco);
 }
 
-.datas-barra input {
-  width: auto;
-  height: 40px;
+.datas-barra .seletor-data {
+  min-width: 240px;
+}
+
+.datas-barra .botao-data {
+  height: 44px;
+  padding-left: 15px;
   border-radius: 999px;
-  font-size: 0.82rem;
+  background: var(--superficie);
+  font-size: 0.86rem;
 }
 
 .botao-buscar {
@@ -8689,4 +8694,436 @@ code {
 
 .datas-avancada input {
   height: 42px;
+}
+
+/* ---------- Calendário (seletor de datas da plataforma) ---------- */
+
+.seletor-data {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.botao-data {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  height: 42px;
+  padding: 0 36px 0 13px;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-sm);
+  background: var(--superficie-2);
+  color: var(--texto);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
+
+.botao-data:hover:not(:disabled) {
+  border-color: var(--borda-forte);
+}
+
+.seletor-data.aberto .botao-data,
+.botao-data:focus-visible {
+  outline: none;
+  border-color: var(--acento);
+  box-shadow: 0 0 0 3px var(--acento-suave);
+}
+
+.botao-data:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.botao-data > svg {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  color: var(--acento);
+}
+
+.botao-data > span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+
+.botao-data > span.vazio {
+  color: var(--texto-fraco);
+}
+
+.limpar-data {
+  position: absolute;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--texto-fraco);
+  cursor: pointer;
+}
+
+.limpar-data:hover {
+  background: var(--hover);
+  color: var(--texto);
+}
+
+.limpar-data svg {
+  width: 14px;
+  height: 14px;
+}
+
+.cal-flutuante {
+  position: fixed;
+  z-index: 1000;
+  border-radius: var(--raio);
+  background: var(--superficie-solida, var(--superficie));
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow: var(--sombra-flutuante);
+  animation: cal-entrar 0.22s var(--curva);
+  transform-origin: top left;
+}
+
+.cal-flutuante.acima {
+  transform-origin: bottom left;
+}
+
+@keyframes cal-entrar {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+}
+
+.calendario {
+  width: 300px;
+  max-width: calc(100vw - 16px);
+  padding: 14px;
+  user-select: none;
+}
+
+.cal-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.cal-titulo {
+  flex: 1;
+  height: 34px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--texto);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cal-titulo:hover,
+.cal-seta:hover {
+  background: var(--hover);
+}
+
+.cal-seta {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--texto-suave);
+  cursor: pointer;
+}
+
+.cal-seta svg {
+  width: 17px;
+  height: 17px;
+}
+
+.cal-semana,
+.cal-dias {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.cal-semana span {
+  padding: 4px 0 6px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  text-align: center;
+  color: var(--texto-fraco);
+}
+
+.cal-dias.vai {
+  animation: cal-vai 0.25s var(--curva);
+}
+
+.cal-dias.volta {
+  animation: cal-volta 0.25s var(--curva);
+}
+
+@keyframes cal-vai {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+}
+
+@keyframes cal-volta {
+  from {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
+}
+
+.cal-dia {
+  position: relative;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--texto);
+  font: inherit;
+  font-size: 0.86rem;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.cal-dia > span {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin: 2px auto;
+  border-radius: 50%;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.cal-dia:hover:not(:disabled) > span {
+  background: var(--hover);
+}
+
+.cal-dia.fora {
+  color: var(--texto-fraco);
+}
+
+.cal-dia:disabled {
+  color: var(--texto-fraco);
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.cal-dia.hoje > span {
+  box-shadow: inset 0 0 0 1.5px var(--acento);
+  font-weight: 600;
+}
+
+.cal-dia.no-intervalo {
+  background: var(--acento-suave);
+}
+
+.cal-dia.inicio {
+  background: linear-gradient(90deg, transparent 50%, var(--acento-suave) 50%);
+}
+
+.cal-dia.fim {
+  background: linear-gradient(90deg, var(--acento-suave) 50%, transparent 50%);
+}
+
+.cal-dia.escolhido > span,
+.cal-dia.escolhido:hover > span {
+  background: var(--acento);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.cal-meses {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.cal-meses button {
+  height: 44px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--superficie-2);
+  color: var(--texto);
+  font: inherit;
+  cursor: pointer;
+}
+
+.cal-meses button:hover {
+  background: var(--hover);
+}
+
+.cal-meses button.ativo {
+  background: var(--acento);
+  color: #fff;
+  font-weight: 600;
+}
+
+.cal-dica {
+  margin: 8px 0 0;
+  font-size: 0.8rem;
+  text-align: center;
+  color: var(--texto-suave);
+}
+
+.cal-rodape {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--borda);
+}
+
+.cal-atalhos {
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  justify-content: start;
+  gap: 6px;
+}
+
+.cal-atalho,
+.cal-limpar {
+  height: 30px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--acento-suave);
+  color: var(--acento-texto);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.cal-atalho:hover {
+  background: var(--acento);
+  color: #fff;
+}
+
+.cal-limpar {
+  background: transparent;
+  color: var(--texto-suave);
+}
+
+.cal-limpar:hover {
+  background: var(--hover);
+  color: var(--texto);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cal-flutuante,
+  .cal-dias.vai,
+  .cal-dias.volta {
+    animation: none;
+  }
+}
+
+.campo-periodo {
+  min-width: 260px;
+}
+
+/* ---------- Paginação (busca de licitações) ---------- */
+
+.paginacao {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 18px 0 6px;
+}
+
+.pag-numeros {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pag-numeros button,
+.pag-seta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 38px;
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--borda);
+  border-radius: 999px;
+  background: var(--superficie);
+  color: var(--texto);
+  font: inherit;
+  font-size: 0.86rem;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
+}
+
+.pag-numeros button:hover:not(:disabled):not(.ativa),
+.pag-seta:hover:not(:disabled) {
+  border-color: var(--borda-forte);
+  background: var(--hover);
+}
+
+.pag-numeros button.ativa {
+  border-color: var(--acento);
+  background: var(--acento);
+  color: #fff;
+  font-weight: 600;
+}
+
+.pag-seta {
+  padding: 0 14px;
+}
+
+.pag-seta svg {
+  width: 16px;
+  height: 16px;
+}
+
+.pag-numeros button:disabled,
+.pag-seta:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.pag-reticencias {
+  min-width: 22px;
+  text-align: center;
+  color: var(--texto-fraco);
+}
+
+@media (max-width: 560px) {
+  .pag-seta span {
+    display: none;
+  }
 }

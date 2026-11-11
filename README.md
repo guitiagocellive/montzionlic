@@ -88,7 +88,9 @@ Não existe cadastro público: só um administrador adiciona pessoas.
   ao login de fornecedor (o botão da página oficial leva ao login de governo). Fechar a janela do Compras.gov.br
   só a esconde, para não perder o login. Depois do login o Compras.gov.br mostra a Área de Trabalho do Fornecedor
   (portal antigo); a sala de disputa é outro sistema, então a ponte lê o menu da Área de Trabalho, acha o item da
-  sala de disputa e abre sozinha (os itens do menu ficam anotados no `montzion.log`). A ponte lê a porta real do
+  sala de disputa e abre sozinha (os itens do menu ficam anotados no `montzion.log`). A lista de disputas é pedida
+  direto na aba logada, como a sala de disputa faz ao abrir o painel "Demais compras" (com o captcha invisível da
+  própria página, para compras novas e legadas), e as compras já abrem sozinhas na página Disputas. A ponte lê a porta real do
   motor (`DevToolsActivePort`) e se religa sozinha, e a página Disputas sabe quando está dentro do aplicativo
   (`window.montzionApp`). A página Disputas lista as disputas da conta
   (pregões e dispensas), os itens com melhor lance, meu lance e cronômetro, e por item: lance mínimo, desconto
@@ -97,6 +99,8 @@ Não existe cadastro público: só um administrador adiciona pessoas.
   (respeitando o intervalo mínimo do edital) e, se não der, vai no lance mínimo. Regra em `src/shared/robo.ts`;
   ponte em `desktop/ponte.go` (protocolo DevTools do navegador, sem bibliotecas externas). Configuração e
   registro dos lances ficam na plataforma (`/api/robo`).
+- **Datas** sempre pelo calendário da plataforma (`components/Calendario.tsx`): data única ou período início–fim
+  com atalhos; o campo `Campo type="date"` já usa o calendário.
 - **Fornecedores** por nicho, com WhatsApp, site e catálogo.
 - **Calendário** e **Painel** com números reais.
 

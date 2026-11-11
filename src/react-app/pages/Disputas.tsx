@@ -79,6 +79,8 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
         .map(lerCompra)
         .filter((x): x is CompraDisputa => !!x);
       setCompras(lista);
+      // Como o Siga Pregão: já entra nas disputas (abre as compras e lê os itens sem precisar clicar).
+      setAbertas((atual) => (atual.size ? atual : new Set(lista.slice(0, 4).map((c) => c.chave))));
       if (lista.length) {
         const cfg = await api<{ itens: Record<string, ConfigItemRobo> }>(`/robo/itens?compras=${encodeURIComponent(lista.map((c) => c.chave).join(","))}`);
         setConfig((atual) => ({ ...cfg.itens, ...atual }));

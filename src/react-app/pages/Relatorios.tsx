@@ -1,7 +1,7 @@
 import { BarChart3, Building2, Download, Swords, Target, TrendingUp, Trophy, XCircle } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { api, mensagemDeErro } from "../api";
-import { Campo } from "../components/Formulario";
+import { SeletorIntervalo } from "../components/Calendario";
 import { avisar, Carregando } from "../components/Ui";
 import { formatarMoeda, formatarNumero } from "../formato";
 import { baixarCsv, nomeMes, periodo, taxa } from "../components/Periodo";
@@ -132,8 +132,10 @@ export function Relatorios() {
         </div>
         {tipo === "personalizado" && (
           <div className="linha-acoes">
-            <Campo rotulo="De" name="de" type="date" value={de} onChange={(e) => setDatas([e.target.value, ate])} />
-            <Campo rotulo="Até" name="ate" type="date" value={ate} onChange={(e) => setDatas([de, e.target.value])} />
+            <div className="campo campo-periodo">
+              <span>Período (início e fim)</span>
+              <SeletorIntervalo de={de} ate={ate} aoMudar={(x, y) => setDatas([x, y])} rotulo="Período" />
+            </div>
           </div>
         )}
       </div>

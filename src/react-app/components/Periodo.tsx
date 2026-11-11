@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { hojeIso } from "../formato";
-import { Campo } from "./Formulario";
+import { SeletorIntervalo } from "./Calendario";
 
 // Filtro de período (este mês, 3 meses, ano...) e utilidades de relatório.
 
@@ -66,8 +66,10 @@ export function BarraPeriodo({ p }: { p: ReturnType<typeof usePeriodo> }) {
       </div>
       {p.tipo === "personalizado" && (
         <div className="linha-acoes">
-          <Campo rotulo="De" name="de" type="date" value={p.de} onChange={(e) => p.setDatas([e.target.value, p.ate])} />
-          <Campo rotulo="Até" name="ate" type="date" value={p.ate} onChange={(e) => p.setDatas([p.de, e.target.value])} />
+          <div className="campo campo-periodo">
+            <span>Período (início e fim)</span>
+            <SeletorIntervalo de={p.de} ate={p.ate} aoMudar={(de, ate) => p.setDatas([de, ate])} rotulo="Período" abrirAoMontar={!p.de || !p.ate} />
+          </div>
         </div>
       )}
     </div>

@@ -206,24 +206,47 @@ export interface CompraDisputa {
   modoDisputa: string;
 }
 
+// Códigos de modalidade do Compras.gov.br (ModalidadeCompraEnum da sala de disputa).
+const NOMES_MODALIDADE: Record<string, string> = {
+  "1": "Convite",
+  "2": "Tomada de preço",
+  "3": "Concorrência eletrônica",
+  "4": "Concorrência internacional",
+  "5": "Pregão eletrônico",
+  "6": "Dispensa eletrônica",
+  "7": "Inexigibilidade",
+  "8": "Cotação eletrônica",
+  "12": "Credenciamento",
+};
+
+/** Chave da compra como a sala de disputa monta: UASG (6) + modalidade (2) + número (5) + ano. */
+export function chaveDaCompra(b: Record<string, unknown>): string {
+  const uasg = String(b.numeroUasg ?? b.uasg ?? "").replace(/\D/g, "");
+  const mod = String(b.modalidade ?? "").replace(/\D/g, "");
+  const numero = String(b.numeroCompra ?? b.numero ?? "").replace(/\D/g, "");
+  const ano = String(b.anoCompra ?? b.ano ?? "").replace(/\D/g, "");
+  if (!uasg || !mod || !numero || ano.length !== 4) return "";
+  return uasg.padStart(6, "0") + mod.padStart(2, "0") + numero.padStart(5, "0") + ano;
+}
+
 /** Converte uma compra vinda da lista de disputas do fornecedor. */
 export function lerCompra(b: Record<string, unknown>): CompraDisputa | null {
-  const chave = String(b.chaveCompra ?? b.chave ?? b.id ?? "");
+  const chave = String(b.chaveCompra ?? b.chave ?? "") || chaveDaCompra(b) || String(b.id ?? "");
   if (!chave) return null;
   const mod = String(b.modalidade ?? b.modalidadeCompra ?? "").toUpperCase();
   const textoMod = String(b.descricaoModalidade ?? b.modalidadeDescricao ?? "");
-  const dispensa = /DISPENSA/i.test(textoMod) || mod === "8" || mod === "DISPENSA" || mod === "D";
-  const pregao = /PREG/i.test(textoMod) || mod === "5" || mod === "6" || mod === "PREGAO" || mod === "P";
+  // Dispensa (6) e cotação eletrônica (8) ficam na aba Dispensas; pregão, concorrência e o resto, na de Pregões.
+  const dispensa = /DISPENSA|COTA[ÇC]/i.test(textoMod) || mod === "6" || mod === "8" || mod === "DISPENSA" || mod === "D";
   const numeroCompra = b.numeroCompra ?? b.numero;
   const ano = b.anoCompra ?? b.ano;
-  const id = String(b.identificacao ?? (numeroCompra ? `${numeroCompra}${ano ? `/${ano}` : ""}` : chave));
-  const nomeMod = dispensa ? "Dispensa eletrônica" : pregao ? "Pregão eletrônico" : textoMod || "Compra";
+  const id = String(b.identificacao ?? (numeroCompra ? `${String(numeroCompra).padStart(5, "0")}${ano ? `/${ano}` : ""}` : chave));
+  const nomeMod = textoMod ? (/eletr/i.test(textoMod) ? textoMod : `${textoMod} eletrônica`.replace(/Pregão eletrônica/i, "Pregão eletrônico")) : NOMES_MODALIDADE[mod] ?? (dispensa ? "Dispensa eletrônica" : "Pregão eletrônico");
   return {
     chave,
-    titulo: /^(dispensa|preg|concorr)/i.test(id) ? id : `${nomeMod} ${id}`,
+    titulo: /^(dispensa|preg|concorr|cota)/i.test(id) ? id : `${nomeMod} ${id}`,
     uasg: String(b.numeroUasg ?? b.uasg ?? b.codigoUasg ?? ""),
     orgao: String(b.nomeUasg ?? b.orgao ?? b.nomeOrgao ?? ""),
-    modalidade: dispensa ? "dispensa" : pregao ? "pregao" : "outra",
+    modalidade: dispensa ? "dispensa" : "pregao",
     modoDisputa: String(b.descricaoModoDisputa ?? b.modoDisputa ?? ""),
   };
 }

@@ -7,6 +7,7 @@ import type { CertificadoInfo, Declaracao, Empresa, LicitacaoResumo, Usuario } f
 import { api, enviarArquivo, mensagemDeErro } from "../api";
 import { type Conteudo, montarConteudo, Visor } from "../components/PreviaArquivo";
 import { avisar, Carregando, Interruptor, Modal, Vazio } from "../components/Ui";
+import { SeletorData } from "../components/Calendario";
 import { EscolherModeloPdf } from "../proposta/EscolherModelo";
 import { link } from "../rota";
 
@@ -452,10 +453,10 @@ export function CriarDocumento({ usuario }: { usuario: Usuario }) {
                   <span>Local</span>
                   <span className="entrada"><input value={r.local} onChange={(e) => mudar({ local: e.target.value })} placeholder={LOCAL_PADRAO} aria-label="Local" /></span>
                 </label>
-                <label className="campo">
+                <div className="campo">
                   <span>Data</span>
-                  <span className="entrada"><input type="date" value={r.data} onChange={(e) => mudar({ data: e.target.value })} aria-label="Data" /></span>
-                </label>
+                  <SeletorData valor={r.data} aoMudar={(v) => mudar({ data: v })} rotulo="Data" />
+                </div>
               </div>
             )}
             <Interruptor ligado={r.com_assinatura} aoMudar={(v) => mudar({ com_assinatura: v })} rotulo="Colocar o campo de assinatura do responsável" />

@@ -4,6 +4,7 @@ import { SITUACOES_DISPUTA } from "../../../shared/negocio";
 import type { Licitacao } from "../../../shared/tipos";
 import { api, mensagemDeErro } from "../../api";
 import { avisar } from "../../components/Ui";
+import { SeletorData } from "../../components/Calendario";
 import { link } from "../../rota";
 
 interface Props {
@@ -181,9 +182,7 @@ function Acompanhamento({ licitacao: l, podeEditar, aoSalvar }: { licitacao: Lic
       </label>
       <label className="campo">
         <span className="texto-suave pequeno">Reabertura da sessão</span>
-        <div className="entrada">
-          <input type="date" value={v.data_reabertura} onChange={(e) => setV({ ...v, data_reabertura: e.target.value })} disabled={!podeEditar} />
-        </div>
+        <SeletorData valor={v.data_reabertura} aoMudar={(d) => setV({ ...v, data_reabertura: d })} desabilitado={!podeEditar} rotulo="Reabertura da sessão" />
       </label>
       <label className="campo campo-curto">
         <span className="texto-suave pequeno">Horário</span>

@@ -34,6 +34,8 @@ Lista do que foi combinado e ainda falta fazer (ou melhorar). Atualizar sempre q
         (antes abria a sala de disputa direto e caía no login de governo).
   - [x] Da Área de Trabalho do Fornecedor para a sala de disputa: a ponte acha o item no menu e abre sozinha
         (testado com menu simulado; conferir o nome real do item no `montzion.log` se não abrir).
+  - [x] Lista de disputas pedida direto (com o captcha da página), compras abrem sozinhas; chave da compra e
+        modalidade (5 pregão, 6 dispensa) como a sala de disputa.
   - [ ] Validar numa disputa real (os campos foram mapeados pelo código da sala de disputa; testado com
         um Compras.gov.br simulado).
 - [ ] **Aplicativo do Windows em janela própria (WebView2)**: compilado, mas ainda não testado num Windows de

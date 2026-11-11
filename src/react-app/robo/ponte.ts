@@ -65,7 +65,7 @@ export const ponte = {
   estado: () => chamar<EstadoPonte>("estado", {}, 8_000),
   entrar: () => chamar<{ ok: boolean }>("entrar"),
   /** Lista de compras em disputa do fornecedor (a página oficial carrega e o aplicativo lê). */
-  compras: (atualizar: boolean) => chamar<{ compras: unknown; capturadaEm: number | null }>("compras", { atualizar }, 45_000),
+  compras: (atualizar: boolean) => chamar<{ compras: unknown; capturadaEm: number | null }>("compras", { atualizar }, 150_000),
   itens: (compra: string) => chamar<unknown>("itens", { compra }, 15_000),
   lance: (compra: string, item: number, valor: number, fase: string) => chamar<RespostaLance>("lance", { compra, item, valor, fase }, 15_000),
 };

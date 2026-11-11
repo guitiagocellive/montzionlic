@@ -1,5 +1,6 @@
 import { CircleAlert, CircleCheck, Eye, EyeOff, type LucideIcon } from "lucide-react";
-import { type InputHTMLAttributes, type ReactNode, useState } from "react";
+import { type ChangeEvent, type InputHTMLAttributes, type ReactNode, useState } from "react";
+import { SeletorData } from "./Calendario";
 import { Marca } from "./Marca";
 
 interface CampoProps extends InputHTMLAttributes<HTMLInputElement> {
@@ -12,6 +13,30 @@ export function Campo({ rotulo, ajuda, icone: Icone, id, type, ...resto }: Campo
   const idCampo = id ?? resto.name;
   const ehSenha = type === "password";
   const [mostrar, setMostrar] = useState(false);
+
+  // Datas abrem o calendário da plataforma (e não o seletor do navegador).
+  if (type === "date") {
+    const { name, value, defaultValue, onChange, disabled, min, max } = resto;
+    return (
+      <div className="campo">
+        <label htmlFor={idCampo}>
+          <span className="texto-suave pequeno">{rotulo}</span>
+        </label>
+        <SeletorData
+          id={idCampo}
+          nome={name}
+          rotulo={rotulo}
+          valor={value === undefined ? undefined : String(value ?? "")}
+          valorInicial={defaultValue === undefined ? undefined : String(defaultValue ?? "")}
+          aoMudar={(v) => onChange?.({ target: { value: v, name: name ?? "" }, currentTarget: { value: v, name: name ?? "" } } as unknown as ChangeEvent<HTMLInputElement>)}
+          desabilitado={disabled}
+          min={min === undefined ? undefined : String(min)}
+          max={max === undefined ? undefined : String(max)}
+        />
+        {ajuda && <small className="texto-fraco">{ajuda}</small>}
+      </div>
+    );
+  }
 
   const classes = ["entrada", Icone && "com-icone", ehSenha && "com-olho"].filter(Boolean);
 

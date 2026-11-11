@@ -492,31 +492,16 @@ func (p *ponte) executar(tipo, compra string, item int, valor float64, fase stri
 		if a == nil {
 			return mapa{"erro": "Você ainda não entrou na sala de disputa do Compras.gov.br: clique em Entrar no Compras.gov.br."}
 		}
-		inicio := time.Now()
-		select {
-		case <-p.novaLista: // descarta aviso antigo
-		default:
+		lista, err := p.buscarLista(a)
+		if err != nil {
+			registrarLog("ponte: lista de disputas: %v", err)
+			return mapa{"erro": err.Error()}
 		}
-		if _, err := p.cdp.Chamar(a.sessao, "Page.navigate", mapa{"url": p.cfg.paginaDisputas()}, 15*time.Second); err != nil {
-			return mapa{"erro": "Não foi possível abrir as disputas no Compras.gov.br: " + err.Error()}
-		}
-		limite := time.After(40 * time.Second)
-		for {
-			select {
-			case <-p.novaLista:
-				p.mu.Lock()
-				lista, em = p.lista, p.listaEm
-				p.mu.Unlock()
-				if em.After(inicio) {
-					return mapa{"compras": lista, "capturadaEm": em.UnixMilli()}
-				}
-			case <-limite:
-				if lista != nil {
-					return mapa{"compras": lista, "capturadaEm": em.UnixMilli()}
-				}
-				return mapa{"erro": "O Compras.gov.br não mostrou a lista de disputas. Confira se você entrou na conta e tente atualizar."}
-			}
-		}
+		p.mu.Lock()
+		p.lista, p.listaEm = lista, time.Now()
+		em = p.listaEm
+		p.mu.Unlock()
+		return mapa{"compras": lista, "capturadaEm": em.UnixMilli()}
 
 	case "itens":
 		if !chaveValida.MatchString(compra) {
@@ -678,4 +663,82 @@ func (p *ponte) abrirSalaPeloPortal() bool {
 		_, _ = p.avaliar(a.sessao, fmt.Sprintf("(window.__montzionSala && window.__montzionSala[%d] && window.__montzionSala[%d](), 'ok')", melhor, melhor), 5*time.Second)
 	}
 	return logado
+}
+
+// ---------- lista de disputas ----------
+
+// Pede a lista "compras em que estou participando" como a própria sala de disputa faz (ela só pede quando
+// alguém abre o painel "Demais compras"): com o captcha invisível da página (hCaptcha ou reCAPTCHA), uma
+// vez para as compras novas (Lei 14.133) e outra para as do sistema legado.
+const scriptLista = `(async () => {
+  const token = sessionStorage.getItem("accessToken");
+  if (!token) return JSON.stringify({ erro: "sem sessão" });
+  const captcha = async () => {
+    try {
+      if (window.hcaptcha && hcaptcha.execute) { const r = await hcaptcha.execute({ async: true }); return (r && r.response) || ""; }
+      if (window.grecaptcha && grecaptcha.execute) return (await grecaptcha.execute()) || "";
+    } catch (e) { return ""; }
+    return "";
+  };
+  const todas = [], erros = [];
+  for (const legado of [false, true]) {
+    const c = await captcha();
+    const r = await fetch("/comprasnet-fase-externa/v1/compras/em-disputa?captcha=" + encodeURIComponent(c) + "&legadoAsp=" + legado + "&tamanhoPagina=100&pagina=0", {
+      headers: { "Authorization": "Bearer " + token, "Accept": "application/json", "X-Device-Platform": "WEB" },
+    });
+    const texto = await r.text();
+    if (!r.ok) { erros.push(r.status + " " + texto.slice(0, 200)); continue; }
+    try {
+      const d = JSON.parse(texto);
+      const lista = Array.isArray(d) ? d : (d && (d.content || d.itens || d.compras || d.data)) || [];
+      for (const x of lista) todas.push(Object.assign({ legadoAsp: legado }, x));
+    } catch (e) { erros.push("resposta inválida"); }
+  }
+  return JSON.stringify({ compras: todas, erros, captcha: !!(window.hcaptcha || window.grecaptcha) });
+})()`
+
+func (p *ponte) buscarLista(a *sessaoAlvo) (json.RawMessage, error) {
+	// O captcha só existe nas páginas da sala de disputa: se a aba logada estiver em outra, abre a sala.
+	if s, _ := p.avaliar(a.sessao, `String(!!(window.hcaptcha || window.grecaptcha) && location.pathname.includes("/seguro/fornecedor"))`, 3*time.Second); s != "true" {
+		if _, err := p.cdp.Chamar(a.sessao, "Page.navigate", mapa{"url": p.cfg.paginaDisputas()}, 15*time.Second); err != nil {
+			return nil, fmt.Errorf("não foi possível abrir a sala de disputa: %v", err)
+		}
+		limite := time.Now().Add(20 * time.Second)
+		for time.Now().Before(limite) {
+			time.Sleep(500 * time.Millisecond)
+			if s, _ := p.avaliar(a.sessao, `String(document.readyState === "complete" && !!(window.hcaptcha || window.grecaptcha))`, 2*time.Second); s == "true" {
+				break
+			}
+		}
+		time.Sleep(time.Second) // o widget invisível termina de montar
+	}
+	var ultimoErro string
+	for tentativa := 0; tentativa < 2; tentativa++ {
+		saida, err := p.avaliar(a.sessao, scriptLista, 90*time.Second)
+		if err != nil {
+			ultimoErro = err.Error()
+			continue
+		}
+		var v struct {
+			Compras json.RawMessage `json:"compras"`
+			Erros   []string        `json:"erros"`
+			Erro    string          `json:"erro"`
+		}
+		if json.Unmarshal([]byte(saida), &v) != nil {
+			ultimoErro = "resposta estranha da sala de disputa"
+			continue
+		}
+		if v.Erro != "" {
+			return nil, fmt.Errorf("sessão do Compras.gov.br expirada: entre de novo")
+		}
+		if len(v.Erros) > 0 {
+			registrarLog("ponte: lista de disputas com erro: %s", strings.Join(v.Erros, " | "))
+		}
+		if len(v.Erros) < 2 && v.Compras != nil {
+			return v.Compras, nil
+		}
+		ultimoErro = strings.Join(v.Erros, " | ")
+		time.Sleep(time.Second)
+	}
+	return nil, fmt.Errorf("o Compras.gov.br não devolveu a lista de disputas (%s). Se aparecer um desafio do captcha na janela do Compras.gov.br, resolva e clique em atualizar", ultimoErro)
 }
