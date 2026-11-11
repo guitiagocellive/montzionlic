@@ -1,9 +1,9 @@
 {
-  "versao": "3.0.4",
+  "versao": "3.0.5",
   "data": "2026-11-11",
   "novidades": [
-    "Robô: quando o Compras.gov.br pede para escolher a empresa/perfil depois do login, a janela aparece na hora com o aviso; depois da escolha o robô entra sozinho.",
-    "Robô: entra na sala de disputa pela chave do portal (compras-id), sem depender do clique no menu.",
-    "Página Disputas: botão \"Copiar diagnóstico\" (sem senhas, chaves nem CPF) para mandar ao suporte."
+    "Robô: funciona com a Área de Trabalho nova do Compras.gov.br (tela verde, login com certificado digital): pede a chave da sala com a sessão dela e entra direto, ou clica em \"Dispensas e Pregões\".",
+    "Robô: avisa quando o portal pede para escolher a empresa/perfil.",
+    "Página Disputas: botão \"Copiar diagnóstico\" para mandar ao suporte."
   ]
 }

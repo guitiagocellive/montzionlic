@@ -101,6 +101,9 @@ func (p *ponte) tipoDe(endereco string) string {
 	switch {
 	case mesmoSite(endereco, p.cfg.Plataforma):
 		return "plataforma"
+	case mesmoSite(endereco, p.cfg.Compras) && areaTrabalho.MatchString(endereco):
+		// Área de Trabalho nova (tela verde): mesmo endereço da sala, mas é ela que leva até a sala.
+		return "portal"
 	case mesmoSite(endereco, p.cfg.Compras):
 		return "compras"
 	case p.cfg.Portal != "" && mesmoSite(endereco, p.cfg.Portal):
@@ -644,6 +647,22 @@ func (p *ponte) executar(tipo, compra string, item int, valor float64, fase stri
 
 // ---------- da Área de Trabalho do Fornecedor para a sala de disputa ----------
 
+var areaTrabalho = regexp.MustCompile(`/comprasnet-area-trabalho-web/`)
+
+// Na Área de Trabalho nova, o card "Dispensas e Pregões" pede ao servidor uma chave da sala (compras-id)
+// com a sessão da própria Área de Trabalho e abre a sala com ela. A ponte faz o mesmo pedido.
+const scriptChaveAreaTrabalho = `(async () => {
+  let token = sessionStorage.getItem("accessToken") || "";
+  if (!token) for (let i = 0; i < sessionStorage.length; i++) { const v = sessionStorage.getItem(sessionStorage.key(i)) || ""; if (/^eyJ/.test(v)) { token = v; break; } }
+  if (!token) return JSON.stringify({ erro: "sem sessão na Área de Trabalho" });
+  try {
+    const r = await fetch("/comprasnet-usuario/v2/sessao/fornecedor/usuario/compras-id", { headers: { "Authorization": "Bearer " + token, "Accept": "text/plain, application/json", "X-Device-Platform": "WEB" } });
+    const t = (await r.text()).trim().replace(/^"|"$/g, "");
+    if (!r.ok) return JSON.stringify({ erro: "status " + r.status });
+    return JSON.stringify({ chave: t });
+  } catch (e) { return JSON.stringify({ erro: String(e) }); }
+})()`
+
 var paginaDeLogin = regexp.MustCompile(`(?i)/seguro/loginPortal|acesso\.gov\.br`)
 
 // Lê os itens do menu da Área de Trabalho (o menu é montado em listas JavaScript "MenuN" nos quadros da
@@ -678,6 +697,12 @@ const scriptMenuPortal = `(() => {
       for (const el of d.querySelectorAll("a[href], [onclick]")) {
         const link = el.getAttribute("href") || el.getAttribute("onclick") || "";
         add(el.innerText || el.title || el.value, link, () => el.click());
+      }
+      // Cards e botões sem link (a Área de Trabalho nova é toda assim): pelo texto.
+      for (const el of d.querySelectorAll("button, [role=button], [role=link], mat-card, [class*=card], [class*=Card], [class*=tile], li, div[tabindex]")) {
+        const t = (el.innerText || "").replace(/\s+/g, " ").trim();
+        if (!t || t.length > 90 || !/dispensa|preg[aã]o|preg[oõ]es|sala de disputa|disputa/i.test(t)) continue;
+        add(t, "texto:" + t, () => el.click());
       }
     } catch (e) {}
     // A chave da sala de disputa (compras-id) vem dentro do link que o portal monta para o sistema novo.
@@ -728,6 +753,10 @@ func notaSala(it itemMenu) int {
 	if strings.Contains(t, "disputa") || strings.Contains(l, "disputa") {
 		n += 3
 	}
+	// Card da Área de Trabalho nova: "Dispensas e Pregões".
+	if regexp.MustCompile(`dispensas?\s+e\s+preg|preg(õ|o)es\s+e\s+dispensas`).MatchString(t) {
+		n += 6
+	}
 	for _, k := range []string{"acompanh", "proposta", "lance", "sele\u00e7\u00e3o do fornecedor", "selecao"} {
 		if strings.Contains(t, k) {
 			n++
@@ -751,6 +780,32 @@ func (p *ponte) abrirSalaPeloPortal() bool {
 		p.mu.Unlock()
 		if time.Since(ultima) < 20*time.Second {
 			continue
+		}
+		// Área de Trabalho nova: pede a chave da sala com a sessão dela e abre a sala direto.
+		if areaTrabalho.MatchString(a.url) && vezes%2 == 0 {
+			// Só pede a chave com a página carregada (no meio da navegação a resposta vem vazia).
+			if pronto, _ := p.avaliar(a.sessao, `document.readyState`, 3*time.Second); pronto != "complete" {
+				continue
+			}
+			saida, err := p.avaliar(a.sessao, scriptChaveAreaTrabalho, 10*time.Second)
+			var r struct{ Chave, Erro string }
+			if err == nil {
+				_ = json.Unmarshal([]byte(saida), &r)
+			}
+			if err == nil && r.Chave == "" && r.Erro == "" {
+				continue // resposta vazia: tenta de novo no próximo segundo, sem contar como tentativa
+			}
+			p.mu.Lock()
+			p.tentouSala[a.alvo] = time.Now()
+			p.tentativas[a.alvo]++
+			p.mu.Unlock()
+			if len(r.Chave) >= 8 && !strings.ContainsAny(r.Chave, " <{") {
+				registrarLog("ponte: Área de Trabalho nova: chave da sala obtida; abrindo a sala direto (tentativa %d)", vezes+1)
+				destino := p.cfg.paginaDisputas() + "?compras-id=" + url.QueryEscape(r.Chave)
+				_, _ = p.cdp.Chamar(a.sessao, "Page.navigate", mapa{"url": destino}, 10*time.Second)
+				continue
+			}
+			registrarLog("ponte: Área de Trabalho nova: não consegui a chave da sala (%v %s); tentando pelo card", err, r.Erro)
 		}
 		saida, err := p.avaliar(a.sessao, scriptMenuPortal, 5*time.Second)
 		if err != nil {
