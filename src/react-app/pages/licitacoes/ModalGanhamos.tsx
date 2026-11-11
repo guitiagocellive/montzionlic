@@ -1,6 +1,6 @@
 import { Trophy } from "lucide-react";
 import { useEffect, useState } from "react";
-import { calcularPreco } from "../../../shared/negocio";
+import { cotacaoDaProposta } from "../../../shared/negocio";
 import type { Cotacao, ItemLicitacao, Licitacao, RascunhoProposta } from "../../../shared/tipos";
 import { api, mensagemDeErro } from "../../api";
 import { Alerta } from "../../components/Formulario";
@@ -29,24 +29,14 @@ export function ModalGanhamos({
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
 
-  // Valor sugerido: lance já registrado > valor da proposta > preço da cotação mais barata.
+  // Valor sugerido: lance já registrado > valor da proposta > preço do produto que vai na proposta.
   useEffect(() => {
     const sugerido = (i: ItemLicitacao, rascunho: RascunhoProposta | null) => {
       if (i.nosso_lance != null) return String(i.nosso_lance);
       const daProposta = rascunho?.itens?.[i.id]?.valor;
       if (daProposta) return daProposta;
-      const precos = cotacoes
-        .filter((c) => c.item_id === i.id)
-        .map((c) =>
-          calcularPreco({
-            custoUnitario: c.custo_unitario ?? 0,
-            frete: c.frete ?? 0,
-            quantidade: i.quantidade ?? 1,
-            impostoPercentual: licitacao.imposto_percentual,
-            lucroPercentual: licitacao.lucro_percentual,
-          }).precoVenda,
-        );
-      return precos.length ? Math.min(...precos).toFixed(2) : "";
+      const escolhida = cotacaoDaProposta(cotacoes, i, licitacao.imposto_percentual, licitacao.lucro_percentual);
+      return escolhida ? escolhida.calculo.precoVenda.toFixed(2) : "";
     };
     const montar = (rascunho: RascunhoProposta | null) =>
       setLinhas(

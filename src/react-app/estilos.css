@@ -9218,3 +9218,58 @@ code {
   align-items: center;
   gap: 4px;
 }
+
+/* Proposta: de onde veio cada valor e botão para voltar ao automático */
+.botao-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0;
+  margin-left: 6px;
+  border: 0;
+  background: none;
+  color: var(--acento);
+  font: inherit;
+  font-size: 0.74rem;
+  cursor: pointer;
+}
+.botao-link:hover {
+  text-decoration: underline;
+}
+.valor-proposta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.valor-proposta .botao-link {
+  margin-left: 0;
+  white-space: nowrap;
+}
+.valor-proposta small {
+  font-size: 0.72rem;
+}
+.botao-link.sem-margem {
+  margin-left: 0;
+  align-self: flex-start;
+}
+.cotacao-produto .cotacao-descritivo {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 0.76rem;
+  color: var(--texto-suave, inherit);
+}
+.cotacao-produto .cotacao-descritivo svg {
+  vertical-align: -1px;
+}
+.selo-proposta {
+  align-self: flex-start;
+  margin-top: 2px;
+}
+.campo-descritivo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

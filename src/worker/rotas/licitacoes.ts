@@ -74,6 +74,8 @@ const ESQUEMA_COTACAO: Esquema = {
   custo_unitario: "numero",
   frete: "numero",
   observacoes: "textoLongo",
+  descricao: "textoLongo",
+  escolhida: "bool",
 };
 
 interface Licitacao {
@@ -123,7 +125,7 @@ async function aoGanhar(db: D1Database, licitacaoId: number): Promise<number | n
          FROM licitacao_itens i
          LEFT JOIN cotacoes c ON c.id = (
            SELECT c2.id FROM cotacoes c2 WHERE c2.item_id = i.id
-            ORDER BY (COALESCE(c2.custo_unitario, 0) + COALESCE(c2.frete, 0) / MAX(COALESCE(i.quantidade, 1), 1))
+            ORDER BY c2.escolhida DESC, (COALESCE(c2.custo_unitario, 0) + COALESCE(c2.frete, 0) / MAX(COALESCE(i.quantidade, 1), 1))
             LIMIT 1)
         WHERE i.licitacao_id = ? AND ${temGanhos ? "i.resultado = 'ganho'" : "i.participar = 1"}
         ORDER BY i.id`,
@@ -466,6 +468,12 @@ async function itemPertence(db: D1Database, itemId: unknown, licitacaoId: number
   return !!item;
 }
 
+/** Só uma cotação por item vai para a proposta: desmarca as outras do mesmo item. */
+async function soUmaEscolhida(db: D1Database, cotacao: { id: number; item_id: number | null }) {
+  if (cotacao.item_id == null) return;
+  await db.prepare("UPDATE cotacoes SET escolhida = 0 WHERE item_id = ? AND id <> ?").bind(cotacao.item_id, cotacao.id).run();
+}
+
 rotasLicitacoes.post("/:id/cotacoes", async (c) => {
   const id = idDaRota(c.req.param("id"));
   if (!id) return c.json({ erro: "Licitação inválida." }, 400);
@@ -477,6 +485,7 @@ rotasLicitacoes.post("/:id/cotacoes", async (c) => {
     return c.json({ erro: "Item não pertence a esta licitação." }, 400);
   }
   const cotacao = await inserir(c.env.DB, "cotacoes", comExtras(campos, { licitacao_id: id }));
+  if (corpo.escolhida === true) await soUmaEscolhida(c.env.DB, cotacao as { id: number; item_id: number | null });
   await registrarEvento(c.env.DB, { licitacao_id: id }, c.get("usuario").id, `cotou "${corpo.produto ?? "produto"}"`);
   return c.json({ cotacao }, 201);
 });
@@ -496,7 +505,9 @@ rotasLicitacoes.patch("/cotacoes/:cotacaoId", async (c) => {
   const comando = comandoAtualizar(c.env.DB, "cotacoes", id, campos, false);
   if (!comando) return c.json({ erro: "Nada para alterar." }, 400);
   await comando.run();
-  return c.json({ cotacao: await buscar(c.env.DB, "cotacoes", id) });
+  const cotacao = await buscar<{ id: number; item_id: number | null }>(c.env.DB, "cotacoes", id);
+  if (corpo.escolhida === true && cotacao) await soUmaEscolhida(c.env.DB, cotacao);
+  return c.json({ cotacao });
 });
 
 rotasLicitacoes.delete("/cotacoes/:cotacaoId", async (c) => {

@@ -159,6 +159,32 @@ export function calcularPreco(params: {
   };
 }
 
+/**
+ * A cotação que vai para a proposta: a marcada como "usar na proposta";
+ * sem marcação, a de menor preço de venda.
+ */
+export function cotacaoDaProposta<C extends { id: number; item_id: number | null; custo_unitario: number | null; frete: number | null; escolhida?: number | null }>(
+  cotacoes: C[],
+  item: { id: number; quantidade: number | null },
+  impostoPercentual: number,
+  lucroPercentual: number,
+): { cotacao: C; calculo: CalculoPreco } | null {
+  const opcoes = cotacoes
+    .filter((c) => c.item_id === item.id)
+    .map((cotacao) => ({
+      cotacao,
+      calculo: calcularPreco({
+        custoUnitario: cotacao.custo_unitario ?? 0,
+        frete: cotacao.frete ?? 0,
+        quantidade: item.quantidade ?? 1,
+        impostoPercentual,
+        lucroPercentual,
+      }),
+    }));
+  if (!opcoes.length) return null;
+  return opcoes.find((o) => o.cotacao.escolhida) ?? opcoes.reduce((a, b) => (b.calculo.precoVenda < a.calculo.precoVenda ? b : a));
+}
+
 // ---------------------------------------------------------
 // Datas e prazos
 // ---------------------------------------------------------

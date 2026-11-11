@@ -117,6 +117,11 @@ Não existe cadastro público: só um administrador adiciona pessoas.
   modelos** (.docx): campos entre chaves, ex.: `{orgao}`; tabela de itens com `{#itens}` … `{/itens}`; declarações
   com `{#declaracoes}{titulo} {texto}{/declaracoes}` e condições com `{#condicoes}{texto}{/condicoes}`.
   Modelo de exemplo em `public/modelos/modelo-proposta.docx`.
+- **De onde a proposta puxa cada item:** a descrição e a marca vêm do **produto cotado** (campo "Descritivo do
+  produto" da cotação; sem descritivo, o nome do produto). O produto é o marcado **"Usar na proposta"** no Orçamento
+  ou, sem marcação, o mais barato. O valor vem do **lance final** registrado no Resultado; sem lance, do preço de
+  venda da cotação. Se a cotação ou o lance mudam depois, a proposta se atualiza; o que foi digitado à mão na
+  proposta fica (com um botão para voltar ao automático). Um lance novo no Resultado sempre entra na proposta.
 - **Assinar documentos** (Documentação → Assinar documentos): envie um ou vários PDFs (declarações, contratos,
   atas, ofícios…), escolha a página e o lugar do carimbo em cada um e assine com o certificado A1 da empresa. O PDF
   assinado é baixado na hora e fica guardado na lista da página (ver, baixar, excluir, procurar) ou, se preferir,

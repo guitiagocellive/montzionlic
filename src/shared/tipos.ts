@@ -154,6 +154,19 @@ export interface Declaracao {
 }
 
 /** O que foi preenchido na aba Proposta de uma licitação (fica salvo). */
+export interface LinhaPropostaRascunho {
+  incluir: boolean;
+  marca: string;
+  valor: string;
+  descricao: string;
+  /**
+   * O que a plataforma preencheu sozinha da última vez (do produto cotado e do lance final).
+   * Se o campo ainda tem esse valor, ele é atualizado quando a cotação ou o resultado mudam;
+   * se a pessoa digitou outra coisa, fica o que ela digitou.
+   */
+  auto?: { marca: string; valor: string; descricao: string };
+}
+
 export interface RascunhoProposta {
   empresa_id: number | null;
   conta_id: number | null;
@@ -170,7 +183,7 @@ export interface RascunhoProposta {
   observacoes: string;
   declaracoes: number[];
   extras: { titulo: string; texto: string }[];
-  itens: Record<string, { incluir: boolean; marca: string; valor: string; descricao: string }>;
+  itens: Record<string, LinhaPropostaRascunho>;
 }
 
 export interface ModeloProposta {
@@ -305,6 +318,10 @@ export interface Cotacao {
   custo_unitario: number | null;
   frete: number | null;
   observacoes: string | null;
+  /** Descritivo do produto cotado (vai na proposta no lugar da descrição do edital). */
+  descricao?: string | null;
+  /** 1 = esta é a cotação que vai para a proposta. */
+  escolhida?: number | null;
 }
 
 export interface Arquivo {

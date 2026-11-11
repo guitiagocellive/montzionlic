@@ -1,6 +1,6 @@
-import { Building2, ListChecks, CalendarDays, Check, ChevronRight, Download, Eye, FileCheck2, FileText, FileType, Pencil, PenLine, Plus, Settings, ShieldCheck, Trash2, Upload } from "lucide-react";
+import { Building2, ListChecks, CalendarDays, Check, ChevronRight, RotateCcw, Download, Eye, FileCheck2, FileText, FileType, Pencil, PenLine, Plus, Settings, ShieldCheck, Trash2, Upload } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { calcularPreco } from "../../../shared/negocio";
+import { cotacaoDaProposta } from "../../../shared/negocio";
 import { podeEditar } from "../../../shared/permissoes";
 import type {
   Arquivo,
@@ -30,6 +30,36 @@ const ModalAssinar = lazy(() => import("../../assinatura/ModalAssinar").then((m)
 
 type Assinatura = { titulo: string; nome: string; carregar: () => Promise<Uint8Array> };
 type Linha = RascunhoProposta["itens"][string];
+
+/** O que a proposta puxa sozinha de um item, e de onde veio. */
+interface Automatico {
+  marca: string;
+  valor: string;
+  descricao: string;
+  deOndeValor: "lance" | "cotacao" | "";
+  deOndeDescricao: "descritivo" | "produto" | "edital";
+}
+
+/**
+ * Junta o que já está na proposta com o que a plataforma puxa agora.
+ * - Campo vazio ou ainda igual ao que foi puxado da última vez: atualiza (a pessoa não mexeu).
+ * - Campo que a pessoa digitou: fica como está.
+ * - Valor: o lance final manda. Quando o lance registrado no Resultado muda, ele entra na proposta
+ *   mesmo que o valor tenha sido digitado antes.
+ */
+export function juntarLinha(salva: Linha | undefined, auto: Automatico, descricaoEdital: string): Linha {
+  const novo = { marca: auto.marca, valor: auto.valor, descricao: auto.descricao };
+  if (!salva) return { incluir: true, ...novo, auto: novo };
+  // Rascunhos antigos não guardavam o que foi puxado: a descrição do edital conta como automática,
+  // e o valor dá lugar ao lance final se ele existir.
+  const antes = salva.auto ?? { marca: "\u0000", valor: "\u0000", descricao: descricaoEdital };
+  const campo = (k: "marca" | "valor" | "descricao") => {
+    const atual = salva[k] ?? "";
+    if (k === "valor" && auto.deOndeValor === "lance" && antes.valor !== auto.valor) return auto.valor;
+    return atual.trim() === "" || atual === antes[k] ? novo[k] : atual;
+  };
+  return { ...salva, marca: campo("marca"), valor: campo("valor"), descricao: campo("descricao"), auto: novo };
+}
 
 /** Seção da proposta que abre e fecha. Lembra o que ficou aberto neste navegador. */
 function Secao({
@@ -124,34 +154,30 @@ export function AbaProposta({
   const entradaPdf = useRef<HTMLInputElement>(null);
   const carregado = useRef(false);
 
-  // Sugestão por item: a cotação mais barata (marca e preço de venda).
-  const sugestoes = useMemo(() => {
-    const mapa = new Map<number, { marca: string; valor: number }>();
+  // O que cada item puxa sozinho: descritivo e marca do produto cotado (o marcado "usar na proposta",
+  // ou o mais barato) e o valor do lance final do Resultado (sem lance, o preço de venda da cotação).
+  const automaticos = useMemo(() => {
+    const mapa = new Map<number, Automatico>();
     for (const item of participando) {
-      const opcoes = cotacoes
-        .filter((c) => c.item_id === item.id)
-        .map((c) => ({
-          c,
-          preco: calcularPreco({
-            custoUnitario: c.custo_unitario ?? 0,
-            frete: c.frete ?? 0,
-            quantidade: item.quantidade ?? 1,
-            impostoPercentual: licitacao.imposto_percentual,
-            lucroPercentual: licitacao.lucro_percentual,
-          }).precoVenda,
-        }));
-      if (opcoes.length === 0) continue;
-      const melhor = opcoes.reduce((a, b) => (b.preco < a.preco ? b : a));
-      mapa.set(item.id, { marca: melhor.c.marca || melhor.c.produto || "", valor: melhor.preco });
+      const escolhida = cotacaoDaProposta(cotacoes, item, licitacao.imposto_percentual, licitacao.lucro_percentual);
+      const c = escolhida?.cotacao;
+      const descritivo = (c?.descricao ?? "").trim();
+      const descricaoProduto = descritivo || (c?.produto ?? "").trim();
+      const lance = item.nosso_lance;
+      mapa.set(item.id, {
+        marca: (c?.marca ?? "").trim(),
+        valor: lance != null ? lance.toFixed(2) : escolhida ? escolhida.calculo.precoVenda.toFixed(2) : "",
+        descricao: descricaoProduto || item.descricao || "",
+        deOndeValor: lance != null ? "lance" : escolhida ? "cotacao" : "",
+        deOndeDescricao: descritivo ? "descritivo" : descricaoProduto ? "produto" : "edital",
+      });
     }
     return mapa;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itens, cotacoes, licitacao.imposto_percentual, licitacao.lucro_percentual]);
 
-  const linhaPadrao = (i: ItemLicitacao): Linha => {
-    const s = sugestoes.get(i.id);
-    return { incluir: true, marca: s?.marca ?? "", valor: s ? s.valor.toFixed(2) : "", descricao: i.descricao ?? "" };
-  };
+  const automaticoDe = (i: ItemLicitacao): Automatico =>
+    automaticos.get(i.id) ?? { marca: "", valor: "", descricao: i.descricao ?? "", deOndeValor: "", deOndeDescricao: "edital" };
 
   // Carrega tudo e o rascunho salvo desta licitação (ou monta um novo com os padrões).
   useEffect(() => {
@@ -186,13 +212,31 @@ export function AbaProposta({
         const base = rasc.rascunho ? { ...novo, ...rasc.rascunho } : novo;
         // Itens: mantém o que foi digitado e completa os que entraram depois.
         const itensRascunho: RascunhoProposta["itens"] = {};
-        for (const i of participando) itensRascunho[i.id] = base.itens?.[i.id] ? { ...linhaPadrao(i), ...base.itens[i.id] } : linhaPadrao(i);
+        for (const i of participando) itensRascunho[i.id] = juntarLinha(base.itens?.[i.id], automaticoDe(i), i.descricao ?? "");
         setR({ ...base, data: rasc.rascunho?.data || hojeIso(), itens: itensRascunho });
       },
       (err) => avisar(mensagemDeErro(err), "erro"),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [licitacao.id]);
+
+  // Cotação ou resultado mudaram com a proposta aberta: atualiza o que não foi digitado à mão.
+  useEffect(() => {
+    setR((atual) => {
+      if (!atual) return atual;
+      let mudou = false;
+      const novos = { ...atual.itens };
+      for (const i of participando) {
+        const junto = juntarLinha(atual.itens[i.id], automaticoDe(i), i.descricao ?? "");
+        if (JSON.stringify(junto) !== JSON.stringify(atual.itens[i.id])) {
+          novos[i.id] = junto;
+          mudou = true;
+        }
+      }
+      return mudou ? { ...atual, itens: novos } : atual;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [automaticos]);
 
   // Salva o rascunho sozinho, um instante depois de cada mudança.
   useEffect(() => {
@@ -499,7 +543,8 @@ export function AbaProposta({
         }
       >
         <p className="texto-fraco pequeno" style={{ margin: "0 0 10px" }}>
-          Preço sugerido = preço de venda da cotação mais barata.
+          A descrição e a marca vêm do produto cotado (o marcado "Usar na proposta" no Orçamento, ou o mais barato). O valor
+          vem do lance final registrado no Resultado; sem lance, do preço de venda da cotação. O que você digitar aqui fica.
         </p>
         {participando.length === 0 ? (
           <Vazio icone={<FileText />} titulo="Nenhum item para participar" />
@@ -509,6 +554,7 @@ export function AbaProposta({
               const l = r.itens[i.id];
               if (!l) return null;
               const valor = paraNumero(l.valor) ?? 0;
+              const auto = automaticoDe(i);
               return (
                 <div key={i.id} className={`linha-proposta ${l.incluir ? "" : "fora"}`}>
                   <input type="checkbox" checked={l.incluir} onChange={(e) => mudarItem(i.id, { incluir: e.target.checked })} aria-label={`Incluir item ${i.numero}`} />
@@ -524,13 +570,35 @@ export function AbaProposta({
                     />
                     <small className="texto-fraco">
                       {formatarNumero(i.quantidade)} {i.unidade}
+                      {" · "}
+                      {l.descricao === auto.descricao ? (
+                        { descritivo: "descritivo do produto cotado", produto: "nome do produto cotado (preencha o descritivo no Orçamento)", edital: "descrição do edital (nenhum produto cotado)" }[auto.deOndeDescricao]
+                      ) : (
+                        <>
+                          descrição editada
+                          {auto.descricao && (
+                            <button type="button" className="botao-link" onClick={() => mudarItem(i.id, { descricao: auto.descricao })}>
+                              <RotateCcw size={11} /> {auto.deOndeDescricao === "edital" ? "usar a do edital" : "usar a do produto cotado"}
+                            </button>
+                          )}
+                        </>
+                      )}
                     </small>
                   </span>
                   <div className="entrada">
                     <input value={l.marca} onChange={(e) => mudarItem(i.id, { marca: e.target.value })} placeholder="Marca" aria-label="Marca" />
                   </div>
-                  <div className="entrada">
-                    <input type="number" step="0.01" min="0" value={l.valor} onChange={(e) => mudarItem(i.id, { valor: e.target.value })} placeholder="Valor unit." aria-label="Valor unitário" />
+                  <div className="valor-proposta">
+                    <div className="entrada">
+                      <input type="number" step="0.01" min="0" value={l.valor} onChange={(e) => mudarItem(i.id, { valor: e.target.value })} placeholder="Valor unit." aria-label="Valor unitário" />
+                    </div>
+                    {auto.valor && l.valor !== auto.valor ? (
+                      <button type="button" className="botao-link" onClick={() => mudarItem(i.id, { valor: auto.valor })} title={auto.deOndeValor === "lance" ? "Usar o lance final registrado no Resultado" : "Usar o preço de venda da cotação"}>
+                        <RotateCcw size={11} /> {auto.deOndeValor === "lance" ? "lance final" : "cotação"}: {formatarMoeda(Number(auto.valor))}
+                      </button>
+                    ) : (
+                      auto.deOndeValor && <small className="texto-fraco">{auto.deOndeValor === "lance" ? "lance final" : "preço de venda da cotação"}</small>
+                    )}
                   </div>
                   <strong className="linha-proposta-total">{formatarMoeda(valor * (i.quantidade ?? 0))}</strong>
                 </div>
