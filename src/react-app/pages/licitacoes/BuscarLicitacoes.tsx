@@ -1,5 +1,12 @@
 import {
+  Ban,
+  Building,
   CalendarClock,
+  CheckCircle2,
+  Coins,
+  FileStack,
+  Gavel,
+  MapPin,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -554,13 +561,29 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
                   )}
                   <div className="tags-resultado">
                     {r.municipio && (
-                      <span className="tag-verde">
+                      <span className="selo-info local">
+                        <MapPin size={12} />
                         {r.municipio}/{r.uf}
                       </span>
                     )}
-                    {r.uasg && <span className="tag-verde">UASG {r.uasg}</span>}
-                    {r.unidade && r.unidade !== r.orgao && r.unidade !== "Unidade Única" && <span className="tag-verde">{r.unidade}</span>}
-                    {r.esfera && <span className="tag-verde">{r.esfera}</span>}
+                    {r.uasg && (
+                      <span className="selo-info local">
+                        <Hash size={12} />
+                        UASG {r.uasg}
+                      </span>
+                    )}
+                    {r.unidade && r.unidade !== r.orgao && r.unidade !== "Unidade Única" && (
+                      <span className="selo-info local" title={r.unidade}>
+                        <Landmark size={12} />
+                        {r.unidade}
+                      </span>
+                    )}
+                    {r.esfera && (
+                      <span className="selo-info local">
+                        <Building size={12} />
+                        {r.esfera}
+                      </span>
+                    )}
                   </div>
                   <div className="linha-sessao">
                     <CalendarClock size={15} />
@@ -569,12 +592,38 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
                     {r.modoDisputa && <span className="texto-fraco">· {r.modoDisputa}</span>}
                   </div>
                   <div className="chips-fonte">
-                    <span className="chip-contorno">Fonte: {r.portal}</span>
-                    <span className="chip-contorno">{r.modalidade}</span>
-                    {r.srp && <span className="chip-contorno laranja">Registro de preço</span>}
-                    {r.valorEstimado && <span className="chip-contorno">Estimado {reais(r.valorEstimado)}</span>}
-                    {r.cancelado && <span className="chip-contorno vermelho">Cancelada</span>}
-                    {idQuadro && <span className="chip-contorno verde">Já no quadro</span>}
+                    {r.valorEstimado && (
+                      <span className="selo-info valor">
+                        <Coins size={12} />
+                        Estimado {reais(r.valorEstimado)}
+                      </span>
+                    )}
+                    <span className="selo-info neutro">
+                      <Globe size={12} />
+                      Fonte: {r.portal}
+                    </span>
+                    <span className="selo-info neutro">
+                      <Gavel size={12} />
+                      {r.modalidade}
+                    </span>
+                    {r.srp && (
+                      <span className="selo-info laranja">
+                        <FileStack size={12} />
+                        Registro de preço
+                      </span>
+                    )}
+                    {r.cancelado && (
+                      <span className="selo-info vermelho">
+                        <Ban size={12} />
+                        Cancelada
+                      </span>
+                    )}
+                    {idQuadro && (
+                      <span className="selo-info verde">
+                        <CheckCircle2 size={12} />
+                        Já no quadro
+                      </span>
+                    )}
                   </div>
                 </article>
               );
