@@ -43,10 +43,10 @@ function carregarCatalogo() {
 }
 
 const dataIso = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+/** Últimos N meses começando no dia 1º do mês (ex.: 12 meses em 11/11/2026 → 01/11/2025 a 11/11/2026). */
 function intervalo(meses: number): [string, string] {
   const fim = new Date();
-  const inicio = new Date(fim);
-  inicio.setMonth(inicio.getMonth() - meses);
+  const inicio = new Date(fim.getFullYear(), fim.getMonth() - meses, 1);
   return [dataIso(inicio), dataIso(fim)];
 }
 
@@ -507,8 +507,14 @@ export function Mercado() {
   const termo = info?.produtos.length === 1 ? info.produtos[0] : texto.trim();
   const ANGULOS: { chave: Angulo; nome: string; icone: ReactNode; valor: number; legenda: string }[] = resumo
     ? [
-        { chave: "correspondencias", nome: "Correspondências", icone: <FileSearch />, valor: resumo.registros, legenda: `itens disputados e vencidos em ${formatarNumero(resumo.compras)} licitações` },
-        { chave: "estados", nome: "Estados", icone: <MapPin />, valor: geral?.estados.length ?? 0, legenda: "estados compraram" },
+        {
+          chave: "correspondencias",
+          nome: "Correspondências",
+          icone: <FileSearch />,
+          valor: resumo.registros,
+          legenda: `itens vencidos em ${formatarNumero(resumo.compras)} licitações de ${formatarNumero(resumo.orgaos)} órgãos`,
+        },
+        { chave: "estados", nome: "Estados", icone: <MapPin />, valor: resumo.estados.length, legenda: uf ? "estado escolhido" : "estados compraram" },
         { chave: "marcas", nome: "Marcas", icone: <Tag />, valor: resumo.marcas.length, legenda: `marcas vencedoras · ${pctSemMarca}% sem marca identificável` },
         { chave: "empresas", nome: "Empresas", icone: <Building2 />, valor: resumo.empresas.length, legenda: "empresas vencedoras" },
       ]
@@ -692,6 +698,16 @@ export function Mercado() {
                   <span className="texto-fraco pequeno">
                     {formatarNumero(resumo.compras)} licitações · {formatarNumero(resumo.quantidade)} unidades · {dataBr(periodo.de)} a {dataBr(periodo.ate)}
                   </span>
+                  {resumo.valorAtas > 0 && (
+                    <div className="divisao-valor">
+                      <span>
+                        <i className="direta" /> Compras diretas <b>{valorCurto(resumo.valor - resumo.valorAtas)}</b>
+                      </span>
+                      <span title="Nas atas de registro de preços a quantidade é o máximo registrado: os órgãos compram aos poucos e nem sempre tudo.">
+                        <i className="ata" /> Registrado em atas <b>{valorCurto(resumo.valorAtas)}</b>
+                      </span>
+                    </div>
+                  )}
                 </div>
                 </div>
               </section>
@@ -810,8 +826,9 @@ export function Mercado() {
                     participantes (quem só deu lance), o que dá números muito maiores.
                   </li>
                   <li>
-                    <b>Valor homologado:</b> preço vencedor × quantidade de cada item, pela data do resultado. Inclui as quantidades
-                    registradas em atas (registro de preços).
+                    <b>Valor homologado:</b> preço vencedor × quantidade de cada item. Nas <b>atas de registro de preços</b> a
+                    quantidade é o máximo registrado (os órgãos compram aos poucos e nem sempre tudo); por isso o total mostra à parte
+                    quanto é compra direta e quanto é registrado em ata. Plataformas que só contam o contratado mostram valores menores.
                   </li>
                   <li>
                     <b>Fonte:</b> dados abertos oficiais do Compras.gov.br (governo federal e estados e municípios que usam a plataforma).

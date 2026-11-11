@@ -7,6 +7,9 @@ export interface RegistroPreco {
   idItemCompra?: number | string;
   dataCompra?: string | null;
   dataResultado?: string | null;
+  /** "SISRP" = registro de preços (ata); "SISPP" = compra direta. */
+  forma?: string | null;
+  codigoUasg?: string | number | null;
   niFornecedor?: string | null;
   nomeFornecedor?: string | null;
   marca?: string | null;
@@ -144,6 +147,10 @@ export interface Resumo {
   descartados: number;
   compras: number;
   valor: number;
+  /** Parte do valor que vem de atas de registro de preços (quantidade máxima registrada, não necessariamente comprada). */
+  valorAtas: number;
+  /** Órgãos compradores (UASGs) diferentes. */
+  orgaos: number;
   quantidade: number;
   marcas: Linha[];
   empresas: Linha[];
@@ -212,6 +219,8 @@ export function resumir(registros: RegistroPreco[], uf = ""): Resumo {
   const compras = new Set<string>();
   const cacheProduto = new Map<string, Set<string>>();
   let valorTotal = 0;
+  let valorAtas = 0;
+  const orgaos = new Set<string>();
   let qtdTotal = 0;
   let semMarca = 0;
   let total = 0;
@@ -246,6 +255,8 @@ export function resumir(registros: RegistroPreco[], uf = ""): Resumo {
     const compra = String(r.idCompra);
     compras.add(compra);
     valorTotal += valor;
+    if ((r.forma ?? "").toUpperCase() === "SISRP") valorAtas += valor;
+    if (r.codigoUasg != null && r.codigoUasg !== "") orgaos.add(String(r.codigoUasg));
     qtdTotal += qtd;
 
     // Palavras do produto e da descrição padronizada do item (o catálogo não traz marca).
@@ -294,6 +305,8 @@ export function resumir(registros: RegistroPreco[], uf = ""): Resumo {
     descartados,
     compras: compras.size,
     valor: valorTotal,
+    valorAtas,
+    orgaos: orgaos.size,
     quantidade: qtdTotal,
     marcas: lista(marcas),
     empresas: lista(empresas),

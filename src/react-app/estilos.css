@@ -10130,3 +10130,31 @@ code {
 .barras-meses {
   height: 210px;
 }
+.divisao-valor {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 16px;
+  margin-top: 4px;
+  font-size: 0.78rem;
+  color: var(--texto-suave);
+}
+.divisao-valor span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.divisao-valor b {
+  color: var(--texto);
+  font-variant-numeric: tabular-nums;
+}
+.divisao-valor i {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  background: var(--mapa-1);
+}
+.divisao-valor i.ata {
+  background: color-mix(in oklab, var(--mapa-1) 38%, transparent);
+  box-shadow: inset 0 0 0 1px var(--mapa-1);
+}
