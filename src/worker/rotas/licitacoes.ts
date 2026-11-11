@@ -6,6 +6,7 @@ import { notificar } from "../notificacoes";
 import { comandoEvento, registrarEvento } from "../atividades";
 import { hojeBrasilia, lerConfiguracoes } from "../configuracoes";
 import { type EmpresaProposta, ehCorPdf, ehModeloPdf, montarDados } from "../../shared/proposta";
+import { normalizarConfig } from "../../shared/robo";
 import { comandoUsarPedido, pedidoValido } from "../pedidosAssinatura";
 import { nomeEtapa } from "../../shared/negocio";
 import { buscar, comandoAtualizar, comExtras, inserir } from "../banco";
@@ -667,6 +668,48 @@ rotasLicitacoes.post("/:id/proposta", async (c) => {
       cor: ehCorPdf(corpo.cor_pdf) ? corpo.cor_pdf : ehCorPdf(empresa.cor_pdf) ? empresa.cor_pdf : "#1f3b8a",
     },
   });
+});
+
+// Robô de lances: configuração desta licitação (valor mínimo por item, segundos finais...).
+// Os valores mínimos são estratégia de preço: só quem vê o orçamento acessa.
+rotasLicitacoes.get("/:id/robo", async (c) => {
+  const id = idDaRota(c.req.param("id"));
+  if (!id) return c.json({ erro: "Licitação inválida." }, 400);
+  if (!podeVer(c.get("usuario").permissoes, "orcamento")) return c.json({ erro: "Você não tem acesso a preços." }, 403);
+  const linha = await c.env.DB.prepare("SELECT dados, atualizado_em FROM robo_config WHERE licitacao_id = ?").bind(id).first<{ dados: string; atualizado_em: number }>();
+  let dados: unknown = null;
+  try {
+    dados = linha ? JSON.parse(linha.dados) : null;
+  } catch {
+    dados = null;
+  }
+  return c.json({ config: normalizarConfig(dados), salvo: !!linha, atualizado_em: linha?.atualizado_em ?? null });
+});
+
+rotasLicitacoes.put("/:id/robo", async (c) => {
+  const id = idDaRota(c.req.param("id"));
+  if (!id) return c.json({ erro: "Licitação inválida." }, 400);
+  const usuario = c.get("usuario");
+  if (!podeVer(usuario.permissoes, "orcamento") || !podeEditar(usuario.permissoes, "licitacoes")) {
+    return c.json({ erro: "Você não tem permissão para configurar o robô." }, 403);
+  }
+  const corpo = await lerJson(c);
+  if (!corpo || typeof corpo.config !== "object" || corpo.config === null) return c.json({ erro: "Requisição inválida." }, 400);
+  if (!(await buscar(c.env.DB, "licitacoes", id))) return c.json({ erro: "Licitação não encontrada." }, 404);
+  const config = normalizarConfig(corpo.config);
+  // Só itens desta licitação.
+  const { results } = await c.env.DB.prepare("SELECT id FROM licitacao_itens WHERE licitacao_id = ?").bind(id).all<{ id: number }>();
+  const validos = new Set(results.map((r) => String(r.id)));
+  for (const k of Object.keys(config.itens)) if (!validos.has(k)) delete config.itens[k];
+  const dados = JSON.stringify(config);
+  if (dados.length > 200_000) return c.json({ erro: "Configuração grande demais." }, 400);
+  await c.env.DB.prepare(
+    `INSERT INTO robo_config (licitacao_id, dados, atualizado_por, atualizado_em) VALUES (?, ?, ?, ?)
+     ON CONFLICT(licitacao_id) DO UPDATE SET dados = excluded.dados, atualizado_por = excluded.atualizado_por, atualizado_em = excluded.atualizado_em`,
+  )
+    .bind(id, dados, usuario.id, Date.now())
+    .run();
+  return c.json({ config });
 });
 
 // Rascunho da proposta desta licitação (o que foi preenchido na aba Proposta).

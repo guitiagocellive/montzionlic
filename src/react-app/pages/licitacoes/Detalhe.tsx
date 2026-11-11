@@ -1,4 +1,4 @@
-import { ArrowLeft, Calculator, CalendarClock, Check, ExternalLink, FileText, FolderOpen, Landmark, ListChecks, MessageSquare, Pencil, Trash2, Trophy, UserRound, Wallet } from "lucide-react";
+import { ArrowLeft, Bot, Calculator, CalendarClock, Check, ExternalLink, FileText, FolderOpen, Landmark, ListChecks, MessageSquare, Pencil, Trash2, Trophy, UserRound, Wallet } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { ETAPAS_EXECUCAO, ETAPAS_LICITACAO, nomeEtapa } from "../../../shared/negocio";
 import { podeEditar, podeVer } from "../../../shared/permissoes";
@@ -16,6 +16,7 @@ import { AbaItens } from "./AbaItens";
 import { AbaOrcamento } from "./AbaOrcamento";
 import { AbaProposta } from "./AbaProposta";
 import { AbaResultado } from "./AbaResultado";
+import { AbaRobo } from "./AbaRobo";
 import { ModalGanhamos } from "./ModalGanhamos";
 import { PainelEtapa } from "./PainelEtapa";
 
@@ -117,7 +118,8 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
     { chave: "orcamento", titulo: "Orçamento", icone: Calculator, info: cotacoes.length ? `${cotacoes.length}` : "", completo: participando.length > 0 && participando.every((i) => cotacoes.some((c) => c.item_id === i.id)) },
     { chave: "proposta", titulo: "Proposta", icone: FileText, info: `${arquivos.filter((a) => a.categoria === "Proposta").length || ""}`, completo: arquivos.some((a) => a.categoria === "Proposta") },
     { chave: "arquivos", titulo: "Arquivos e IA", icone: FolderOpen, info: arquivos.length ? `${arquivos.length}` : "", completo: arquivos.length > 0 },
-  ].filter((p) => !["orcamento", "proposta"].includes(p.chave) || podeVer(usuario.permissoes, "orcamento"));
+    { chave: "robo", titulo: "Robô de lances", icone: Bot, info: "", completo: false },
+  ].filter((p) => !["orcamento", "proposta", "robo"].includes(p.chave) || podeVer(usuario.permissoes, "orcamento"));
 
   const hoje = hojeIso();
   const reaberta = !!l.data_reabertura && l.data_reabertura >= hoje;
@@ -346,6 +348,7 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
             {aba === "proposta" && (
               <AbaProposta licitacao={l} itens={itens} cotacoes={cotacoes} arquivos={arquivos} usuario={usuario} aoMudar={carregar} aoEditarDados={() => setEditando(true)} />
             )}
+            {aba === "robo" && <AbaRobo licitacao={l} itens={itens} cotacoes={cotacoes} usuario={usuario} />}
             {aba === "resultado" && (
               <AbaResultado licitacao={l} itens={itens} podeEditar={podeEditar(usuario.permissoes, "licitacoes")} aoMudar={carregar} />
             )}

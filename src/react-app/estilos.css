@@ -7912,3 +7912,313 @@ code {
 .criar-doc .cartao {
   margin: 0;
 }
+
+/* ---------- Robô de lances ---------- */
+
+.robo-geral {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.robo-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.robo-topo h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.robo-opcoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 14px 24px;
+}
+
+.campo-curto {
+  flex: 0 0 200px;
+}
+
+.robo-interruptor {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 320px;
+  padding: 10px 14px;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-sm);
+  background: var(--superficie-2);
+}
+
+.entrada.com-sufixo,
+.entrada.com-prefixo {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-sm);
+  background: var(--superficie-2);
+  overflow: hidden;
+}
+
+.entrada.com-sufixo input,
+.entrada.com-prefixo input {
+  border: 0;
+  background: transparent;
+  height: 36px;
+  min-width: 0;
+  box-shadow: none;
+}
+
+.entrada.com-sufixo em,
+.entrada.com-prefixo em {
+  padding: 0 10px;
+  font-style: normal;
+  font-size: 0.8rem;
+  color: var(--texto-fraco);
+  white-space: nowrap;
+}
+
+.entrada.com-prefixo em {
+  padding-right: 0;
+}
+
+.entrada.com-prefixo.perigo {
+  border-color: var(--vermelho);
+}
+
+.campo-lucro {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.campo-lucro .entrada {
+  width: 110px;
+}
+
+.texto-perigo {
+  color: var(--vermelho);
+}
+
+.robo-alerta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  background: var(--amarelo-fundo);
+  color: var(--amarelo);
+}
+
+.tabela-robo td {
+  vertical-align: top;
+}
+
+.tabela-robo td:nth-child(2) {
+  white-space: normal;
+  min-width: 180px;
+}
+
+.tabela-robo td small {
+  display: block;
+  color: var(--texto-fraco);
+}
+
+.tabela-robo td .entrada {
+  min-width: 104px;
+}
+
+.tabela-robo th,
+.tabela-robo td {
+  padding-left: 6px;
+  padding-right: 6px;
+}
+
+.tabela-robo tr.apagada td {
+  opacity: 0.5;
+}
+
+.tabela-robo input[type="checkbox"] {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--acento);
+}
+
+.reducao-robo {
+  display: flex;
+  gap: 6px;
+}
+
+.reducao-robo .entrada {
+  min-width: 80px !important;
+  width: 90px;
+}
+
+.reducao-robo .entrada input {
+  height: 38px;
+}
+
+.reducao-robo select {
+  width: 64px;
+  height: 38px;
+  padding: 0 8px;
+}
+
+.robo-acoes {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.robo-acoes > div {
+  flex: 1 1 360px;
+}
+
+.robo-acoes h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.robo-acoes p svg {
+  vertical-align: -2px;
+}
+
+/* Simulador */
+.simulador {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.simulador-opcoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.simulador-opcoes .espaco {
+  flex: 1;
+}
+
+.campo-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--texto-fraco);
+}
+
+.campo-inline select {
+  width: auto;
+  height: 32px;
+  padding: 0 8px;
+  font-size: 0.84rem;
+}
+
+.tabela-simulador td {
+  vertical-align: top;
+}
+
+.tabela-simulador td small {
+  display: block;
+  color: var(--texto-fraco);
+}
+
+.tabela-simulador td:first-child,
+.tabela-simulador td:last-child {
+  white-space: normal;
+  min-width: 160px;
+}
+
+.cronometro {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.cronometro.final {
+  color: var(--vermelho);
+}
+
+.resultado-simulador {
+  padding: 12px 16px;
+  border-radius: var(--raio-sm);
+  background: var(--verde-fundo);
+}
+
+.resultado-simulador h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+  font-size: 0.92rem;
+  color: var(--verde);
+}
+
+.resultado-simulador ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.86rem;
+  line-height: 1.6;
+}
+
+.comparacao-simulador {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-sm);
+}
+
+.comparacao-simulador strong svg {
+  vertical-align: -2px;
+}
+
+.tabela-comparacao {
+  flex: 1 1 100%;
+}
+
+.registro-simulador {
+  max-height: 180px;
+  overflow-y: auto;
+  padding: 8px 12px;
+  border-radius: var(--raio-sm);
+  background: var(--superficie-2);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.linha-registro {
+  padding: 2px 0;
+  color: var(--texto-suave);
+}
+
+.linha-registro span {
+  color: var(--texto-fraco);
+  margin-right: 6px;
+}
+
+.linha-registro.nosso {
+  color: var(--verde);
+  font-weight: 600;
+}
+
+.linha-registro.info {
+  color: var(--texto-fraco);
+  font-style: italic;
+}

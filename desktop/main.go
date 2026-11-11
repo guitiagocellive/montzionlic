@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
@@ -23,7 +24,7 @@ const (
 	nomeApp    = "Montzion"
 	chaveReg   = `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\Montzion`
 	semJanela  = 0x08000000 // CREATE_NO_WINDOW
-	versao     = "1.0.0"
+	versao     = "1.1.0"
 	mbOK       = 0x00000000
 	mbIconInfo = 0x00000040
 	mbYesNo    = 0x00000004
@@ -31,7 +32,46 @@ const (
 	idYes      = 6
 )
 
-var user32 = syscall.NewLazyDLL("user32.dll")
+var (
+	user32  = syscall.NewLazyDLL("user32.dll")
+	shell32 = syscall.NewLazyDLL("shell32.dll")
+	ole32   = syscall.NewLazyDLL("ole32.dll")
+)
+
+// Registro do que aconteceu (para descobrir erros em computadores de clientes):
+// %LOCALAPPDATA%\Montzion\montzion.log
+func registrarLog(formato string, args ...any) {
+	pasta := pastaInstalacao()
+	_ = os.MkdirAll(pasta, 0o755)
+	f, err := os.OpenFile(filepath.Join(pasta, "montzion.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "%s v%s  %s\r\n", time.Now().Format("2006-01-02 15:04:05"), versao, fmt.Sprintf(formato, args...))
+}
+
+type guid struct {
+	d1     uint32
+	d2, d3 uint16
+	d4     [8]byte
+}
+
+var (
+	pastaDesktop   = guid{0xB4BFCC3A, 0xDB2C, 0x424C, [8]byte{0xB0, 0x29, 0x7F, 0xE9, 0x9A, 0x87, 0xC6, 0x41}}
+	pastaProgramas = guid{0xA77F5D77, 0x2E2B, 0x44C3, [8]byte{0xA6, 0xA2, 0xAB, 0xA6, 0x01, 0x05, 0x4A, 0x51}}
+)
+
+// Pasta especial do Windows (área de trabalho de verdade, mesmo quando está no OneDrive).
+func pastaConhecida(id guid, reserva string) string {
+	var p *uint16
+	r, _, _ := shell32.NewProc("SHGetKnownFolderPath").Call(uintptr(unsafe.Pointer(&id)), 0, 0, uintptr(unsafe.Pointer(&p)))
+	if r != 0 || p == nil {
+		return reserva
+	}
+	defer ole32.NewProc("CoTaskMemFree").Call(uintptr(unsafe.Pointer(p)))
+	return syscall.UTF16ToString((*[1 << 15]uint16)(unsafe.Pointer(p))[:])
+}
 
 func mensagem(texto string, flags uintptr) int {
 	t, _ := syscall.UTF16PtrFromString(texto)
@@ -51,9 +91,10 @@ func pastaInstalacao() string {
 }
 
 func atalhos() []string {
-	inicio := filepath.Join(os.Getenv("APPDATA"), "Microsoft", "Windows", "Start Menu", "Programs")
+	inicio := pastaConhecida(pastaProgramas, filepath.Join(os.Getenv("APPDATA"), "Microsoft", "Windows", "Start Menu", "Programs"))
+	desktop := pastaConhecida(pastaDesktop, filepath.Join(os.Getenv("USERPROFILE"), "Desktop"))
 	return []string{
-		filepath.Join(os.Getenv("USERPROFILE"), "Desktop", nomeApp+".lnk"),
+		filepath.Join(desktop, nomeApp+".lnk"),
 		filepath.Join(inicio, nomeApp+".lnk"),
 	}
 }
@@ -73,8 +114,19 @@ func copiar(origem, destino string) error {
 		out.Close()
 		return err
 	}
-	out.Close()
-	_ = os.Remove(destino)
+	if err = out.Close(); err != nil {
+		return err
+	}
+	// Se o Montzion estiver aberto, o Windows não deixa apagar o .exe, mas deixa renomear:
+	// o antigo vira .antigo (apagado na próxima vez) e o novo entra no lugar.
+	if _, err := os.Stat(destino); err == nil {
+		antigo := destino + ".antigo"
+		_ = os.Remove(antigo)
+		if err := os.Rename(destino, antigo); err != nil {
+			_ = os.Remove(tmp)
+			return fmt.Errorf("feche o Montzion e tente de novo (%v)", err)
+		}
+	}
 	return os.Rename(tmp, destino)
 }
 
@@ -86,7 +138,18 @@ func criarAtalho(lnk, alvo, args string) error {
 		"$s=(New-Object -ComObject WScript.Shell).CreateShortcut(%s);$s.TargetPath=%s;$s.Arguments=%s;$s.IconLocation=%s;$s.WorkingDirectory=%s;$s.Description='Montzion - gestão de licitações';$s.Save()",
 		aspas(lnk), aspas(alvo), aspas(args), aspas(alvo+",0"), aspas(filepath.Dir(alvo)),
 	)
-	return oculto("powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script).Run()
+	saida, err := oculto("powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script).CombinedOutput()
+	if err == nil {
+		if _, e := os.Stat(lnk); e == nil {
+			return nil
+		}
+		err = fmt.Errorf("atalho não foi criado")
+	}
+	registrarLog("atalho %s falhou: %v %s", lnk, err, strings.TrimSpace(string(saida)))
+	// Sem PowerShell (bloqueado em algumas empresas): cria um atalho de internet simples.
+	url := strings.TrimSuffix(lnk, ".lnk") + ".url"
+	conteudo := "[InternetShortcut]\r\nURL=file:///" + strings.ReplaceAll(alvo, `\`, "/") + "\r\nIconFile=" + alvo + "\r\nIconIndex=0\r\n"
+	return os.WriteFile(url, []byte(conteudo), 0o644)
 }
 
 func registrar(exe string) {
@@ -116,9 +179,12 @@ func instalar(atual string) (string, error) {
 		return "", err
 	}
 	for _, lnk := range atalhos() {
-		_ = criarAtalho(lnk, destino, "")
+		if err := criarAtalho(lnk, destino, ""); err != nil {
+			registrarLog("não criou o atalho %s: %v", lnk, err)
+		}
 	}
 	registrar(destino)
+	registrarLog("instalado em %s", destino)
 	return destino, nil
 }
 
@@ -128,6 +194,7 @@ func desinstalar() {
 	}
 	for _, lnk := range atalhos() {
 		_ = os.Remove(lnk)
+		_ = os.Remove(strings.TrimSuffix(lnk, ".lnk") + ".url")
 	}
 	_ = oculto("reg.exe", "delete", chaveReg, "/f").Run()
 	// O próprio .exe está em uso: apaga a pasta alguns segundos depois de fechar.
@@ -160,12 +227,19 @@ func abrir() {
 		filepath.Join(local, `Google\Chrome\Application\chrome.exe`),
 	)
 	if navegador != "" {
-		if err := exec.Command(navegador, "--app="+endereco, "--start-maximized").Start(); err == nil {
+		err := exec.Command(navegador, "--app="+endereco, "--start-maximized").Start()
+		if err == nil {
 			return
 		}
+		registrarLog("não abriu %s: %v", navegador, err)
+	} else {
+		registrarLog("Edge/Chrome não encontrados; abrindo no navegador padrão")
 	}
 	// Sem Edge/Chrome: abre no navegador padrão.
-	_ = oculto("rundll32.exe", "url.dll,FileProtocolHandler", endereco).Start()
+	if err := oculto("rundll32.exe", "url.dll,FileProtocolHandler", endereco).Start(); err != nil {
+		registrarLog("não abriu o navegador padrão: %v", err)
+		mensagem("Não foi possível abrir o navegador.\n\nAbra "+endereco+" no seu navegador.", mbOK|mbIconInfo)
+	}
 }
 
 func main() {
@@ -175,13 +249,26 @@ func main() {
 			return
 		}
 	}
+	defer func() {
+		if r := recover(); r != nil {
+			registrarLog("erro inesperado: %v", r)
+			mensagem(fmt.Sprintf("Erro inesperado no Montzion: %v\n\nA plataforma vai abrir no navegador.", r), mbOK|mbIconInfo)
+			_ = oculto("rundll32.exe", "url.dll,FileProtocolHandler", endereco).Start()
+		}
+	}()
+	// Limpa a versão antiga que ficou de uma atualização.
+	_ = os.Remove(filepath.Join(pastaInstalacao(), nomeApp+".exe.antigo"))
 	atual, err := os.Executable()
+	if err != nil {
+		registrarLog("não achou o próprio arquivo: %v", err)
+	}
 	if err == nil {
 		atual, _ = filepath.EvalSymlinks(atual)
 		destino := filepath.Join(pastaInstalacao(), nomeApp+".exe")
 		if !strings.EqualFold(filepath.Clean(atual), filepath.Clean(destino)) {
 			if _, err := instalar(atual); err != nil {
-				mensagem("Não foi possível instalar o Montzion: "+err.Error()+"\n\nA plataforma vai abrir mesmo assim.", mbOK|mbIconInfo)
+				registrarLog("instalação falhou: %v", err)
+				mensagem("Não foi possível instalar o Montzion: "+err.Error()+"\n\nA plataforma vai abrir mesmo assim.\nDetalhes em "+filepath.Join(pastaInstalacao(), "montzion.log"), mbOK|mbIconInfo)
 			} else {
 				mensagem("Montzion instalado!\n\nCriamos um atalho na área de trabalho e no menu Iniciar.\nAgora a plataforma vai abrir.", mbOK|mbIconInfo)
 			}
