@@ -46,6 +46,8 @@ type ponte struct {
 	lista     json.RawMessage
 	listaEm   time.Time
 	novaLista chan struct{}
+	// Janela própria do aplicativo: abre/foca a janela nativa do Compras.gov.br (nil = aba do navegador).
+	abrirCompras func() bool
 }
 
 var (
@@ -380,6 +382,12 @@ func (p *ponte) executar(tipo, compra string, item int, valor float64, fase stri
 		return mapa{"conectado": conectado, "janela": a != nil, "versao": versao}
 
 	case "entrar":
+		if p.abrirCompras != nil {
+			if !p.abrirCompras() {
+				return mapa{"erro": "Não foi possível abrir a janela do Compras.gov.br."}
+			}
+			return mapa{"ok": true}
+		}
 		if a := p.sessaoCompras(); a != nil {
 			_, _ = p.cdp.Chamar("", "Target.activateTarget", mapa{"targetId": a.alvo}, 5*time.Second)
 			return mapa{"ok": true}

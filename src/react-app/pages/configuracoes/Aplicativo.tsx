@@ -40,7 +40,8 @@ export function AplicativoConfig() {
           <div>
             <h2>Montzion para Windows</h2>
             <p className="texto-suave" style={{ margin: "4px 0 0" }}>
-              Abre a plataforma numa janela própria, como um programa, com atalho na área de trabalho e no menu Iniciar.
+              Programa próprio do Montzion: janela com o nome e o ícone do Montzion, sem barra de endereço nem abas, com atalho na
+              área de trabalho e no menu Iniciar. É por ele que o robô de lances funciona.
             </p>
           </div>
           <a className="botao acento" href="/downloads/Montzion-Instalador.exe" download="Montzion-Instalador.exe">
@@ -64,6 +65,9 @@ export function AplicativoConfig() {
           <li>
             Pronto: aparece o atalho <strong>Montzion</strong> na área de trabalho e no menu Iniciar. Não precisa de senha de
             administrador.
+          </li>
+          <li>
+            Já tinha instalado uma versão antiga? Baixe e abra o instalador de novo: ele atualiza sozinho.
           </li>
           <li>
             Para remover: <strong>Configurações do Windows → Aplicativos → Montzion → Desinstalar</strong>.

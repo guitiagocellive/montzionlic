@@ -32,6 +32,10 @@ Lista do que foi combinado e ainda falta fazer (ou melhorar). Atualizar sempre q
   - [x] Ponte no aplicativo do Windows (janela do Compras.gov.br logada pela própria pessoa no gov.br).
   - [ ] Validar numa disputa real (os campos foram mapeados pelo código da sala de disputa; testado com
         um Compras.gov.br simulado).
+- [ ] **Aplicativo do Windows em janela própria (WebView2)**: compilado, mas ainda não testado num Windows de
+      verdade. Conferir: abre com nome/ícone do Montzion, links externos vão para o navegador, "Entrar no
+      Compras.gov.br" abre a janela própria e o robô lista as disputas. Se der erro, mandar o
+      `%LOCALAPPDATA%\Montzion\montzion.log`.
 - [ ] **6. Links diretos para emitir certidões** na Documentação (Receita/PGFN, FGTS, TST, Estado,
       Município), com o aviso de vencimento levando ao site certo.
 - [ ] **7. Busca geral (Ctrl+K)** — achar licitação, empenho ou fornecedor pelo número, órgão ou produto.

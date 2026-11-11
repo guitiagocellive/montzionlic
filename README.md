@@ -80,8 +80,8 @@ Não existe cadastro público: só um administrador adiciona pessoas.
   - Filtros que o PNCP não faz (data da sessão, plataforma, UASG, CNPJ, nº, vários municípios) são aplicados aqui depois de
     baixar até 3.000 resultados por consulta; a tela avisa quando é preciso afinar a busca.
   - A pesquisa sai do navegador; só o download dos arquivos passa pelo servidor (`/api/pncp/arquivo`).
-- **Disputas / robô de lances** (Licitações → Disputas): funciona pelo aplicativo do Windows. O aplicativo abre o
-  navegador com um perfil só do Montzion e, quando pedido, a janela do Compras.gov.br, onde a pessoa entra com o
+- **Disputas / robô de lances** (Licitações → Disputas): funciona pelo aplicativo do Windows. O aplicativo abre a
+  plataforma na janela própria e, quando pedido, a janela do Compras.gov.br, onde a pessoa entra com o
   gov.br (a senha e o certificado não passam pela plataforma). A página Disputas lista as disputas da conta
   (pregões e dispensas), os itens com melhor lance, meu lance e cronômetro, e por item: lance mínimo, desconto
   (%), ligar/parar, "Permitir lances com 4 casas decimais" e "Não aguardar os segundos finais para enviar
@@ -171,8 +171,15 @@ Não existe cadastro público: só um administrador adiciona pessoas.
 
 Em **Configurações → Aplicativo** (ou no menu da conta → "Baixar app para Windows") cada pessoa baixa o
 `Montzion-Instalador.exe`. Ao abrir, ele instala o Montzion na pasta do usuário (sem pedir administrador), cria
-atalhos na área de trabalho e no menu Iniciar, registra em "Aplicativos instalados" (para desinstalar) e abre
-`https://montzion.com.br` numa janela própria (modo aplicativo do Edge ou Chrome). O instalador ainda não tem
+atalhos na área de trabalho e no menu Iniciar, registra em "Aplicativos instalados" (para desinstalar) e abre o
+Montzion num **programa próprio**: uma janela do Windows com nome e ícone do Montzion e o motor WebView2 da Microsoft
+dentro (o mesmo do Edge, que já vem no Windows 10 e 11), sem barra de endereço, sem abas e com os dados guardados em
+`%LOCALAPPDATA%\Montzion\Dados`. Links para outros sites (PNCP, portais) abrem no navegador padrão; a janela do
+Compras.gov.br do robô de lances também é uma janela própria. Abrir o atalho de novo só traz a janela para a frente.
+Se o Windows não tiver o WebView2, o aplicativo avisa uma vez (com o link de download gratuito da Microsoft) e abre
+no modo aplicativo do Edge/Chrome. Código em `desktop/janela_windows.go` (chamadas diretas ao Windows, sem
+bibliotecas externas; o `WebView2Loader.dll` da Microsoft vai embutido, licença em `desktop/recursos`). Registro de
+erros em `%LOCALAPPDATA%\Montzion\montzion.log`. O instalador ainda não tem
 assinatura digital de código, então o Windows mostra "O Windows protegeu o computador" na primeira vez
 (Mais informações → Executar assim mesmo).
 

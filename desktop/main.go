@@ -4,7 +4,8 @@
 //
 // Na primeira vez (rodando o arquivo baixado), copia-se para %LOCALAPPDATA%\Montzion, cria atalhos
 // na área de trabalho e no menu Iniciar e registra em "Aplicativos instalados" (sem pedir administrador).
-// Depois, cada vez que é aberto, abre https://montzion.com.br no modo aplicativo do Edge (ou Chrome).
+// Depois, cada vez que é aberto, mostra a plataforma na janela própria do Montzion (motor WebView2 do
+// Windows, sem barra de endereço). Sem WebView2, cai para o modo aplicativo do Edge (ou Chrome).
 package main
 
 import (
@@ -197,7 +198,6 @@ func procurar(caminhos ...string) string {
 	return ""
 }
 
-// Abre a plataforma numa janela própria (modo aplicativo do Edge/Chrome).
 func procurarNavegador() string {
 	pf, pf86, local := os.Getenv("ProgramFiles"), os.Getenv("ProgramFiles(x86)"), os.Getenv("LOCALAPPDATA")
 	return procurar(
@@ -210,7 +210,7 @@ func procurarNavegador() string {
 	)
 }
 
-// Trava: só um Montzion por vez controla o navegador (a ponte do robô).
+// Trava: só um Montzion aberto por vez (e só uma ponte do robô).
 const portaTrava = "127.0.0.1:47811"
 
 func portaLivre() int {
@@ -224,9 +224,79 @@ func portaLivre() int {
 	return 9333
 }
 
-// Abre a plataforma numa janela própria (Edge/Chrome com um perfil só do Montzion) e liga a ponte do
-// robô de lances, que fica rodando enquanto o navegador estiver aberto.
+func configuracao() configPonte {
+	return configPonte{Plataforma: endereco, Compras: "https://cnetmobile.estaleiro.serpro.gov.br"}
+}
+
+// Liga a ponte do robô de lances ao motor das janelas e fica rodando enquanto elas estiverem abertas.
+func ligarPonte(porta int, abrirCompras func() bool) {
+	ws, err := enderecoDevTools(porta, 60*time.Second)
+	if err != nil {
+		registrarLog("robô de lances indisponível: %v", err)
+		return
+	}
+	cdp, err := conectarCDP(ws)
+	if err != nil {
+		registrarLog("robô de lances indisponível: %v", err)
+		return
+	}
+	registrarLog("ponte do robô ligada (porta %d)", porta)
+	p := novaPonte(configuracao(), cdp)
+	p.abrirCompras = abrirCompras
+	if err := p.Rodar(); err != nil {
+		registrarLog("ponte do robô parou: %v", err)
+	}
+}
+
+// Abre o Montzion na janela própria do aplicativo. Só se o Windows não tiver o motor WebView2
+// (raro: vem no Windows 10 e 11) cai para o modo aplicativo do Edge/Chrome.
 func abrir() {
+	trava, err := net.Listen("tcp", portaTrava)
+	if err != nil {
+		// Já está aberto: traz a janela para a frente.
+		for i := 0; i < 15; i++ {
+			if focarJanelaAberta() {
+				return
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+		registrarLog("outro Montzion segura a trava, mas sem janela; abrindo sem o robô")
+	} else {
+		defer trava.Close()
+	}
+	comPonte := trava != nil
+	porta := 0
+	if comPonte {
+		porta = portaLivre()
+	}
+	err = janelaNativa(configuracao(), porta, func() {
+		registrarLog("janela própria aberta")
+		if comPonte {
+			go ligarPonte(porta, pedirJanelaCompras)
+		}
+	})
+	if err == nil {
+		return
+	}
+	registrarLog("janela própria indisponível: %v", err)
+	avisarWebView2()
+	abrirModoNavegador(comPonte)
+}
+
+// Avisa (uma vez só) que falta o WebView2 e oferece o download gratuito da Microsoft.
+func avisarWebView2() {
+	marca := filepath.Join(pastaInstalacao(), "aviso-webview2")
+	if _, err := os.Stat(marca); err == nil {
+		return
+	}
+	_ = os.WriteFile(marca, []byte(time.Now().Format(time.RFC3339)), 0o644)
+	if mensagem("Para abrir o Montzion na janela própria, o Windows precisa do componente gratuito \"Microsoft Edge WebView2\".\n\nDeseja baixar agora? (Depois de instalar, abra o Montzion de novo.)\n\nEnquanto isso, a plataforma abre numa janela do Edge.", mbYesNo|mbIconQ) == idYes {
+		abrirNoNavegador(linkWebView2)
+	}
+}
+
+// Plano B: abre a plataforma no modo aplicativo do Edge/Chrome (perfil só do Montzion).
+func abrirModoNavegador(comPonte bool) {
 	navegador := procurarNavegador()
 	if navegador == "" {
 		registrarLog("Edge/Chrome não encontrados; abrindo no navegador padrão")
@@ -237,15 +307,12 @@ func abrir() {
 		return
 	}
 	perfil := filepath.Join(pastaInstalacao(), "Navegador")
-	trava, err := net.Listen("tcp", portaTrava)
-	if err != nil {
-		// O Montzion já está aberto: só abre mais uma janela no mesmo navegador.
+	if !comPonte {
 		if err := exec.Command(navegador, "--user-data-dir="+perfil, "--app="+endereco).Start(); err != nil {
 			registrarLog("não abriu outra janela: %v", err)
 		}
 		return
 	}
-	defer trava.Close()
 	porta := portaLivre()
 	cmd := exec.Command(navegador,
 		fmt.Sprintf("--remote-debugging-port=%d", porta),
@@ -260,20 +327,7 @@ func abrir() {
 		_ = exec.Command(navegador, "--app="+endereco, "--start-maximized").Start()
 		return
 	}
-	ws, err := enderecoDevTools(porta, 25*time.Second)
-	if err != nil {
-		registrarLog("robô de lances indisponível: %v", err)
-		return
-	}
-	cdp, err := conectarCDP(ws)
-	if err != nil {
-		registrarLog("robô de lances indisponível: %v", err)
-		return
-	}
-	registrarLog("ponte do robô ligada (porta %d)", porta)
-	if err := novaPonte(configPonte{Plataforma: endereco, Compras: "https://cnetmobile.estaleiro.serpro.gov.br"}, cdp).Rodar(); err != nil {
-		registrarLog("ponte do robô parou: %v", err)
-	}
+	ligarPonte(porta, nil)
 }
 
 func main() {
@@ -304,7 +358,7 @@ func main() {
 				registrarLog("instalação falhou: %v", err)
 				mensagem("Não foi possível instalar o Montzion: "+err.Error()+"\n\nA plataforma vai abrir mesmo assim.\nDetalhes em "+filepath.Join(pastaInstalacao(), "montzion.log"), mbOK|mbIconInfo)
 			} else {
-				mensagem("Montzion instalado!\n\nCriamos um atalho na área de trabalho e no menu Iniciar.\nAgora a plataforma vai abrir.", mbOK|mbIconInfo)
+				mensagem("Montzion instalado!\n\nCriamos um atalho na área de trabalho e no menu Iniciar.\nAgora o Montzion vai abrir.", mbOK|mbIconInfo)
 			}
 		}
 	}
