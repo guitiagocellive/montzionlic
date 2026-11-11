@@ -9848,3 +9848,36 @@ code {
   font-weight: 400;
   color: var(--texto-fraco);
 }
+
+/* Configurações → Aplicativo, dentro do app */
+.versao-app {
+  font-variant-numeric: tabular-nums;
+}
+.aviso-versao {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border-radius: var(--raio-sm);
+  border: 1px solid var(--borda);
+  background: var(--superficie-2);
+  font-size: 0.88rem;
+}
+.aviso-versao.ok {
+  justify-content: flex-start;
+  gap: 8px;
+  color: var(--verde, #22c55e);
+}
+.aviso-versao.nova strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.aviso-versao ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 0.84rem;
+}

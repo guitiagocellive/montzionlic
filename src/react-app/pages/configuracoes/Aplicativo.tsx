@@ -1,10 +1,104 @@
-import { Download, MonitorDown, MonitorSmartphone, ShieldAlert } from "lucide-react";
+import { CheckCircle2, Download, Loader2, MonitorDown, MonitorSmartphone, RefreshCw, ShieldAlert, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
+import { noAplicativo } from "../../robo/ponte";
+
+type VersaoPublicada = { versao: string; data?: string; novidades?: string[] };
+
+/** 1 se a for mais nova que b, -1 se mais velha, 0 se igual ("3.0.10" > "3.0.9"). */
+export function compararVersoes(a: string, b: string) {
+  const pa = a.split(".").map((n) => parseInt(n, 10) || 0);
+  const pb = b.split(".").map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) > (pb[i] ?? 0) ? 1 : -1;
+  }
+  return 0;
+}
+
+const dataBr = (iso?: string) => (iso && /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso.split("-").reverse().join("/") : "");
+
+/** Dentro do aplicativo: versão instalada e verificar se há uma nova. */
+function AtualizacaoApp() {
+  const atual = window.montzionApp?.versao ?? "";
+  const [estado, setEstado] = useState<"" | "verificando" | "erro">("");
+  const [publicada, setPublicada] = useState<VersaoPublicada | null>(null);
+
+  async function verificar() {
+    setEstado("verificando");
+    try {
+      const r = await fetch(`/downloads/versao.json?agora=${Date.now()}`, { cache: "no-store" });
+      if (!r.ok) throw new Error();
+      setPublicada((await r.json()) as VersaoPublicada);
+      setEstado("");
+    } catch {
+      setEstado("erro");
+    }
+  }
+
+  const nova = publicada && atual ? compararVersoes(publicada.versao, atual) > 0 : false;
+
+  return (
+    <section className="cartao app-download">
+      <div className="app-download-topo">
+        <span className="app-icone">
+          <img src="/icones/icone-192.png" alt="" />
+        </span>
+        <div>
+          <h2>Montzion para Windows</h2>
+          <p className="texto-suave" style={{ margin: "4px 0 0" }}>
+            Você está usando o aplicativo. Versão instalada: <strong className="versao-app">{atual || "—"}</strong>
+          </p>
+        </div>
+        <button className="botao secundario" onClick={verificar} disabled={estado === "verificando"}>
+          {estado === "verificando" ? <Loader2 className="girando" /> : <RefreshCw />} Verificar atualização
+        </button>
+      </div>
+
+      {estado === "erro" && <p className="alerta erro">Não foi possível verificar agora. Confira a internet e tente de novo.</p>}
+
+      {publicada && !nova && (
+        <p className="aviso-versao ok">
+          <CheckCircle2 size={16} /> Você já está na versão mais recente ({atual}).
+        </p>
+      )}
+
+      {publicada && nova && (
+        <div className="aviso-versao nova">
+          <div>
+            <strong>
+              <Sparkles size={16} /> Nova versão {publicada.versao} disponível
+            </strong>
+            {publicada.data && <span className="texto-fraco pequeno"> · publicada em {dataBr(publicada.data)}</span>}
+            {!!publicada.novidades?.length && (
+              <ul>
+                {publicada.novidades.map((n) => (
+                  <li key={n}>{n}</li>
+                ))}
+              </ul>
+            )}
+            <p className="texto-fraco pequeno" style={{ margin: "6px 0 0" }}>
+              Baixe e abra o instalador: ele atualiza o aplicativo sozinho, sem perder login nem configurações. Depois abra o
+              Montzion de novo.
+            </p>
+          </div>
+          <a className="botao acento" href="/downloads/Montzion-Instalador.exe" download="Montzion-Instalador.exe">
+            <Download /> Baixar versão {publicada.versao}
+          </a>
+        </div>
+      )}
+    </section>
+  );
+}
 
 type EventoInstalar = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
 
 /** Baixar o Montzion para o computador (Windows) ou instalar pelo navegador. */
 export function AplicativoConfig() {
+  // Dentro do aplicativo não faz sentido oferecer baixar o aplicativo: mostra a versão e a atualização.
+  if (noAplicativo()) return <AtualizacaoApp />;
+  return <AplicativoNavegador />;
+}
+
+function AplicativoNavegador() {
   const [instalavel, setInstalavel] = useState<EventoInstalar | null>(null);
   const [instalado, setInstalado] = useState(() => matchMedia("(display-mode: standalone)").matches);
   const windows = /Windows/i.test(navigator.userAgent);

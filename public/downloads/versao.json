@@ -1,0 +1,9 @@
+{
+  "versao": "3.0.0",
+  "data": "2026-11-11",
+  "novidades": [
+    "Robô de lances dentro do aplicativo, em tempo real (cobre o lance do concorrente na hora).",
+    "Login direto no gov.br, como no Siga Pregão: a janela some sozinha depois do login.",
+    "Mostra só as compras em disputa agora."
+  ]
+}

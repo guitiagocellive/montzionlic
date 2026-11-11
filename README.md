@@ -219,6 +219,11 @@ erros em `%LOCALAPPDATA%\Montzion\montzion.log`. O instalador ainda não tem
 assinatura digital de código, então o Windows mostra "O Windows protegeu o computador" na primeira vez
 (Mais informações → Executar assim mesmo).
 
+Dentro do aplicativo, Configurações → Aplicativo não oferece baixar de novo: mostra a **versão instalada** e o botão
+**Verificar atualização**, que compara com `public/downloads/versao.json` e, se houver versão nova, mostra as novidades
+e o botão para baixar. Ao gerar um instalador novo, suba a versão em `desktop/comum.go` **e** em
+`public/downloads/versao.json` (com as novidades); o teste `go test ./...` em `desktop/` falha se as duas forem diferentes.
+
 Para gerar de novo depois de mudar algo em `desktop/` (precisa de Go 1.22+ e Python 3):
 
 ```bash
