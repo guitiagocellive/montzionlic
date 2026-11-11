@@ -18,6 +18,7 @@ Lista do que foi combinado e ainda falta fazer (ou melhorar). Atualizar sempre q
   - [x] Janela ao clicar no card em etapas (Dados, Itens, Arquivos) com Anterior/Próxima.
   - [x] Ao adicionar ao quadro, escolher os itens de que vai participar (selecionar/desmarcar todos).
   - [x] Filtro por plataforma da disputa e registro de preço na área principal.
+  - [x] Busca no formato do Siga Pregão (lupa recolhida, nº e UASG abertos, pesquisa avançada em cartão animado).
   - [ ] Continuar ajustando com o uso (ordem, destaque, resumo).
   - [ ] Buscas salvas e aviso diário de licitações novas que batem com os nichos.
 

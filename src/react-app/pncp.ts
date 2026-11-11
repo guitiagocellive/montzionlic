@@ -67,7 +67,20 @@ export interface FiltrosBusca {
   sessaoDe: string;
   sessaoAte: string;
   ordem: "recentes" | "relevancia" | "sessao";
+  modosDisputa: string[];
+  tipoItem: "" | "M" | "S";
+  /** Só participação exclusiva para ME/EPP. */
+  meEpp: boolean;
 }
+
+/** Modos de disputa do PNCP (modos_disputa). */
+export const MODOS_DISPUTA = [
+  { codigo: "1", nome: "Aberto" },
+  { codigo: "3", nome: "Aberto e fechado" },
+  { codigo: "6", nome: "Fechado e aberto" },
+  { codigo: "2", nome: "Fechado" },
+  { codigo: "4", nome: "Dispensa com disputa" },
+];
 
 export const FILTROS_PADRAO: FiltrosBusca = {
   palavra: "",
@@ -87,7 +100,17 @@ export const FILTROS_PADRAO: FiltrosBusca = {
   sessaoDe: "",
   sessaoAte: "",
   ordem: "recentes",
+  modosDisputa: [],
+  tipoItem: "",
+  meEpp: false,
 };
+
+/** O campo "UASG ou CNPJ do órgão": 14 dígitos = CNPJ do órgão; senão, código da UASG. */
+export function codigoOrgao(f: Pick<FiltrosBusca, "uasg" | "orgao">) {
+  const campo = somenteNumero(f.uasg);
+  const cnpj = campo.length === 14 ? campo : somenteNumero(f.orgao).length === 14 ? somenteNumero(f.orgao) : "";
+  return { uasg: campo.length === 14 ? "" : semZeros(f.uasg), cnpj };
+}
 
 export interface ResultadoPncp {
   id: string; // numero_controle_pncp
@@ -291,9 +314,12 @@ export interface RespostaBusca {
 function parametros(f: FiltrosBusca, ibge: number | null) {
   const numero = f.numero.trim();
   const orgao = f.orgao.trim();
-  const cnpj = somenteNumero(orgao).length === 14 ? somenteNumero(orgao) : "";
+  const { uasg, cnpj } = codigoOrgao(f);
+  const nomeOrgao = somenteNumero(orgao).length === 14 ? "" : orgao;
+  // Palavras separadas por ";" viram uma busca com todas elas.
+  const palavras = f.palavra.split(";").map((x) => x.trim()).filter(Boolean).join(" ");
   // Número entre aspas ("80/2026") faz o PNCP trazer o número exato primeiro.
-  const termo = [f.palavra.trim(), numero ? `"${numero}"` : "", semZeros(f.uasg), cnpj || orgao].filter(Boolean).join(" ");
+  const termo = [palavras, numero ? `"${numero}"` : "", uasg, cnpj, nomeOrgao].filter(Boolean).join(" ");
   const p = new URLSearchParams({ tipos_documento: "edital", ordenacao: f.ordem === "relevancia" && termo ? "relevancia" : "-data" });
   if (termo) p.set("q", termo);
   if (f.situacao === "recebendo_proposta") p.set("status", "recebendo_proposta");
@@ -306,6 +332,9 @@ function parametros(f: FiltrosBusca, ibge: number | null) {
   if (f.valorMin.trim() && vMin >= 0) p.set("valor_total_estimado_min", String(vMin));
   if (f.valorMax.trim() && vMax > 0) p.set("valor_total_estimado_max", String(vMax));
   if (ibge) p.set("codigo_ibge", String(ibge));
+  if (f.modosDisputa?.length) p.set("modos_disputa", f.modosDisputa.join("|"));
+  if (f.tipoItem) p.set("tipos_item", f.tipoItem);
+  if (f.meEpp) p.set("beneficios", "1");
   return p;
 }
 
@@ -313,8 +342,7 @@ function parametros(f: FiltrosBusca, ibge: number | null) {
 function filtroLocal(f: FiltrosBusca) {
   const [numBase, numAno] = f.numero.trim().split("/").map((x) => x.trim());
   const alvoNumero = numBase ? semZeros(numBase) : "";
-  const uasg = semZeros(f.uasg);
-  const cnpj = somenteNumero(f.orgao).length === 14 ? somenteNumero(f.orgao) : "";
+  const { uasg, cnpj } = codigoOrgao(f);
   const intervalo = intervaloSessao(f);
   const plataformas = f.plataformas ?? [];
   const conhecidas = PLATAFORMAS.filter((x) => x !== "Outras");

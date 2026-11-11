@@ -64,19 +64,13 @@ Não existe cadastro público: só um administrador adiciona pessoas.
 - **Orçamento automático:** preço de venda = custo com frete ÷ (1 − impostos − lucro).
 - **IA gratuita (Workers AI):** lê edital/termo de referência (PDF, imagem, Word, Excel), resume,
   preenche os dados e importa os itens. Limite grátis diário (~8 a 10 editais).
-- **Buscar licitações (PNCP):** Licitações → Buscar licitações. Pesquisa os editais do Portal Nacional de
-  Contratações Públicas por palavra-chave, nº da licitação, **data da sessão** (hoje, amanhã, próximos 3/7/15/30 dias
-  ou datas escolhidas), estado, modalidade e situação. Em "Mais filtros": **município** (lista do IBGE em
-  `public/dados/municipios.json`, até 10 por busca), **UASG**, **órgão** (nome ou CNPJ), **registro de preço**, esfera
-  e faixa de **valor estimado**. Na área principal também: **registro de preço** (só SRP / sem SRP) e **plataforma**
-  da disputa (Compras.gov.br, Licitações-e, Portal de Compras Públicas, BNC, BLL, Licitanet…). Ordena por publicação,
-  sessão mais próxima ou relevância.
-  - **Clicar no card** abre a janela da licitação em etapas: **Dados** (sessão, valor de referência, registro de preço,
-    modalidade, plataforma, UASG, objeto e mais informações), **Itens** e **Arquivos** (o arquivo ocupa a janela, com
-    o edital já aberto). No card, "Ver itens" e "Ver arquivos" abrem direto na etapa. "Anterior/Próxima" (ou as setas
-    do teclado) passam de uma licitação para outra mantendo a etapa.
-  - **Adicionar ao quadro** primeiro pergunta de quais itens a empresa vai participar (procurar, selecionar todos,
-    desmarcar todos) e só esses itens entram na licitação.
+- **Buscar licitações (PNCP):** Licitações → Buscar licitações, no formato do Siga Pregão. Barra compacta: a **lupa**
+  fica recolhida e se abre ao clicar (busca por palavra: notebook, uniforme…), os campos **Nº da licitação** e
+  **UASG ou CNPJ do órgão** ficam abertos, a **data da sessão** (hoje, amanhã, 3/7/15/30 dias ou datas) e o botão da
+  **Pesquisa avançada**, que abre num cartão animado com palavras-chave separadas por ";", período, tipo de item
+  (material/serviço), situação, estados, municípios (lista do IBGE), portais de compra, modalidades, modo de disputa,
+  órgão, faixa de valor e outros filtros (exclusiva ME/EPP, excluir ou só registro de preço, esfera). Ordena por
+  publicação, sessão mais próxima ou relevância.
   - Cada resultado mostra sessão (com aviso de "hoje"/"amanhã"), UASG, valor estimado, SRP, modo de disputa e os links
     para o **PNCP** e para o **portal da disputa** (Compras.gov.br, BLL, BNC, Licitações-e, Portal de Compras
     Públicas…), direto na licitação quando o PNCP informa.

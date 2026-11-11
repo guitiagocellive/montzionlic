@@ -1,12 +1,14 @@
 import {
   CalendarClock,
+  ChevronDown,
   ExternalLink,
   FileSearch,
   FolderOpen,
+  Globe,
+  Hash,
   ListOrdered,
   Landmark,
   Loader2,
-  MapPin,
   Plus,
   Search,
   SlidersHorizontal,
@@ -17,7 +19,7 @@ import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { podeEditar } from "../../../shared/permissoes";
 import type { LicitacaoResumo, Usuario } from "../../../shared/tipos";
 import { api, mensagemDeErro } from "../../api";
-import { avisar, Vazio } from "../../components/Ui";
+import { avisar, Interruptor, Modal, Vazio } from "../../components/Ui";
 import { useFecharAoClicarFora } from "../../components/useFecharAoClicarFora";
 import { link, navegar } from "../../rota";
 import {
@@ -25,6 +27,7 @@ import {
   carregarMunicipios,
   ESFERAS,
   FILTROS_PADRAO,
+  MODOS_DISPUTA,
   type FiltrosBusca,
   type ItemPncp,
   MODALIDADES_PNCP,
@@ -38,7 +41,7 @@ import {
   semAcento,
   UFS,
 } from "../../pncp";
-import { DetalhePncp, dataHora, type EtapaPncp, quandoSessao, reais } from "./DetalhePncp";
+import { DetalhePncp, dataHora, type EtapaPncp, reais } from "./DetalhePncp";
 import { EscolherItensPncp } from "./EscolherItensPncp";
 
 const CHAVE_FILTROS = "montzion:busca-pncp";
@@ -136,8 +139,54 @@ function FiltroMunicipios({ ufs, valor, aoMudar }: { ufs: string[]; valor: Munic
 }
 
 /** Quantos filtros de "Mais filtros" estão ligados. */
-function filtrosExtras(f: FiltrosBusca) {
-  return [f.municipios.length > 0, !!f.uasg.trim(), !!f.orgao.trim(), f.esferas.length > 0, !!f.valorMin.trim() || !!f.valorMax.trim()].filter(Boolean).length;
+/** Quantos filtros da pesquisa avançada estão diferentes do padrão. */
+function filtrosAvancados(f: FiltrosBusca) {
+  const mod = [...f.modalidades].sort().join(",") !== [...FILTROS_PADRAO.modalidades].sort().join(",");
+  return [
+    f.ufs.length > 0,
+    f.municipios.length > 0,
+    f.plataformas.length > 0,
+    mod,
+    !!f.srp,
+    f.esferas.length > 0,
+    !!f.valorMin.trim() || !!f.valorMax.trim(),
+    (f.modosDisputa ?? []).length > 0,
+    !!f.tipoItem,
+    !!f.meEpp,
+    !!f.orgao.trim(),
+    f.situacao === "todas",
+  ].filter(Boolean).length;
+}
+
+/** "em 22h 53min", "em 9 dias", "encerrada" */
+function tempoAte(iso: string | null): { texto: string; classe: string } | null {
+  if (!iso) return null;
+  const alvo = new Date(iso.length <= 10 ? `${iso}T23:59:59` : iso).getTime();
+  if (!Number.isFinite(alvo)) return null;
+  const min = Math.round((alvo - Date.now()) / 60000);
+  if (min < 0) return { texto: "encerrada", classe: "passou" };
+  if (min < 60) return { texto: `em ${min}min`, classe: "urgente" };
+  if (min < 24 * 60) return { texto: `em ${Math.floor(min / 60)}h ${min % 60}min`, classe: "breve" };
+  const dias = Math.round(min / (24 * 60));
+  return { texto: `em ${dias} dia${dias > 1 ? "s" : ""}`, classe: dias <= 3 ? "breve" : "" };
+}
+
+/** Seção que abre e fecha dentro da pesquisa avançada. */
+function SecaoFiltro({ titulo, aberta, aoAlternar, children, acoes }: { titulo: string; aberta: boolean; aoAlternar: () => void; children: React.ReactNode; acoes?: React.ReactNode }) {
+  return (
+    <section className={`secao-filtro ${aberta ? "aberta" : ""}`}>
+      <button type="button" className="secao-filtro-topo" onClick={aoAlternar} aria-expanded={aberta}>
+        <span>{titulo}</span>
+        <ChevronDown />
+      </button>
+      <div className="secao-filtro-corpo">
+        <div>
+          {children}
+          {acoes && <div className="secao-filtro-acoes">{acoes}</div>}
+        </div>
+      </div>
+    </section>
+  );
 }
 
 export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
@@ -152,8 +201,11 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
   const [noQuadro, setNoQuadro] = useState<Record<string, number>>({});
   const [importando, setImportando] = useState<{ id: string; etapa: string } | null>(null);
   const [abertos, setAbertos] = useState<Record<string, boolean>>({});
-  const [verUfs, setVerUfs] = useState(false);
-  const [maisFiltros, setMaisFiltros] = useState(() => filtrosExtras(lerFiltros()) > 0);
+  const [buscaAberta, setBuscaAberta] = useState(() => !!lerFiltros().palavra);
+  const [avancada, setAvancada] = useState(false);
+  const [secoes, setSecoes] = useState<Record<string, boolean>>({ estados: true, portais: true, modalidades: true, modos: false, municipios: false, orgao: false, valores: false, outros: true });
+  const campoBusca = useRef<HTMLInputElement>(null);
+  const alternarSecao = (k: string) => setSecoes((x) => ({ ...x, [k]: !x[k] }));
   const [detalhe, setDetalhe] = useState<string | null>(null);
   const [etapa, setEtapa] = useState<EtapaPncp>("dados");
   const [escolhendo, setEscolhendo] = useState<ResultadoPncp | null>(null);
@@ -250,7 +302,7 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
     setFiltros({ ...FILTROS_PADRAO, palavra: filtros.palavra });
   }
 
-  const extras = filtrosExtras(filtros);
+  const avancados = filtrosAvancados(filtros);
   const resultados = resposta?.itens ?? null;
   const visiveis = resposta?.varredura ? (resultados ?? []).slice(0, mostrar) : resultados ?? [];
   const posAberto = detalhe && resultados ? resultados.findIndex((x) => x.id === detalhe) : -1;
@@ -285,6 +337,8 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
     return `${resposta.total.toLocaleString("pt-BR")} resultado(s) · mostrando ${resposta.itens.length}`;
   }
 
+  const marcarTodos = (k: "ufs" | "plataformas" | "modalidades", todos: string[]) => mudar({ [k]: todos } as Partial<FiltrosBusca>);
+
   return (
     <>
       <div className="cabecalho-pagina entrar">
@@ -295,185 +349,100 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
         </div>
       </div>
 
-      <form className="cartao filtros-pncp entrar" onSubmit={enviar}>
-        <div className="filtros-pncp-linha">
-          <div className="entrada com-icone busca">
+      <form className="barra-busca entrar" onSubmit={enviar}>
+        <div className={`busca-lupa ${buscaAberta || filtros.palavra ? "aberta" : ""}`}>
+          <button
+            type="button"
+            className="botao-lupa"
+            onClick={() => {
+              setBuscaAberta(true);
+              setTimeout(() => campoBusca.current?.focus(), 60);
+            }}
+            aria-label="Buscar por palavra"
+            title="Buscar por palavra (ex.: notebook, uniforme)"
+          >
             <Search />
-            <input
-              placeholder="Palavra-chave: produto ou objeto (ex.: notebook, pilha, material de limpeza)"
-              value={filtros.palavra}
-              onChange={(e) => mudar({ palavra: e.target.value })}
-              aria-label="Palavra-chave"
-            />
-          </div>
-          <div className="entrada numero-pncp">
-            <input placeholder="Nº da licitação (ex.: 90008/2026)" value={filtros.numero} onChange={(e) => mudar({ numero: e.target.value })} aria-label="Número da licitação" />
-          </div>
-          <button className="botao acento" disabled={buscando}>
-            {buscando ? <Loader2 className="girando" /> : <Search />} Buscar
           </button>
-        </div>
-
-        <div className="filtros-pncp-grupo">
-          <span className="rotulo-filtro">Data da sessão</span>
-          <div className="chips-filtro">
-            {PERIODOS_SESSAO.map((p) => (
-              <button
-                type="button"
-                key={p.valor}
-                className={`chip-filtro ${filtros.sessao === p.valor ? "ativo" : ""}`}
-                onClick={() => (p.valor === "periodo" ? mudar({ sessao: "periodo" }) : mudarEBuscar({ sessao: p.valor }))}
-              >
-                {p.nome}
-              </button>
-            ))}
-            {filtros.sessao === "periodo" && (
-              <span className="periodo-sessao">
-                <input type="date" value={filtros.sessaoDe} onChange={(e) => mudar({ sessaoDe: e.target.value })} aria-label="Sessão a partir de" />
-                até
-                <input type="date" value={filtros.sessaoAte} onChange={(e) => mudar({ sessaoAte: e.target.value })} aria-label="Sessão até" />
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="filtros-pncp-grupo">
-          <span className="rotulo-filtro">Situação</span>
-          <div className="segmentado pequeno">
-            <button type="button" className={filtros.situacao === "recebendo_proposta" ? "ativo" : ""} onClick={() => mudar({ situacao: "recebendo_proposta" })}>
-              Recebendo propostas
-            </button>
-            <button type="button" className={filtros.situacao === "todas" ? "ativo" : ""} onClick={() => mudar({ situacao: "todas" })}>
-              Todas
-            </button>
-          </div>
-        </div>
-
-        <div className="filtros-pncp-grupo">
-          <span className="rotulo-filtro">Modalidade</span>
-          <div className="chips-filtro">
-            {MODALIDADES_PNCP.map((m) => (
-              <button type="button" key={m.codigo} className={`chip-filtro ${filtros.modalidades.includes(m.codigo) ? "ativo" : ""}`} onClick={() => mudar({ modalidades: alternar(filtros.modalidades, m.codigo) })}>
-                {m.nome}
-              </button>
-            ))}
-            {filtros.modalidades.length === 0 ? (
-              <span className="texto-fraco pequeno">Todas as modalidades</span>
-            ) : (
-              <button type="button" className="botao link pequeno" onClick={() => mudar({ modalidades: [] })}>
-                <X size={13} /> Todas
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="filtros-pncp-grupo">
-          <span className="rotulo-filtro">Registro de preço</span>
-          <div className="segmentado pequeno">
-            {([["", "Tanto faz"], ["sim", "Só registro de preço"], ["nao", "Sem registro de preço"]] as const).map(([v, t]) => (
-              <button key={v} type="button" className={filtros.srp === v ? "ativo" : ""} onClick={() => mudar({ srp: v })}>
-                {t}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="filtros-pncp-grupo">
-          <span className="rotulo-filtro">Plataforma</span>
-          <div className="chips-filtro">
-            {PLATAFORMAS.map((pl) => (
-              <button type="button" key={pl} className={`chip-filtro ${filtros.plataformas.includes(pl) ? "ativo" : ""}`} onClick={() => mudar({ plataformas: alternar(filtros.plataformas, pl) })}>
-                {pl}
-              </button>
-            ))}
-            {filtros.plataformas.length === 0 ? (
-              <span className="texto-fraco pequeno">Todas as plataformas</span>
-            ) : (
-              <button type="button" className="botao link pequeno" onClick={() => mudar({ plataformas: [] })}>
-                <X size={13} /> Todas
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="filtros-pncp-grupo">
-          <span className="rotulo-filtro">Estado</span>
-          <div className="chips-filtro">
-            {filtros.ufs.length === 0 && !verUfs && <span className="texto-fraco pequeno">Todos os estados</span>}
-            {(verUfs ? UFS : filtros.ufs).map((uf) => (
-              <button type="button" key={uf} className={`chip-filtro uf ${filtros.ufs.includes(uf) ? "ativo" : ""}`} onClick={() => mudar({ ufs: alternar(filtros.ufs, uf) })}>
-                {uf}
-              </button>
-            ))}
-            <button type="button" className="botao link pequeno" onClick={() => setVerUfs((v) => !v)}>
-              {verUfs ? "Fechar" : "Escolher estados"}
-            </button>
-            {filtros.ufs.length > 0 && (
-              <button type="button" className="botao link pequeno" onClick={() => mudar({ ufs: [] })}>
-                <X size={13} /> Limpar
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="mais-filtros-topo">
-          <button type="button" className="botao link pequeno" onClick={() => setMaisFiltros((v) => !v)} aria-expanded={maisFiltros}>
-            <SlidersHorizontal size={14} /> {maisFiltros ? "Menos filtros" : "Mais filtros"}
-            {extras > 0 && <span className="contador-filtros">{extras}</span>}
-          </button>
-          <span className="texto-fraco pequeno">Município, UASG, órgão, esfera e valor</span>
-          {(extras > 0 || filtros.sessao || filtros.numero || filtros.srp || filtros.plataformas.length > 0) && (
-            <button type="button" className="botao link pequeno" onClick={limparFiltros}>
-              <X size={13} /> Limpar filtros
+          <input
+            ref={campoBusca}
+            placeholder="Encontrar: notebooks, uniformes, merenda escolar…"
+            value={filtros.palavra}
+            onChange={(e) => mudar({ palavra: e.target.value })}
+            onBlur={() => !filtros.palavra && setBuscaAberta(false)}
+            aria-label="Palavra-chave"
+            tabIndex={buscaAberta || filtros.palavra ? 0 : -1}
+          />
+          {filtros.palavra && (
+            <button type="button" className="limpar-lupa" onClick={() => mudar({ palavra: "" })} aria-label="Limpar palavra">
+              <X size={14} />
             </button>
           )}
         </div>
-
-        {maisFiltros && (
-          <div className="mais-filtros">
-            <div className="filtros-pncp-grupo">
-              <span className="rotulo-filtro">Município</span>
-              <FiltroMunicipios ufs={filtros.ufs} valor={filtros.municipios} aoMudar={(municipios) => mudar({ municipios })} />
-            </div>
-            <div className="filtros-pncp-grupo">
-              <span className="rotulo-filtro">UASG</span>
-              <div className="entrada pequena-entrada">
-                <input placeholder="Código da unidade (ex.: 158149)" inputMode="numeric" value={filtros.uasg} onChange={(e) => mudar({ uasg: e.target.value })} aria-label="UASG" />
-              </div>
-              <span className="rotulo-filtro curto">Órgão</span>
-              <div className="entrada pequena-entrada largo">
-                <input placeholder="Nome ou CNPJ do órgão" value={filtros.orgao} onChange={(e) => mudar({ orgao: e.target.value })} aria-label="Órgão" />
-              </div>
-            </div>
-            <div className="filtros-pncp-grupo">
-              <span className="rotulo-filtro">Esfera</span>
-              <div className="chips-filtro">
-                {ESFERAS.map((e) => (
-                  <button type="button" key={e.codigo} className={`chip-filtro ${filtros.esferas.includes(e.codigo) ? "ativo" : ""}`} onClick={() => mudar({ esferas: alternar(filtros.esferas, e.codigo) })}>
-                    {e.nome}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="filtros-pncp-grupo">
-              <span className="rotulo-filtro">Valor estimado</span>
-              <div className="entrada pequena-entrada">
-                <input placeholder="De R$" inputMode="decimal" value={filtros.valorMin} onChange={(e) => mudar({ valorMin: e.target.value })} aria-label="Valor mínimo" />
-              </div>
-              <div className="entrada pequena-entrada">
-                <input placeholder="Até R$" inputMode="decimal" value={filtros.valorMax} onChange={(e) => mudar({ valorMax: e.target.value })} aria-label="Valor máximo" />
-              </div>
-            </div>
-          </div>
+        <label className="campo-barra">
+          <Hash size={15} />
+          <input placeholder="Nº da licitação" value={filtros.numero} onChange={(e) => mudar({ numero: e.target.value })} aria-label="Número da licitação" />
+        </label>
+        <label className="campo-barra">
+          <Landmark size={15} />
+          <input placeholder="UASG ou CNPJ do órgão" inputMode="numeric" value={filtros.uasg} onChange={(e) => mudar({ uasg: e.target.value })} aria-label="UASG ou CNPJ do órgão" />
+        </label>
+        <button type="button" className={`botao-barra ${avancados ? "com-filtros" : ""}`} onClick={() => setAvancada(true)} aria-label="Pesquisa avançada" title="Pesquisa avançada">
+          <SlidersHorizontal />
+          {avancados > 0 && <span className="contador-filtros">{avancados}</span>}
+        </button>
+        <label className="periodo-barra" title="Data da sessão">
+          <CalendarClock size={15} />
+          <select value={filtros.sessao} onChange={(e) => (e.target.value === "periodo" ? mudar({ sessao: "periodo" }) : mudarEBuscar({ sessao: e.target.value as FiltrosBusca["sessao"] }))} aria-label="Data da sessão">
+            {PERIODOS_SESSAO.map((x) => (
+              <option key={x.valor} value={x.valor}>
+                {x.valor === "" ? "Sessão: qualquer data" : x.nome}
+              </option>
+            ))}
+          </select>
+        </label>
+        {filtros.sessao === "periodo" && (
+          <span className="datas-barra">
+            <input type="date" value={filtros.sessaoDe} onChange={(e) => mudar({ sessaoDe: e.target.value })} aria-label="Sessão a partir de" />
+            até
+            <input type="date" value={filtros.sessaoAte} onChange={(e) => mudar({ sessaoAte: e.target.value })} aria-label="Sessão até" />
+          </span>
         )}
+        <button className="botao acento botao-buscar" disabled={buscando}>
+          {buscando ? <Loader2 className="girando" /> : <Search />} Buscar
+        </button>
       </form>
+
+      {avancados > 0 && (
+        <div className="filtros-ativos entrar">
+          {filtros.ufs.length > 0 && <span className="chip">{filtros.ufs.join(", ")}</span>}
+          {filtros.municipios.map((m) => (
+            <span key={m.ibge} className="chip">
+              {m.nome}/{m.uf}
+            </span>
+          ))}
+          {filtros.modalidades.length > 0 && (
+            <span className="chip">{filtros.modalidades.map((c) => MODALIDADES_PNCP.find((m) => m.codigo === c)?.nome).join(", ")}</span>
+          )}
+          {filtros.plataformas.length > 0 && <span className="chip">{filtros.plataformas.join(", ")}</span>}
+          {filtros.srp === "sim" && <span className="chip">Só registro de preço</span>}
+          {filtros.srp === "nao" && <span className="chip">Sem registro de preço</span>}
+          {filtros.meEpp && <span className="chip">Exclusiva ME/EPP</span>}
+          {filtros.tipoItem && <span className="chip">{filtros.tipoItem === "M" ? "Material" : "Serviço"}</span>}
+          {(filtros.modosDisputa ?? []).length > 0 && <span className="chip">{filtros.modosDisputa.map((c) => MODOS_DISPUTA.find((m) => m.codigo === c)?.nome).join(", ")}</span>}
+          {filtros.situacao === "todas" && <span className="chip">Todas as situações</span>}
+          <button type="button" className="botao link pequeno" onClick={limparFiltros}>
+            <X size={13} /> Limpar filtros
+          </button>
+        </div>
+      )}
 
       {erro && <p className="alerta erro">{erro}</p>}
 
       {resultados === null ? (
         <section className="cartao">
           <Vazio icone={<FileSearch />} titulo={buscando ? "Buscando no PNCP…" : "Escolha os filtros e clique em Buscar"}>
-            Dica: use o nome do produto que vocês vendem, marque os estados em que atendem e use "Próximos 3 dias" para ver as sessões que estão chegando.
+            Dica: clique na lupa para buscar pelo produto (notebook, uniforme…), ou informe o número da licitação ou a UASG. Os estados, portais e modalidades
+            ficam na pesquisa avançada (<SlidersHorizontal size={13} />).
           </Vazio>
         </section>
       ) : resultados.length === 0 && !buscando ? (
@@ -500,90 +469,84 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
           <div className="lista-pncp">
             {visiveis.map((r) => {
               const idQuadro = noQuadro[r.id];
-              const aberto = abertos[r.id];
-              const quando = quandoSessao(r.encerramento);
+              const objetoAberto = abertos[r.id];
+              const quando = tempoAte(r.encerramento);
               const importandoEste = importando?.id === r.id;
               return (
                 <article
                   key={r.id}
-                  className={`resultado-pncp clicavel ${r.cancelado ? "cancelado" : ""}`}
+                  className={`resultado-pncp clicavel ${r.cancelado || quando?.classe === "passou" ? "apagado" : ""}`}
                   onClick={(e) => {
                     if ((e.target as HTMLElement).closest("a, button, input, select")) return;
                     if (window.getSelection()?.toString()) return; // estava selecionando texto
                     abrir(r.id);
                   }}
                 >
-                  <div className="resultado-pncp-etiquetas">
-                    <span className="chip">{r.modalidade}</span>
-                    {r.srp && <span className="chip azul" title="Sistema de Registro de Preços">Registro de preço</span>}
-                    <span className="chip">
-                      <MapPin size={11} /> {r.municipio ? `${r.municipio}/` : ""}
-                      {r.uf}
-                    </span>
-                    {r.encerramento && (
-                      <span className={`chip destaque sessao ${quando?.classe ?? ""}`}>
-                        <CalendarClock size={11} /> Sessão {dataHora(r.encerramento)}
-                        {quando && quando.texto !== "encerrada" && <strong> · {quando.texto}</strong>}
-                      </span>
-                    )}
-                    {r.cancelado && <span className="chip vermelho">Cancelada</span>}
-                    {idQuadro && <span className="chip verde">Já no quadro</span>}
+                  <div className="resultado-topo">
+                    <h3>
+                      <button className="titulo-resultado" onClick={() => abrir(r.id)}>
+                        {r.modalidade} Nº {r.numero}/{r.ano} - {r.orgao}
+                        {r.uf && ` / ${r.uf}`}
+                      </button>
+                    </h3>
+                    <div className="acoes-resultado">
+                      <button className="botao-icone" onClick={() => abrir(r.id, "itens")} aria-label="Ver itens" title="Ver itens">
+                        <ListOrdered />
+                      </button>
+                      <button className="botao-icone" onClick={() => abrir(r.id, "arquivos")} aria-label="Ver arquivos" title="Ver arquivos">
+                        <FolderOpen />
+                      </button>
+                      <a className="botao-icone" href={r.linkPncp} target="_blank" rel="noreferrer noopener" aria-label="Ver no PNCP" title="Ver no PNCP">
+                        <ExternalLink />
+                      </a>
+                      {r.linkPortal && (
+                        <a className="botao-icone" href={r.linkPortal} target="_blank" rel="noreferrer noopener" aria-label={`Abrir no ${r.portal}`} title={`Abrir no ${r.portal}`}>
+                          <Globe />
+                        </a>
+                      )}
+                      {idQuadro ? (
+                        <a className="botao secundario pequeno" {...link(`/licitacoes/${idQuadro}`)}>
+                          <SquareArrowOutUpRight /> No quadro
+                        </a>
+                      ) : (
+                        editar && (
+                          <button className="botao acento pequeno" onClick={() => setEscolhendo(r)} disabled={!!importando}>
+                            {importandoEste ? <Loader2 className="girando" /> : <Plus />}
+                            {importandoEste ? importando.etapa : "Adicionar"}
+                          </button>
+                        )
+                      )}
+                    </div>
                   </div>
-                  <h3>
-                    <button className="titulo-resultado" onClick={() => abrir(r.id)}>
-                      {r.modalidade} nº {r.numero}/{r.ano}
-                    </button>
-                  </h3>
-                  <p className="resultado-pncp-orgao">
-                    <Landmark size={12} /> {r.orgao}
-                    {r.unidade && r.unidade !== r.orgao && r.unidade !== "Unidade Única" ? ` · ${r.unidade}` : ""}
-                    {r.uasg && ` · UASG ${r.uasg}`}
-                  </p>
-                  <p className={`resultado-pncp-objeto ${aberto ? "aberto" : ""}`}>{r.objeto}</p>
-                  {r.objeto.length > 220 && (
-                    <button className="botao link pequeno" onClick={() => setAbertos((a) => ({ ...a, [r.id]: !aberto }))}>
-                      {aberto ? "Ver menos" : "Ver objeto completo"}
+                  <p className={`resultado-pncp-objeto ${objetoAberto ? "aberto" : ""}`}>{r.objeto}</p>
+                  {r.objeto.length > 260 && (
+                    <button className="botao link pequeno ver-objeto" onClick={() => setAbertos((a) => ({ ...a, [r.id]: !objetoAberto }))}>
+                      {objetoAberto ? "Ver menos" : "Ver objeto completo"}
                     </button>
                   )}
-                  <div className="resultado-pncp-numeros">
-                    {r.valorEstimado && (
-                      <span>
-                        Valor estimado <strong>{reais(r.valorEstimado)}</strong>
+                  <div className="tags-resultado">
+                    {r.municipio && (
+                      <span className="tag-verde">
+                        {r.municipio}/{r.uf}
                       </span>
                     )}
-                    {r.modoDisputa && <span>Disputa {r.modoDisputa.toLowerCase()}</span>}
-                    {r.esfera && <span>{r.esfera}</span>}
-                    <span>Publicada em {dataHora(r.publicadoEm).split(" às")[0]}</span>
+                    {r.uasg && <span className="tag-verde">UASG {r.uasg}</span>}
+                    {r.unidade && r.unidade !== r.orgao && r.unidade !== "Unidade Única" && <span className="tag-verde">{r.unidade}</span>}
+                    {r.esfera && <span className="tag-verde">{r.esfera}</span>}
                   </div>
-                  <div className="resultado-pncp-acoes">
-                    <button className="botao secundario pequeno" onClick={() => abrir(r.id, "itens")}>
-                      <ListOrdered /> Ver itens
-                    </button>
-                    <button className="botao secundario pequeno" onClick={() => abrir(r.id, "arquivos")}>
-                      <FolderOpen /> Ver arquivos
-                    </button>
-                    <a className="botao secundario pequeno" href={r.linkPncp} target="_blank" rel="noreferrer noopener">
-                      <ExternalLink /> PNCP
-                    </a>
-                    {r.linkPortal ? (
-                      <a className="botao secundario pequeno" href={r.linkPortal} target="_blank" rel="noreferrer noopener" title={r.linkPortal}>
-                        <ExternalLink /> {r.portal}
-                      </a>
-                    ) : (
-                      <span className="texto-fraco pequeno portal-sem-link">Portal: {r.portal}</span>
-                    )}
-                    {idQuadro ? (
-                      <a className="botao secundario pequeno" {...link(`/licitacoes/${idQuadro}`)}>
-                        <SquareArrowOutUpRight /> Abrir no quadro
-                      </a>
-                    ) : (
-                      editar && (
-                        <button className="botao acento pequeno" onClick={() => setEscolhendo(r)} disabled={!!importando}>
-                          {importandoEste ? <Loader2 className="girando" /> : <Plus />}
-                          {importandoEste ? importando.etapa : "Adicionar ao quadro"}
-                        </button>
-                      )
-                    )}
+                  <div className="linha-sessao">
+                    <CalendarClock size={15} />
+                    {r.encerramento ? <strong>{dataHora(r.encerramento)}</strong> : <span className="texto-fraco">Sem data de sessão</span>}
+                    {quando && <span className={`pill-quando ${quando.classe}`}>{quando.texto}</span>}
+                    {r.modoDisputa && <span className="texto-fraco">· {r.modoDisputa}</span>}
+                  </div>
+                  <div className="chips-fonte">
+                    <span className="chip-contorno">Fonte: {r.portal}</span>
+                    <span className="chip-contorno">{r.modalidade}</span>
+                    {r.srp && <span className="chip-contorno laranja">Registro de preço</span>}
+                    {r.valorEstimado && <span className="chip-contorno">Estimado {reais(r.valorEstimado)}</span>}
+                    {r.cancelado && <span className="chip-contorno vermelho">Cancelada</span>}
+                    {idQuadro && <span className="chip-contorno verde">Já no quadro</span>}
                   </div>
                 </article>
               );
@@ -613,6 +576,195 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
             </p>
           )}
         </>
+      )}
+
+      {avancada && (
+        <Modal titulo="Pesquisa avançada" aoFechar={() => setAvancada(false)} largo>
+          <form
+            className="pesquisa-avancada"
+            onSubmit={(e) => {
+              e.preventDefault();
+              setAvancada(false);
+              if (filtros.palavra) setBuscaAberta(true);
+              buscar(1);
+            }}
+          >
+            <div className="palavras-avancada">
+              <span className="texto-fraco pequeno">Palavras-chave, separadas por ponto e vírgula (;)</span>
+              <div className="entrada com-icone">
+                <Search />
+                <input value={filtros.palavra} onChange={(e) => mudar({ palavra: e.target.value })} placeholder="Ex.: notebook; monitor; impressora" aria-label="Palavras-chave da pesquisa avançada" />
+              </div>
+            </div>
+            <div className="grade-avancada">
+              <label className="campo">
+                <span>Data da sessão</span>
+                <select value={filtros.sessao} onChange={(e) => mudar({ sessao: e.target.value as FiltrosBusca["sessao"] })} aria-label="Período da sessão">
+                  {PERIODOS_SESSAO.map((x) => (
+                    <option key={x.valor} value={x.valor}>
+                      {x.nome}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="campo">
+                <span>Intervalo</span>
+                <span className="datas-avancada">
+                  <input type="date" value={filtros.sessaoDe} onChange={(e) => mudar({ sessao: "periodo", sessaoDe: e.target.value })} aria-label="Intervalo de" />
+                  <input type="date" value={filtros.sessaoAte} onChange={(e) => mudar({ sessao: "periodo", sessaoAte: e.target.value })} aria-label="Intervalo até" />
+                </span>
+              </label>
+              <label className="campo">
+                <span>Tipo de item</span>
+                <select value={filtros.tipoItem} onChange={(e) => mudar({ tipoItem: e.target.value as FiltrosBusca["tipoItem"] })} aria-label="Tipo de item">
+                  <option value="">Todos</option>
+                  <option value="M">Material</option>
+                  <option value="S">Serviço</option>
+                </select>
+              </label>
+              <label className="campo">
+                <span>Situação</span>
+                <select value={filtros.situacao} onChange={(e) => mudar({ situacao: e.target.value as FiltrosBusca["situacao"] })} aria-label="Situação">
+                  <option value="recebendo_proposta">Recebendo propostas</option>
+                  <option value="todas">Todas</option>
+                </select>
+              </label>
+            </div>
+
+            <SecaoFiltro
+              titulo="Escolha os estados"
+              aberta={secoes.estados}
+              aoAlternar={() => alternarSecao("estados")}
+              acoes={
+                <>
+                  <button type="button" className="botao link pequeno" onClick={() => marcarTodos("ufs", [])}>
+                    desmarcar todos
+                  </button>
+                  <button type="button" className="botao link pequeno" onClick={() => marcarTodos("ufs", [...UFS])}>
+                    marcar todos
+                  </button>
+                </>
+              }
+            >
+              <div className="chips-filtro centralizados">
+                {UFS.map((uf) => (
+                  <button type="button" key={uf} className={`chip-filtro uf ${filtros.ufs.includes(uf) ? "ativo" : ""}`} onClick={() => mudar({ ufs: alternar(filtros.ufs, uf) })}>
+                    {uf}
+                  </button>
+                ))}
+              </div>
+            </SecaoFiltro>
+
+            <SecaoFiltro titulo="Municípios" aberta={secoes.municipios} aoAlternar={() => alternarSecao("municipios")}>
+              <FiltroMunicipios ufs={filtros.ufs} valor={filtros.municipios} aoMudar={(municipios) => mudar({ municipios })} />
+            </SecaoFiltro>
+
+            <SecaoFiltro
+              titulo="Escolha os portais de compra"
+              aberta={secoes.portais}
+              aoAlternar={() => alternarSecao("portais")}
+              acoes={
+                <>
+                  <button type="button" className="botao link pequeno" onClick={() => marcarTodos("plataformas", [])}>
+                    desmarcar todos
+                  </button>
+                  <button type="button" className="botao link pequeno" onClick={() => marcarTodos("plataformas", [...PLATAFORMAS])}>
+                    marcar todos
+                  </button>
+                </>
+              }
+            >
+              <div className="chips-filtro centralizados">
+                {PLATAFORMAS.map((pl) => (
+                  <button type="button" key={pl} className={`chip-filtro ${filtros.plataformas.includes(pl) ? "ativo" : ""}`} onClick={() => mudar({ plataformas: alternar(filtros.plataformas, pl) })}>
+                    {pl}
+                  </button>
+                ))}
+              </div>
+            </SecaoFiltro>
+
+            <SecaoFiltro
+              titulo="Escolha as modalidades"
+              aberta={secoes.modalidades}
+              aoAlternar={() => alternarSecao("modalidades")}
+              acoes={
+                <>
+                  <button type="button" className="botao link pequeno" onClick={() => marcarTodos("modalidades", [])}>
+                    desmarcar todos
+                  </button>
+                  <button type="button" className="botao link pequeno" onClick={() => marcarTodos("modalidades", MODALIDADES_PNCP.map((m) => m.codigo))}>
+                    marcar todos
+                  </button>
+                </>
+              }
+            >
+              <div className="chips-filtro centralizados">
+                {MODALIDADES_PNCP.map((m) => (
+                  <button type="button" key={m.codigo} className={`chip-filtro ${filtros.modalidades.includes(m.codigo) ? "ativo" : ""}`} onClick={() => mudar({ modalidades: alternar(filtros.modalidades, m.codigo) })}>
+                    {m.nome}
+                  </button>
+                ))}
+              </div>
+            </SecaoFiltro>
+
+            <SecaoFiltro titulo="Modo de disputa" aberta={secoes.modos} aoAlternar={() => alternarSecao("modos")}>
+              <div className="chips-filtro centralizados">
+                {MODOS_DISPUTA.map((m) => (
+                  <button type="button" key={m.codigo} className={`chip-filtro ${(filtros.modosDisputa ?? []).includes(m.codigo) ? "ativo" : ""}`} onClick={() => mudar({ modosDisputa: alternar(filtros.modosDisputa ?? [], m.codigo) })}>
+                    {m.nome}
+                  </button>
+                ))}
+              </div>
+            </SecaoFiltro>
+
+            <SecaoFiltro titulo="Filtrar por órgão" aberta={secoes.orgao} aoAlternar={() => alternarSecao("orgao")}>
+              <div className="entrada">
+                <input value={filtros.orgao} onChange={(e) => mudar({ orgao: e.target.value })} placeholder="Nome do órgão (ex.: Prefeitura de Campinas) ou CNPJ" aria-label="Órgão" />
+              </div>
+            </SecaoFiltro>
+
+            <SecaoFiltro titulo="Filtrar por valores" aberta={secoes.valores} aoAlternar={() => alternarSecao("valores")}>
+              <div className="grade-avancada">
+                <label className="campo">
+                  <span>Valor estimado de (R$)</span>
+                  <span className="entrada">
+                    <input inputMode="decimal" value={filtros.valorMin} onChange={(e) => mudar({ valorMin: e.target.value })} aria-label="Valor mínimo" />
+                  </span>
+                </label>
+                <label className="campo">
+                  <span>Até (R$)</span>
+                  <span className="entrada">
+                    <input inputMode="decimal" value={filtros.valorMax} onChange={(e) => mudar({ valorMax: e.target.value })} aria-label="Valor máximo" />
+                  </span>
+                </label>
+              </div>
+            </SecaoFiltro>
+
+            <SecaoFiltro titulo="Outros filtros" aberta={secoes.outros} aoAlternar={() => alternarSecao("outros")}>
+              <div className="outros-filtros">
+                <Interruptor ligado={filtros.meEpp} aoMudar={(v) => mudar({ meEpp: v })} rotulo="Participação exclusiva (ME/EPP)" />
+                <Interruptor ligado={filtros.srp === "nao"} aoMudar={(v) => mudar({ srp: v ? "nao" : "" })} rotulo="Excluir registros de preços" />
+                <Interruptor ligado={filtros.srp === "sim"} aoMudar={(v) => mudar({ srp: v ? "sim" : "" })} rotulo="Só registros de preços" />
+              </div>
+              <div className="chips-filtro centralizados" style={{ marginTop: 10 }}>
+                {ESFERAS.map((e) => (
+                  <button type="button" key={e.codigo} className={`chip-filtro ${filtros.esferas.includes(e.codigo) ? "ativo" : ""}`} onClick={() => mudar({ esferas: alternar(filtros.esferas, e.codigo) })}>
+                    {e.nome}
+                  </button>
+                ))}
+              </div>
+            </SecaoFiltro>
+
+            <div className="rodape-avancada">
+              <button type="button" className="botao secundario" onClick={limparFiltros}>
+                Limpar filtros
+              </button>
+              <button className="botao acento">
+                <Search /> Buscar
+              </button>
+            </div>
+          </form>
+        </Modal>
       )}
 
       {aberto && (
