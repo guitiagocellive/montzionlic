@@ -1,12 +1,10 @@
 {
-  "versao": "3.1.4",
+  "versao": "3.1.5",
   "data": "2026-11-12",
   "novidades": [
-    "Atualizar ficou automático: ao abrir o instalador novo, o Montzion aberto fecha sozinho e a versão nova abre no lugar.",
-    "Corrigido \"nenhuma participação\": o Compras.gov.br devolve a lista vazia quando a consulta vai sem captcha; agora o aplicativo repete com o captcha e, se precisar, usa a página oficial.",
-    "Disputas e Acompanhamento carregam em segundos (a lista do robô também passou a ser lida direto).",
-    "Ao abrir o aplicativo, a última leitura aparece na hora e é atualizada por trás.",
-    "Corrigido o vai-e-volta da página do Compras.gov.br (\"compra não encontrada\") que causava o erro de contexto.",
-    "Itens das compras e propostas iniciais lidos no formato certo."
+    "Robô cobre NA HORA: assim que alguém passa na frente, ele dá o lance para voltar ao 1º lugar, até o seu lance mínimo. Esperar os últimos 10 segundos virou opção.",
+    "Disputas: compras na etapa Disputa que não vinham na lista do Compras.gov.br agora aparecem (o robô também usa as suas participações).",
+    "Acompanhamento: itens e chat da licitação voltam a aparecer (o Compras.gov.br devolvia vazio sem o captcha).",
+    "Ao atualizar, o Montzion aberto fecha e a versão nova abre sozinha."
   ]
 }

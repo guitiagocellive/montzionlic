@@ -42,6 +42,7 @@ type compraMotor struct {
 	esperar  time.Time // depois de 429
 	erro     string
 	inscrita bool
+	qtdLog   int // última quantidade de itens em disputa registrada no log (para o diagnóstico)
 }
 
 type registroLance struct {
@@ -488,6 +489,24 @@ func (m *motor) atualizarLista() {
 	}
 	var lista []map[string]any
 	_ = json.Unmarshal(bruto, &lista)
+	// Junta as participações que o Acompanhamento sabe que estão na etapa Disputa (3) ou com disputa agendada
+	// (99): a lista "em disputa" do Compras.gov.br às vezes não traz todas.
+	extras := m.comprasEmDisputaDoAcompanhamento()
+	ja := map[string]bool{}
+	for _, info := range lista {
+		ja[chaveDaCompraInfo(info)] = true
+	}
+	somadas := 0
+	for _, info := range extras {
+		if k := chaveDaCompraInfo(info); k != "" && !ja[k] {
+			ja[k] = true
+			lista = append(lista, info)
+			somadas++
+		}
+	}
+	if somadas > 0 {
+		registrarLog("robô: %d compra(s) em disputa vieram do Acompanhamento (não estavam na lista do Compras.gov.br)", somadas)
+	}
 	m.mu.Lock()
 	vistas := map[string]bool{}
 	ordem := []string{}
@@ -504,7 +523,7 @@ func (m *motor) atualizarLista() {
 		}
 		c := m.compras[chave]
 		if c == nil {
-			c = &compraMotor{chave: chave, itens: map[int]*itemMotor{}}
+			c = &compraMotor{chave: chave, itens: map[int]*itemMotor{}, qtdLog: -1}
 			m.compras[chave] = c
 		}
 		c.info = info
@@ -594,6 +613,10 @@ func (m *motor) lerItens(chave string) {
 			itens = obj.Itens
 		}
 		c.erro, c.lida = "", true
+		if len(itens) != c.qtdLog {
+			c.qtdLog = len(itens)
+			registrarLog("robô: compra %s: %d item(ns) em disputa agora", mascararNumeros(chave), len(itens))
+		}
 		presentes := map[int]bool{}
 		chaves := []string{}
 		for _, it := range itens {
@@ -1063,4 +1086,42 @@ func (m *motor) ConfirmarLances(ids []int64) {
 	}
 	m.lances = resto
 	m.mu.Unlock()
+}
+
+// comprasEmDisputaDoAcompanhamento: participações em andamento na etapa Disputa, no formato da lista do robô.
+func (m *motor) comprasEmDisputaDoAcompanhamento() []map[string]any {
+	a := &m.acomp
+	a.mu.Lock()
+	bruto := a.andamento
+	a.mu.Unlock()
+	var saida []map[string]any
+	for _, x := range listaDe(bruto) {
+		c, _ := x["compra"].(map[string]any)
+		if c == nil {
+			c = x
+		}
+		fase := textoDe(numeroInteiro(c["faseCompraFaseExterna"]))
+		if fase != "3" && fase != "99" {
+			continue
+		}
+		k := chaveDaParticipacao(x)
+		if k == "" {
+			continue
+		}
+		info := map[string]any{"legadoAsp": legadoDaParticipacao(x)}
+		for chave, v := range c {
+			info[chave] = v
+		}
+		info["chaveCompra"] = k
+		// A participação não traz modalidade/número/ano: saem da chave (UASG 6 + modalidade 2 + número 5 + ano 4).
+		if _, ok := info["modalidade"]; !ok && len(k) == 17 {
+			mod, _ := strconv.Atoi(k[6:8])
+			num, _ := strconv.Atoi(k[8:13])
+			info["modalidade"] = float64(mod)
+			info["numeroCompra"] = float64(num)
+			info["anoCompra"] = k[13:]
+		}
+		saida = append(saida, info)
+	}
+	return saida
 }

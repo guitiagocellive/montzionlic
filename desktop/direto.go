@@ -127,7 +127,32 @@ func (m *motor) requisicao(metodo, caminho, query string, captcha string, corpo 
 // (qualquer resposta de erro) ou devolver uma lista vazia suspeita, repete com o captcha da página e anota a
 // tela como "exige captcha" quando a segunda tentativa der certo.
 func (m *motor) consultarDireto(metodo, caminho, query string, captcha bool, corpo []byte, tipo string) (respostaDireta, error) {
-	return m.consultarDiretoOpc(metodo, caminho, query, captcha, corpo, tipo, false)
+	// Nas telas com captcha o Compras.gov.br responde "ok" e VAZIO quando o captcha falta (visto no diagnóstico
+	// real): resposta vazia nessas telas sempre ganha uma segunda tentativa com captcha.
+	return m.consultarDiretoOpc(metodo, caminho, query, captcha, corpo, tipo, captcha && metodo == "GET")
+}
+
+// respostaVazia: sem conteúdo útil ("", [], {}, null ou um objeto só com listas vazias).
+func respostaVazia(corpo []byte) bool {
+	t := strings.TrimSpace(string(corpo))
+	if t == "" || t == "[]" || t == "{}" || t == "null" {
+		return true
+	}
+	var o map[string]json.RawMessage
+	if json.Unmarshal(corpo, &o) != nil {
+		return false
+	}
+	temLista := false
+	for _, v := range o {
+		x := strings.TrimSpace(string(v))
+		if strings.HasPrefix(x, "[") {
+			temLista = true
+			if x != "[]" {
+				return false
+			}
+		}
+	}
+	return temLista && len(listaQualquer(corpo)) == 0
 }
 
 func (m *motor) consultarDiretoOpc(metodo, caminho, query string, captcha bool, corpo []byte, tipo string, vazioSuspeito bool) (respostaDireta, error) {
@@ -147,11 +172,11 @@ func (m *motor) consultarDiretoOpc(metodo, caminho, query string, captcha bool, 
 	}
 	if captcha && codigo == "" {
 		recusou := !okHTTP(r.Status) && r.Status != 404
-		vazio := vazioSuspeito && okHTTP(r.Status) && len(listaQualquer(r.Corpo)) == 0
+		vazio := vazioSuspeito && okHTTP(r.Status) && respostaVazia(r.Corpo)
 		if recusou || vazio {
 			if c, errC := m.captcha(); errC == nil {
 				if r2, err2 := m.requisicao(metodo, caminho, query, c, corpo, tipo); err2 == nil {
-					if okHTTP(r2.Status) && (recusou || len(listaQualquer(r2.Corpo)) > 0) {
+					if okHTTP(r2.Status) && (recusou || !respostaVazia(r2.Corpo)) {
 						captchaExigido.Store(padrao, true)
 						registrarLog("compras: %s exige captcha", padrao)
 					}

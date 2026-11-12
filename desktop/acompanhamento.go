@@ -400,6 +400,8 @@ func (m *motor) aplicarLeitura(v leituraAcomp, comLista bool) error {
 		}
 	}
 	registrarLog("acompanhamento: %d em andamento, %d finalizadas, %d detalhadas agora", len(listaDe(a.andamento)), len(listaDe(a.finalizadas)), len(v.Detalhes))
+	// Compra na etapa Disputa que o robô ainda não conhece: o robô relê a lista já (sem esperar 5 min).
+	go m.roboConfereDisputas()
 	if len(v.Erros) > 0 {
 		registrarLog("acompanhamento: %s", strings.Join(v.Erros, " | "))
 	}
@@ -698,5 +700,22 @@ func (m *motor) cicloCacheAcomp() {
 		if os.WriteFile(tmp, dados, 0o600) == nil {
 			_ = os.Rename(tmp, arquivoCacheAcomp())
 		}
+	}
+}
+
+func (m *motor) roboConfereDisputas() {
+	extras := m.comprasEmDisputaDoAcompanhamento()
+	m.mu.Lock()
+	falta := false
+	for _, info := range extras {
+		if m.compras[chaveDaCompraInfo(info)] == nil {
+			falta = true
+			break
+		}
+	}
+	pronto := m.token != "" && m.fase == "pronto"
+	m.mu.Unlock()
+	if falta && pronto {
+		m.atualizarLista()
 	}
 }

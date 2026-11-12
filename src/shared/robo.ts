@@ -1,10 +1,9 @@
 // Robô de lances do Compras.gov.br: a regra de decisão de cada item.
 //
-// Sempre espera os 10 segundos finais do cronômetro do item para dar lance (para não comer margem
-// nem atiçar o concorrente antes da hora). Aí dá o menor lance que coloca a empresa em 1º.
+// Cobre na hora: assim que alguém passa na frente, dá o menor lance que coloca a empresa em 1º.
 // Se não der para ser 1º sem passar do lance mínimo, dá o lance mínimo (melhor colocação possível).
 // Nunca envia abaixo do lance mínimo.
-// "Não aguardar os segundos finais" faz ele cobrir assim que perde o 1º lugar.
+// "Esperar os segundos finais" (opcional) faz ele só cobrir nos últimos 10 segundos do cronômetro.
 
 /** Segundos finais em que o robô começa a dar lances. */
 export const SEGUNDOS_FINAIS = 10;
@@ -16,12 +15,13 @@ export interface ConfigItemRobo {
   minimo: number | null;
   /** Quanto baixar do melhor lance a cada lance (%). O intervalo mínimo do edital sempre é respeitado. */
   desconto: number;
-  naoAguardar: boolean;
+  /** Opcional: só cobre nos últimos 10 segundos. Padrão: cobre na hora. */
+  aguardarFinais: boolean;
   /** Lances com 4 casas decimais (senão, centavos). */
   quatroCasas: boolean;
 }
 
-export const ITEM_ROBO_PADRAO: ConfigItemRobo = { ligado: false, minimo: null, desconto: 0.5, naoAguardar: false, quatroCasas: false };
+export const ITEM_ROBO_PADRAO: ConfigItemRobo = { ligado: false, minimo: null, desconto: 0.5, aguardarFinais: false, quatroCasas: false };
 
 /** Fases do item no Compras.gov.br (FaseItemEnum). */
 export const FASES: Record<string, string> = {
@@ -109,7 +109,7 @@ export function decidir(estado: EstadoItem, item: ConfigItemRobo | undefined): D
   if (estado.situacao === "G") return { acao: "aguardar", tipo: "ganhando", motivo: "Ganhando" };
 
   // Espera os 10 segundos finais (no encerramento aleatório não há cronômetro: qualquer segundo pode ser o último).
-  if (!item.naoAguardar && estado.fase === "LA" && estado.restanteSeg != null && estado.restanteSeg > SEGUNDOS_FINAIS) {
+  if (item.aguardarFinais && estado.fase === "LA" && estado.restanteSeg != null && estado.restanteSeg > SEGUNDOS_FINAIS) {
     return { acao: "aguardar", tipo: "aguardando-final", motivo: `Aguardando entrar nos últimos ${SEGUNDOS_FINAIS} segundos para enviar lance` };
   }
 
@@ -139,7 +139,7 @@ export function normalizarItem(bruto: unknown): ConfigItemRobo {
     ligado: b.ligado === true,
     minimo: minimo != null && Number.isFinite(minimo) && minimo > 0 ? minimo : null,
     desconto: Number.isFinite(desconto) && desconto >= 0 && desconto <= 50 ? desconto : ITEM_ROBO_PADRAO.desconto,
-    naoAguardar: b.naoAguardar === true,
+    aguardarFinais: b.aguardarFinais === true,
     quatroCasas: b.quatroCasas === true,
   };
 }
@@ -241,12 +241,14 @@ export function chaveDaCompra(b: Record<string, unknown>): string {
 export function lerCompra(b: Record<string, unknown>): CompraDisputa | null {
   const chave = String(b.chaveCompra ?? b.chave ?? "") || chaveDaCompra(b) || String(b.id ?? "");
   if (!chave) return null;
-  const mod = String(b.modalidade ?? b.modalidadeCompra ?? "").toUpperCase();
+  // Sem modalidade/número/ano no objeto: saem da chave (UASG 6 + modalidade 2 + número 5 + ano 4).
+  const daChave = /^\d{17}$/.test(chave) ? { modalidade: String(Number(chave.slice(6, 8))), numero: chave.slice(8, 13), ano: chave.slice(13) } : null;
+  const mod = String(b.modalidade ?? b.modalidadeCompra ?? daChave?.modalidade ?? "").toUpperCase();
   const textoMod = String(b.descricaoModalidade ?? b.modalidadeDescricao ?? "");
   // Dispensa (6) e cotação eletrônica (8) ficam na aba Dispensas; pregão, concorrência e o resto, na de Pregões.
   const dispensa = /DISPENSA|COTA[ÇC]/i.test(textoMod) || mod === "6" || mod === "8" || mod === "DISPENSA" || mod === "D";
-  const numeroCompra = b.numeroCompra ?? b.numero;
-  const ano = b.anoCompra ?? b.ano;
+  const numeroCompra = b.numeroCompra ?? b.numero ?? daChave?.numero;
+  const ano = b.anoCompra ?? b.ano ?? daChave?.ano;
   const id = String(b.identificacao ?? (numeroCompra ? `${String(numeroCompra).padStart(5, "0")}${ano ? `/${ano}` : ""}` : chave));
   const nomeMod = textoMod ? (/eletr/i.test(textoMod) ? textoMod : `${textoMod} eletrônica`.replace(/Pregão eletrônica/i, "Pregão eletrônico")) : NOMES_MODALIDADE[mod] ?? (dispensa ? "Dispensa eletrônica" : "Pregão eletrônico");
   return {

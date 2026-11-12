@@ -341,8 +341,8 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
                         <input type="checkbox" checked={cfg.quatroCasas} onChange={(e) => mudarItem(k, { quatroCasas: e.target.checked })} /> Permitir lances com 4 casas decimais
                       </label>
                       <label>
-                        <input type="checkbox" checked={cfg.naoAguardar} onChange={(e) => mudarItem(k, { naoAguardar: e.target.checked })} /> Não aguardar os segundos finais para
-                        enviar lances
+                        <input type="checkbox" checked={cfg.aguardarFinais} onChange={(e) => mudarItem(k, { aguardarFinais: e.target.checked })} /> Esperar os últimos{" "}
+                        {SEGUNDOS_FINAIS} segundos para cobrir
                       </label>
                     </div>
                     <div className="item-disputa-rodape">
@@ -383,7 +383,7 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
           <span className="sobretitulo">Licitações</span>
           <h1>Disputas</h1>
           <p className="texto-suave">
-            Robô de lances do Compras.gov.br: recebe cada lance na hora, espera os últimos {SEGUNDOS_FINAIS} segundos e cobre até o seu lance mínimo.
+            Robô de lances do Compras.gov.br: recebe cada lance na hora e cobre na mesma hora, até o seu lance mínimo, para ficar na melhor colocação.
           </p>
         </div>
       </div>

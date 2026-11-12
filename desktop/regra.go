@@ -2,9 +2,9 @@ package main
 
 // Regra de decisão do robô (a mesma de src/shared/robo.ts, rodando dentro do aplicativo para responder na hora).
 //
-// Sempre espera os 10 segundos finais do cronômetro do item. Aí dá o menor lance que coloca a empresa em 1º;
-// se não der sem passar do lance mínimo, vai no lance mínimo. Nunca envia abaixo do mínimo.
-// "Não aguardar os segundos finais" cobre assim que perde o 1º lugar.
+// Cobre na hora: assim que alguém passa na frente, dá o menor lance que coloca a empresa em 1º; se não der sem
+// passar do lance mínimo, vai no lance mínimo. Nunca envia abaixo do mínimo.
+// "Esperar os segundos finais" (opcional) só cobre nos últimos 10 segundos do cronômetro.
 
 import (
 	"fmt"
@@ -16,11 +16,12 @@ import (
 const segundosFinais = 10
 
 type configItem struct {
-	Ligado      bool     `json:"ligado"`
-	Minimo      *float64 `json:"minimo"`
-	Desconto    float64  `json:"desconto"`
-	NaoAguardar bool     `json:"naoAguardar"`
-	QuatroCasas bool     `json:"quatroCasas"`
+	Ligado         bool     `json:"ligado"`
+	Minimo         *float64 `json:"minimo"`
+	Desconto       float64  `json:"desconto"`
+	NaoAguardar    bool     `json:"naoAguardar"` // antigo (a regra agora cobre na hora por padrão)
+	AguardarFinais bool     `json:"aguardarFinais"`
+	QuatroCasas    bool     `json:"quatroCasas"`
 }
 
 type estadoItem struct {
@@ -128,7 +129,7 @@ func decidir(e estadoItem, c *configItem) decisao {
 	if e.Situacao == "G" {
 		return decisao{Tipo: "ganhando", Motivo: "Ganhando"}
 	}
-	if !c.NaoAguardar && e.Fase == "LA" && e.RestanteSeg != nil && *e.RestanteSeg > segundosFinais {
+	if c.AguardarFinais && e.Fase == "LA" && e.RestanteSeg != nil && *e.RestanteSeg > segundosFinais {
 		return decisao{Tipo: "aguardando-final", Motivo: fmt.Sprintf("Aguardando entrar nos últimos %d segundos para enviar lance", segundosFinais)}
 	}
 	if nosso <= minimo {
