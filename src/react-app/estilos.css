@@ -12271,6 +12271,43 @@ label.botao.desativado {
   }
 }
 
+/* ---------- Grupos no cadastro ---------- */
+.cabeca-grupo-proposta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: color-mix(in oklab, var(--acento) 10%, var(--superficie-2));
+  border: 1px solid color-mix(in oklab, var(--acento) 30%, transparent);
+}
+.cabeca-grupo-proposta > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+.resumo-grupo-proposta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.item-proposta.subitem {
+  margin-left: 22px;
+  border-left: 3px solid color-mix(in oklab, var(--acento) 35%, transparent);
+}
+.tabela-um-clique tr.linha-grupo td {
+  background: color-mix(in oklab, var(--acento) 9%, var(--superficie-2));
+}
+.tabela-um-clique tr.linha-grupo .col-item strong {
+  -webkit-line-clamp: 1;
+}
+.tabela-um-clique tr.subitem .col-item {
+  padding-left: 26px;
+  border-left: 3px solid color-mix(in oklab, var(--acento) 35%, transparent);
+}
+
 /* ---------- Cadastro com um clique ---------- */
 .faixa-um-clique {
   display: flex;

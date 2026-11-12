@@ -313,7 +313,7 @@ function ConteudoCadastro({
   }, [chave, itens]);
   const participando = participacao.isFornecedorParticipante === true;
   const encerrado = prazoEncerrado(compra);
-  const comProposta = itens.filter((i) => i.proposta);
+  const comProposta = itens.filter((i) => i.proposta && !i.grupo);
   const total = comProposta.reduce(
     (s, i) =>
       s +
@@ -326,7 +326,7 @@ function ConteudoCadastro({
     0,
   );
   const fim = txt(compra.dataHoraFimPropostas);
-  const visiveis = soSem ? itens.filter((i) => !i.proposta) : itens;
+  const visiveis = soSem ? itens.filter((i) => i.grupo || !i.proposta) : itens;
   const orgao = [
     txt(compra.numeroUasg) || chave.slice(0, 6).replace(/^0+/, ""),
     txt(compra.nomeUasg),
@@ -390,7 +390,7 @@ function ConteudoCadastro({
 
       <section className={`itens-proposta ${participando ? "" : "bloqueado"}`}>
         <div className="lista-compras-topo">
-          <h3>Itens ({itens.length})</h3>
+          <h3>Itens ({itens.filter((i) => !i.grupo).length})</h3>
           <div className="resumo-itens-proposta">
             <span className="chip verde">
               {comProposta.length} com proposta
@@ -430,20 +430,70 @@ function ConteudoCadastro({
           </p>
         )}
         <ul>
-          {visiveis.map((it) => (
-            <LinhaItemProposta
-              key={`${it.numero}-${doQuadro ? 1 : 0}`}
-              chave={chave}
-              cnpj={cnpj}
-              item={it}
-              sugestao={doQuadro?.sugestoes.get(it.numero) ?? null}
-              liberado={participando && !encerrado}
-              aoSalvar={recarregar}
-            />
-          ))}
+          {visiveis.map((it) =>
+            it.grupo ? (
+              <CabecaGrupo
+                key={`g${it.numero}`}
+                grupo={it}
+                itens={itens.filter((x) => x.grupoDe === it.numero)}
+              />
+            ) : (
+              <LinhaItemProposta
+                key={`${it.numero}-${doQuadro ? 1 : 0}`}
+                chave={chave}
+                cnpj={cnpj}
+                item={it}
+                sugestao={doQuadro?.sugestoes.get(it.numero) ?? null}
+                liberado={participando && !encerrado}
+                aoSalvar={recarregar}
+              />
+            ),
+          )}
         </ul>
       </section>
     </>
+  );
+}
+
+/** Cabeçalho de um grupo: a proposta do grupo é a dos itens dele (todos precisam ser cadastrados). */
+function CabecaGrupo({
+  grupo,
+  itens,
+}: {
+  grupo: ItemProposta;
+  itens: ItemProposta[];
+}) {
+  const feitos = itens.filter((x) => x.proposta).length;
+  const total = itens.reduce(
+    (s, x) =>
+      s +
+      (x.proposta?.valor ?? 0) *
+        (x.porValorTotal ? 1 : (x.proposta?.quantidade ?? x.quantidade ?? 0)),
+    0,
+  );
+  return (
+    <li className="cabeca-grupo-proposta">
+      <div>
+        <strong>{grupo.nomeGrupo}</strong>
+        <span className="texto-fraco pequeno">
+          {itens.length
+            ? `${itens.length} itens · cadastre todos para concorrer no grupo`
+            : "Não consegui ler os itens deste grupo agora."}
+          {grupo.referencia.tipo === "valor" &&
+            ` · referência do grupo ${formatarMoeda(grupo.referencia.valor)}`}
+          {grupo.referencia.tipo !== "valor" &&
+            ` · referência ${textoReferencia(grupo.referencia)?.toLowerCase()}`}
+        </span>
+      </div>
+      <div className="resumo-grupo-proposta">
+        <span
+          className={`chip ${itens.length && feitos === itens.length ? "verde" : feitos ? "amarelo" : "cinza"}`}
+        >
+          {feitos}/{itens.length} cadastrados
+        </span>
+        {total > 0 && <strong>{formatarMoeda(total)}</strong>}
+      </div>
+    </li>
   );
 }
 
@@ -715,9 +765,13 @@ function LinhaItemProposta({
         marca: "",
         modelo: "",
       }));
-  const [valor, setValor] = useState(it.desconto ? textoNumero(p?.valor) : textoValor(p ? p.valor : inicial?.valor));
+  const [valor, setValor] = useState(
+    it.desconto
+      ? textoNumero(p?.valor)
+      : textoValor(p ? p.valor : inicial?.valor),
+  );
   const [quantidade, setQuantidade] = useState(
-    textoNumero(p?.quantidade ?? it.quantidade),
+    textoNumero(p?.quantidade ?? it.quantidade ?? sugestao?.quantidade),
   );
   const [marca, setMarca] = useState(p?.marca ?? inicial?.marca ?? "");
   const [modelo, setModelo] = useState(p?.modelo ?? inicial?.modelo ?? "");
@@ -727,11 +781,11 @@ function LinhaItemProposta({
     null,
   );
   const v = paraNumero(valor);
-  const q = it.srp ? paraNumero(quantidade) : it.quantidade;
+  const q = paraNumero(quantidade) ?? it.quantidade;
   const mudou =
     !p ||
     v !== p.valor ||
-    (it.srp && q !== p.quantidade) ||
+    q !== (p.quantidade ?? it.quantidade) ||
     marca !== p.marca ||
     modelo !== p.modelo;
   const valido = !problemaDaProposta(it, {
@@ -820,7 +874,9 @@ function LinhaItemProposta({
   const id = (campo: string) => `${campo}-${chave}-${it.numero}`;
 
   return (
-    <li className={`item-proposta ${p ? "com-proposta" : ""}`}>
+    <li
+      className={`item-proposta ${p ? "com-proposta" : ""} ${it.grupoDe != null ? "subitem" : ""}`}
+    >
       <div className="desc-item-proposta">
         <span className="numero-item-proposta">{it.numero}</span>
         <div>
@@ -833,7 +889,7 @@ function LinhaItemProposta({
           </button>
           <div className="etiquetas-item-proposta">
             <span>
-              {it.quantidade ?? "—"} {it.unidade}
+              {it.quantidade ?? sugestao?.quantidade ?? "—"} {it.unidade}
             </span>
             <span>{it.desconto ? "Maior desconto" : "Menor preço"}</span>
             {!it.desconto && (
@@ -893,9 +949,11 @@ function LinhaItemProposta({
             value={quantidade}
             onChange={(e) => setQuantidade(e.target.value)}
             inputMode="decimal"
-            disabled={!liberado || ocupado || !it.srp}
+            disabled={!liberado || ocupado}
             title={
-              it.srp ? "" : "Sem registro de preços: oferta a quantidade toda"
+              it.srp
+                ? ""
+                : "Sem registro de preços: normalmente a quantidade toda do edital"
             }
           />
           {it.material && (

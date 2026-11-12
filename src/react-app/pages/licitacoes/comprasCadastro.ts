@@ -63,7 +63,12 @@ export interface ItemProposta {
   srp: boolean;
   margem: boolean;
   anexoObrigatorio: boolean;
+  /** Cabeçalho de grupo (número negativo no Compras.gov.br): a proposta vai em cada item dele. */
   grupo: boolean;
+  /** Item de dentro de um grupo: o número do grupo (ex.: -1). */
+  grupoDe: number | null;
+  /** No cabeçalho do grupo: o nome dele ("Grupo 1"). */
+  nomeGrupo: string;
   /** Mesmo número de referencia.valor (null quando sigiloso ou não informado). */
   valorEstimado: number | null;
   referencia: Referencia;
@@ -83,7 +88,9 @@ export function lerItem(b: unknown, srp: boolean): ItemProposta | null {
   const valores = obj(p.valores);
   const trat = txt(x.tipoTratamentoDiferenciadoMeEpp);
   // Igual à tela oficial: sigiloso até homologar; sem valor = "Não informado".
-  const porValorTotal = x.disputaPorValorUnitario === false;
+  const cabecaGrupo = x.isGrupo === true && x.isSubItem !== true;
+  // O grupo mostra o valor estimado TOTAL (como a tela oficial: "Valor estimado (total)").
+  const porValorTotal = cabecaGrupo || x.disputaPorValorUnitario === false;
   const ref = valorDe(porValorTotal ? x.valorEstimadoTotal : (x.valorEstimadoUnitario ?? x.valorEstimado ?? x.valorUnitarioEstimado));
   const referencia: Referencia =
     x.possuiOrcamentoSigiloso === true && x.homologado !== true
@@ -94,7 +101,7 @@ export function lerItem(b: unknown, srp: boolean): ItemProposta | null {
   return {
     numero: n,
     descricao: txt(x.descricao ?? x.descricaoDetalhada) || `Item ${n}`,
-    quantidade: num(x.quantidadeSolicitada ?? x.quantidade),
+    quantidade: num(x.quantidadeSolicitada ?? obj(x.detalhamento).quantidadeSolicitada ?? x.quantidade ?? x.quantidadeTotal ?? x.quantidadeItem),
     unidade: txt(x.unidadeFornecimento ?? x.unidadeMedida ?? x.unidade),
     desconto,
     material: txt(x.tipoItemCatalogo) !== "S",
@@ -102,7 +109,9 @@ export function lerItem(b: unknown, srp: boolean): ItemProposta | null {
     srp,
     margem: x.utilizaMargemPreferencia === true,
     anexoObrigatorio: x.isObrigatorioEnvioAnexo === true,
-    grupo: x.isGrupo === true,
+    grupo: x.isGrupo === true && x.isSubItem !== true,
+    grupoDe: null,
+    nomeGrupo: x.isGrupo === true ? txt(x.descricao) || `Grupo ${Math.abs(n)}` : "",
     valorEstimado: referencia.valor,
     referencia,
     porValorTotal,
@@ -180,7 +189,34 @@ export async function carregarCompra(chave: string): Promise<CompraCarregada> {
     textos = Object.values(obj(d?.dados)).flatMap((v) => (Array.isArray(v) ? v.map(txt) : [txt(v)])).filter(Boolean);
   }
   const cnpj = txt(obj(p.participante).identificacao).replace(/\D/g, "");
-  return { compra: c, participacao: p, itens: todos.map((b) => lerItem(b, srp)).filter((x): x is ItemProposta => !!x), declaracoes: textos, itensBloqueados, cnpj };
+  // Grupos: o Compras.gov.br lista o grupo (número negativo) e os itens dele vêm em "itens-grupo".
+  const itens: ItemProposta[] = [];
+  for (const b of todos) {
+    const it = lerItem(b, srp);
+    if (!it) continue;
+    itens.push(it);
+    if (it.grupo) itens.push(...(await itensDoGrupo(chave, it.numero, srp)));
+  }
+  return { compra: c, participacao: p, itens, declaracoes: textos, itensBloqueados, cnpj };
+}
+
+/** Itens de dentro do grupo (a proposta do grupo é a soma das propostas deles). */
+export async function itensDoGrupo(chave: string, grupo: number, srp: boolean): Promise<ItemProposta[]> {
+  const brutos: unknown[] = [];
+  for (let pagina = 0; pagina < 10; pagina++) {
+    const query = `tamanhoPagina=100&pagina=${pagina}&size=100&page=${pagina}`;
+    const caminho = `${FE}/v1/compras/${chave}/itens/${grupo}/itens-grupo`;
+    let r = await pedir({ caminho, query }).catch(() => null);
+    if (!r || !lista(r.dados).length) r = await pedir({ caminho, query, captcha: true }).catch(() => null);
+    const l = r ? lista(r.dados) : [];
+    brutos.push(...l);
+    const paginas = Number(r?.cabecalhos?.["pages-count"] ?? 0);
+    if (l.length < 100 || !paginas || pagina + 1 >= paginas) break;
+  }
+  return brutos
+    .map((b) => lerItem(b, srp))
+    .filter((x): x is ItemProposta => !!x && x.numero !== grupo)
+    .map((x) => ({ ...x, grupo: false, grupoDe: grupo }));
 }
 
 export function prazoEncerrado(compra: Bruto) {
@@ -198,7 +234,7 @@ export interface DadosProposta {
 }
 
 export function problemaDaProposta(it: ItemProposta, d: Partial<DadosProposta>): string {
-  if (it.grupo) return "Item de grupo: cadastre pelo Compras.gov.br";
+  if (it.grupo) return "Grupo: cadastre os itens dele";
   if (d.valor == null || !(d.valor > 0)) return it.desconto ? "Informe o desconto" : "Informe o valor unitário";
   if (it.desconto && d.valor > 100) return "Desconto acima de 100%";
   if (d.quantidade == null || !(d.quantidade > 0)) return "Informe a quantidade";

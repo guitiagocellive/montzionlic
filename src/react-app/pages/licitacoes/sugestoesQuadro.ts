@@ -15,6 +15,8 @@ export interface FichaQuadro {
 export interface SugestaoItem extends Sugestao {
   /** O item existe na licitação do quadro. */
   noQuadro: boolean;
+  /** Quantidade do edital (do item da licitação no quadro). */
+  quantidade: number | null;
   participar: boolean;
 }
 
@@ -27,16 +29,17 @@ export function sugestoesDoQuadro(itensCompras: ItemProposta[], ficha: FichaQuad
   for (const it of itensCompras) {
     const nosso = porNumero.get(String(it.numero));
     if (!nosso) {
-      saida.set(it.numero, { ...valorSugerido(it, { venda: null, custo: null, valorDigitado: null, marca: "", modelo: "" }), noQuadro: false, participar: false });
+      saida.set(it.numero, { ...valorSugerido(it, { venda: null, custo: null, valorDigitado: null, marca: "", modelo: "" }), noQuadro: false, participar: false, quantidade: null });
       continue;
     }
     const escolhida = cotacaoDaProposta(cotacoes, nosso, l.imposto_percentual, l.lucro_percentual);
     const r = rascunho?.itens?.[String(nosso.id)];
     // O Compras.gov.br não mostrou o valor, mas o edital (PNCP) trouxe: usa o do edital como referência.
+    const comQtd: ItemProposta = it.quantidade == null && nosso.quantidade != null ? { ...it, quantidade: nosso.quantidade } : it;
     const comEdital: ItemProposta =
       it.referencia.tipo === "nao-informado" && nosso.valor_referencia != null && nosso.valor_referencia > 0
-        ? { ...it, referencia: { tipo: "valor", valor: nosso.valor_referencia }, valorEstimado: nosso.valor_referencia }
-        : it;
+        ? { ...comQtd, referencia: { tipo: "valor", valor: nosso.valor_referencia }, valorEstimado: nosso.valor_referencia }
+        : comQtd;
     const s = valorSugerido(comEdital, {
       venda: escolhida ? escolhida.calculo.precoVenda : null,
       custo: escolhida ? escolhida.calculo.precoMinimo : null,
@@ -45,8 +48,8 @@ export function sugestoesDoQuadro(itensCompras: ItemProposta[], ficha: FichaQuad
       modelo: (escolhida?.cotacao.produto || "").trim(),
     });
     const participar = !!nosso.participar && r?.incluir !== false;
-    if (comEdital !== it) s.origem = "Valor de referência do edital";
-    saida.set(it.numero, { ...s, noQuadro: true, participar });
+    if (comEdital !== comQtd) s.origem = "Valor de referência do edital";
+    saida.set(it.numero, { ...s, noQuadro: true, participar, quantidade: nosso.quantidade });
   }
   return saida;
 }

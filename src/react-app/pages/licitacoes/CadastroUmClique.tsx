@@ -48,28 +48,85 @@ interface Linha {
  * Monta as linhas: casa cada item do Compras.gov.br com o item da licitação (pelo número). O valor é o de
  * referência do órgão; sigiloso ou não informado, calcula pelo orçamento. Marca só os viáveis.
  */
-export function montarLinhas(itensCompras: ItemProposta[], ficha: Ficha, rascunho: RascunhoProposta | null): Linha[] {
+export function montarLinhas(
+  itensCompras: ItemProposta[],
+  ficha: Ficha,
+  rascunho: RascunhoProposta | null,
+): Linha[] {
   const sugestoes = sugestoesDoQuadro(itensCompras, ficha, rascunho);
-  return itensCompras.map((it) => {
+  const linhas = itensCompras.map((it) => {
     const s = sugestoes.get(it.numero)!;
-    const linha: Linha = { item: it, marcado: false, valor: textoValor(s.valor), quantidade: textoNumero(it.quantidade), marca: s.marca, modelo: s.modelo, origem: s.origem, aviso: "", status: "", erro: "" };
+    const linha: Linha = {
+      item: it,
+      marcado: false,
+      valor: textoValor(s.valor),
+      // Quantidade: a do Compras.gov.br; se ele não mandar, a do edital (item da licitação no quadro).
+      quantidade: textoNumero(it.quantidade ?? s.quantidade),
+      marca: s.marca,
+      modelo: s.modelo,
+      origem: s.origem,
+      aviso: "",
+      status: "",
+      erro: "",
+    };
     if (it.proposta) {
       linha.valor = textoValor(it.proposta.valor);
       linha.marca = it.proposta.marca;
       linha.modelo = it.proposta.modelo;
-      linha.quantidade = textoNumero(it.proposta.quantidade ?? it.quantidade);
+      linha.quantidade = textoNumero(
+        it.proposta.quantidade ?? it.quantidade ?? s.quantidade,
+      );
       linha.origem = "Já cadastrada";
     }
-    if (it.grupo) return { ...linha, aviso: "Item de grupo: cadastre pelo Compras.gov.br" };
-    if (!s.noQuadro) return { ...linha, aviso: it.proposta ? "" : "Este item não está na licitação do quadro" };
+    if (it.grupo) return { ...linha, valor: "", origem: it.nomeGrupo };
+    if (!s.noQuadro)
+      return {
+        ...linha,
+        aviso: it.proposta ? "" : "Este item não está na licitação do quadro",
+      };
     if (!s.participar) linha.aviso = "Marcado para não participar";
     else if (!it.proposta) linha.aviso = s.aviso;
     linha.marcado = !linha.aviso && !it.proposta && s.valor != null;
     return linha;
   });
+  // Grupo: a proposta precisa de TODOS os itens dele. O grupo só vai marcado se todos são viáveis.
+  for (const g of linhas.filter((x) => x.item.grupo)) {
+    const dele = linhas.filter((x) => x.item.grupoDe === g.item.numero);
+    if (!dele.length) {
+      g.aviso =
+        "Não consegui ler os itens deste grupo: abra o cadastro completo";
+      continue;
+    }
+    const cadastrados = dele.every((x) => x.item.proposta);
+    const problema = dele.find(
+      (x) => !x.item.proposta && (x.aviso || paraNumero(x.valor) == null),
+    );
+    g.aviso = cadastrados
+      ? ""
+      : problema
+        ? `O grupo precisa de todos os itens. Item ${problema.item.numero}: ${problema.aviso || "sem valor"}`
+        : "";
+    g.origem = cadastrados
+      ? `${g.item.nomeGrupo} · já cadastrado`
+      : `${g.item.nomeGrupo} · ${dele.length} itens: a proposta vai em cada um` +
+        (g.item.referencia.tipo === "valor"
+          ? ` · referência do grupo ${formatarMoeda(g.item.referencia.valor)}`
+          : g.item.referencia.tipo === "sigiloso"
+            ? " · referência sigilosa"
+            : "");
+    g.marcado = !cadastrados && !problema;
+    for (const x of dele) x.marcado = g.marcado;
+  }
+  return linhas;
 }
 
-export function CadastroUmClique({ licitacaoId, aoFechar }: { licitacaoId: number; aoFechar: () => void }) {
+export function CadastroUmClique({
+  licitacaoId,
+  aoFechar,
+}: {
+  licitacaoId: number;
+  aoFechar: () => void;
+}) {
   const [ficha, setFicha] = useState<Ficha | null>(null);
   const [rascunho, setRascunho] = useState<RascunhoProposta | null>(null);
   const [erro, setErro] = useState("");
@@ -88,7 +145,9 @@ export function CadastroUmClique({ licitacaoId, aoFechar }: { licitacaoId: numbe
   useEffect(() => {
     Promise.all([
       api<Ficha>(`/licitacoes/${licitacaoId}`),
-      api<{ rascunho: RascunhoProposta | null }>(`/licitacoes/${licitacaoId}/proposta/rascunho`).catch(() => ({ rascunho: null })),
+      api<{ rascunho: RascunhoProposta | null }>(
+        `/licitacoes/${licitacaoId}/proposta/rascunho`,
+      ).catch(() => ({ rascunho: null })),
     ]).then(
       ([f, r]) => {
         setFicha(f);
@@ -135,7 +194,9 @@ export function CadastroUmClique({ licitacaoId, aoFechar }: { licitacaoId: numbe
         if (!chaveDoLink(ficha.licitacao.link)) {
           api(`/licitacoes/${ficha.licitacao.id}`, {
             metodo: "PATCH",
-            corpo: { link: `https://cnetmobile.estaleiro.serpro.gov.br/comprasnet-web/public/compras/acompanhamento-compra?compra=${chave}` },
+            corpo: {
+              link: `https://cnetmobile.estaleiro.serpro.gov.br/comprasnet-web/public/compras/acompanhamento-compra?compra=${chave}`,
+            },
           }).catch(() => {});
         }
       })
@@ -148,25 +209,58 @@ export function CadastroUmClique({ licitacaoId, aoFechar }: { licitacaoId: numbe
 
   const participando = compra?.participacao.isFornecedorParticipante === true;
   const encerrado = compra ? prazoEncerrado(compra.compra) : false;
-  const marcadas = linhas.filter((x) => x.marcado);
+  // O cabeçalho do grupo não é enviado: só os itens dele.
+  const marcadas = linhas.filter((x) => x.marcado && !x.item.grupo);
   const dadosDe = (x: Linha) => ({
     valor: paraNumero(x.valor) ?? 0,
-    quantidade: x.item.srp ? (paraNumero(x.quantidade) ?? 0) : (x.item.quantidade ?? 0),
+    quantidade: paraNumero(x.quantidade) ?? x.item.quantidade ?? 0,
     marca: x.marca,
     modelo: x.modelo,
   });
-  const problemas = marcadas.map((x) => problemaDaProposta(x.item, dadosDe(x))).filter(Boolean);
-  const totalDe = (x: Linha) => (x.item.desconto ? 0 : x.item.porValorTotal ? dadosDe(x).valor : dadosDe(x).valor * dadosDe(x).quantidade);
-  const total = useMemo(() => marcadas.reduce((s, x) => s + totalDe(x), 0), [linhas]); // eslint-disable-line react-hooks/exhaustive-deps
+  const problemas = marcadas
+    .map((x) => problemaDaProposta(x.item, dadosDe(x)))
+    .filter(Boolean);
+  const totalDe = (x: Linha) =>
+    x.item.desconto
+      ? 0
+      : x.item.porValorTotal
+        ? dadosDe(x).valor
+        : dadosDe(x).valor * dadosDe(x).quantidade;
+  const total = useMemo(
+    () => marcadas.reduce((s, x) => s + totalDe(x), 0),
+    [linhas],
+  ); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const mudar = (i: number, n: Partial<Linha>) => setLinhas((ls) => ls.map((x, j) => (j === i ? { ...x, ...n } : x)));
+  const mudar = (i: number, n: Partial<Linha>) =>
+    setLinhas((ls) => ls.map((x, j) => (j === i ? { ...x, ...n } : x)));
+  // Marcar/desmarcar o grupo marca/desmarca todos os itens dele juntos.
+  const marcarGrupo = (grupo: number, marcado: boolean) =>
+    setLinhas((ls) =>
+      ls.map((x) =>
+        (x.item.numero === grupo && x.item.grupo) || x.item.grupoDe === grupo
+          ? { ...x, marcado: x.status === "ok" ? false : marcado }
+          : x,
+      ),
+    );
+  const totalGrupo = (grupo: number) =>
+    linhas
+      .filter((x) => x.item.grupoDe === grupo)
+      .reduce((s, x) => s + (paraNumero(x.valor) != null ? totalDe(x) : 0), 0);
 
   async function confirmar() {
     if (!compra || !marcadas.length || problemas.length) return;
     const resumo = marcadas
-      .map((x) => `• Item ${x.item.numero}: ${x.item.desconto ? `${x.valor}%` : formatarMoeda(dadosDe(x).valor)}${x.item.material ? ` · ${x.marca} ${x.modelo}` : ""}`)
+      .map(
+        (x) =>
+          `• Item ${x.item.numero}: ${x.item.desconto ? `${x.valor}%` : formatarMoeda(dadosDe(x).valor)}${x.item.material ? ` · ${x.marca} ${x.modelo}` : ""}`,
+      )
       .join("\n");
-    if (!window.confirm(`Cadastrar ${marcadas.length} item(ns) no Compras.gov.br?\n\n${resumo}\n\nTotal: ${formatarMoeda(total)}`)) return;
+    if (
+      !window.confirm(
+        `Cadastrar ${marcadas.length} item(ns) no Compras.gov.br?\n\n${resumo}\n\nTotal: ${formatarMoeda(total)}`,
+      )
+    )
+      return;
     setEnviando(true);
     let ok = 0;
     for (let i = 0; i < linhas.length; i++) {
@@ -182,54 +276,119 @@ export function CadastroUmClique({ licitacaoId, aoFechar }: { licitacaoId: numbe
       }
     }
     setEnviando(false);
-    avisar(ok === marcadas.length ? `${ok} item(ns) cadastrado(s) no Compras.gov.br.` : `${ok} de ${marcadas.length} cadastrado(s). Veja os erros na lista.`, ok === marcadas.length ? "sucesso" : "erro");
+    avisar(
+      ok === marcadas.length
+        ? `${ok} item(ns) cadastrado(s) no Compras.gov.br.`
+        : `${ok} de ${marcadas.length} cadastrado(s). Veja os erros na lista.`,
+      ok === marcadas.length ? "sucesso" : "erro",
+    );
   }
 
   const l = ficha?.licitacao;
-  const titulo = chave ? tituloDaChave(chave) : l?.numero ? `Nº ${l.numero}` : "licitação";
+  const titulo = chave
+    ? tituloDaChave(chave)
+    : l?.numero
+      ? `Nº ${l.numero}`
+      : "licitação";
 
-  if (verCompleto && chave) return <CadastroProposta chave={chave} cnpj={compra?.cnpj ?? ""} aoFechar={() => (setVerCompleto(false), setVez((v) => v + 1))} />;
+  if (verCompleto && chave)
+    return (
+      <CadastroProposta
+        chave={chave}
+        cnpj={compra?.cnpj ?? ""}
+        aoFechar={() => (setVerCompleto(false), setVez((v) => v + 1))}
+      />
+    );
 
   return (
-    <Modal titulo={`Cadastrar no Compras.gov.br · ${titulo}`} aoFechar={aoFechar} largo>
+    <Modal
+      titulo={`Cadastrar no Compras.gov.br · ${titulo}`}
+      aoFechar={aoFechar}
+      largo
+    >
       <style>{".modal.largo:has(.um-clique){max-width:1180px}"}</style>
       <div className="um-clique cadastro-proposta">
         {!app ? (
-          <p className="alerta aviso">Abra a plataforma pelo aplicativo Montzion e entre no Compras.gov.br para cadastrar a proposta por aqui.</p>
+          <p className="alerta aviso">
+            Abra a plataforma pelo aplicativo Montzion e entre no Compras.gov.br
+            para cadastrar a proposta por aqui.
+          </p>
         ) : erro ? (
           <div className="alerta erro linha-erro-item">
             <span>{erro}</span>
-            <button className="botao secundario pequeno" onClick={() => (setErro(""), setVez((v) => v + 1))}>
+            <button
+              className="botao secundario pequeno"
+              onClick={() => (setErro(""), setVez((v) => v + 1))}
+            >
               Tentar de novo
             </button>
           </div>
         ) : !ficha || procurando || (chave && carregandoCompra && !compra) ? (
           <p className="texto-suave carregando-marcas">
-            <Loader2 className="girando" size={16} /> {!ficha ? "Lendo a licitação e o orçamento…" : procurando ? "Procurando a compra no Compras.gov.br…" : "Abrindo a compra e montando a proposta…"}
+            <Loader2 className="girando" size={16} />{" "}
+            {!ficha
+              ? "Lendo a licitação e o orçamento…"
+              : procurando
+                ? "Procurando a compra no Compras.gov.br…"
+                : "Abrindo a compra e montando a proposta…"}
           </p>
         ) : !chave ? (
-          <EscolherCompra opcoes={opcoes ?? []} licitacao={ficha.licitacao} aoEscolher={setChave} />
+          <EscolherCompra
+            opcoes={opcoes ?? []}
+            licitacao={ficha.licitacao}
+            aoEscolher={setChave}
+          />
         ) : compra ? (
           <>
             <div className="cabeca-cadastro">
               <div>
                 <strong>{titulo}</strong>
-                <span>{[l?.uasg && `UASG ${l.uasg}`, txt(compra.compra.nomeUasg) || l?.orgao].filter(Boolean).join(" - ")}</span>
-                {l?.objeto && <span className="texto-suave pequeno objeto-cadastro">{l.objeto}</span>}
+                <span>
+                  {[
+                    l?.uasg && `UASG ${l.uasg}`,
+                    txt(compra.compra.nomeUasg) || l?.orgao,
+                  ]
+                    .filter(Boolean)
+                    .join(" - ")}
+                </span>
+                {l?.objeto && (
+                  <span className="texto-suave pequeno objeto-cadastro">
+                    {l.objeto}
+                  </span>
+                )}
               </div>
               <div className={`prazo-cadastro ${encerrado ? "encerrado" : ""}`}>
                 <span>Envio de propostas até</span>
-                <strong>{txt(compra.compra.dataHoraFimPropostas) ? new Date(Date.parse(txt(compra.compra.dataHoraFimPropostas))).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—"}</strong>
-                {encerrado && <span className="chip vermelho">Prazo encerrado</span>}
+                <strong>
+                  {txt(compra.compra.dataHoraFimPropostas)
+                    ? new Date(
+                        Date.parse(txt(compra.compra.dataHoraFimPropostas)),
+                      ).toLocaleString("pt-BR", {
+                        dateStyle: "short",
+                        timeStyle: "short",
+                      })
+                    : "—"}
+                </strong>
+                {encerrado && (
+                  <span className="chip vermelho">Prazo encerrado</span>
+                )}
               </div>
             </div>
 
             {!participando && (
               <>
                 <p className="aviso-itens-bloqueados">
-                  <CircleAlert size={15} /> Primeiro aceite as declarações desta compra. Depois a plataforma monta a proposta com os itens do orçamento.
+                  <CircleAlert size={15} /> Primeiro aceite as declarações desta
+                  compra. Depois a plataforma monta a proposta com os itens do
+                  orçamento.
                 </p>
-                <Declaracoes chave={chave} participacao={compra.participacao} textos={compra.declaracoes} encerrado={encerrado} aoSalvar={() => setVez((v) => v + 1)} />
+                <Declaracoes
+                  chave={chave}
+                  participacao={compra.participacao}
+                  textos={compra.declaracoes}
+                  encerrado={encerrado}
+                  aoSalvar={() => setVez((v) => v + 1)}
+                />
               </>
             )}
 
@@ -239,7 +398,10 @@ export function CadastroUmClique({ licitacaoId, aoFechar }: { licitacaoId: numbe
                   <h3>
                     <Zap size={16} /> Proposta montada pelo orçamento
                   </h3>
-                  <span className="texto-suave pequeno">Confira, ajuste se precisar e confirme. Itens com aviso ficam desmarcados.</span>
+                  <span className="texto-suave pequeno">
+                    Confira, ajuste se precisar e confirme. Itens com aviso
+                    ficam desmarcados.
+                  </span>
                 </div>
                 <div className="tabela-um-clique">
                   <table>
@@ -258,11 +420,67 @@ export function CadastroUmClique({ licitacaoId, aoFechar }: { licitacaoId: numbe
                     <tbody>
                       {linhas.map((x, i) => {
                         const d = dadosDe(x);
-                        const bloqueado = x.item.grupo || enviando || encerrado || x.status === "ok";
+                        const bloqueado =
+                          x.item.grupo ||
+                          enviando ||
+                          encerrado ||
+                          x.status === "ok";
+                        if (x.item.grupo)
+                          return (
+                            <tr
+                              key={x.item.numero}
+                              className={`linha-grupo ${x.marcado ? "marcado" : ""}`}
+                            >
+                              <td>
+                                <input
+                                  type="checkbox"
+                                  checked={x.marcado}
+                                  disabled={
+                                    enviando ||
+                                    encerrado ||
+                                    !linhas.some(
+                                      (y) => y.item.grupoDe === x.item.numero,
+                                    )
+                                  }
+                                  onChange={(e) =>
+                                    marcarGrupo(x.item.numero, e.target.checked)
+                                  }
+                                  aria-label={`Cadastrar o ${x.item.nomeGrupo}`}
+                                />
+                              </td>
+                              <td className="col-item" colSpan={6}>
+                                <strong>{x.item.nomeGrupo}</strong>
+                                <span className="pequeno texto-fraco">
+                                  {x.origem}
+                                </span>
+                                {x.aviso && (
+                                  <span className="pequeno texto-amarelo">
+                                    {x.aviso}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="col-total">
+                                {formatarMoeda(totalGrupo(x.item.numero))}
+                              </td>
+                            </tr>
+                          );
                         return (
-                          <tr key={x.item.numero} className={`${x.marcado ? "marcado" : ""} ${x.status}`}>
+                          <tr
+                            key={x.item.numero}
+                            className={`${x.marcado ? "marcado" : ""} ${x.status} ${x.item.grupoDe != null ? "subitem" : ""}`}
+                          >
                             <td>
-                              <input type="checkbox" checked={x.marcado} disabled={bloqueado} onChange={(e) => mudar(i, { marcado: e.target.checked })} aria-label={`Cadastrar o item ${x.item.numero}`} />
+                              {x.item.grupoDe == null && (
+                                <input
+                                  type="checkbox"
+                                  checked={x.marcado}
+                                  disabled={bloqueado}
+                                  onChange={(e) =>
+                                    mudar(i, { marcado: e.target.checked })
+                                  }
+                                  aria-label={`Cadastrar o item ${x.item.numero}`}
+                                />
+                              )}
                             </td>
                             <td className="col-item">
                               <strong>
@@ -270,41 +488,150 @@ export function CadastroUmClique({ licitacaoId, aoFechar }: { licitacaoId: numbe
                               </strong>
                               <span className="pequeno texto-fraco">
                                 {x.origem}
-                                {x.status === "ok" && <span className="texto-verde"> · Cadastrado</span>}
+                                {x.status === "ok" && (
+                                  <span className="texto-verde">
+                                    {" "}
+                                    · Cadastrado
+                                  </span>
+                                )}
                                 {x.status === "enviando" && " · Enviando…"}
                               </span>
-                              {x.aviso && <span className="pequeno texto-amarelo">{x.aviso}</span>}
-                              {x.erro && <span className="pequeno texto-vermelho">{x.erro}</span>}
+                              {x.aviso && (
+                                <span className="pequeno texto-amarelo">
+                                  {x.aviso}
+                                </span>
+                              )}
+                              {x.erro && (
+                                <span className="pequeno texto-vermelho">
+                                  {x.erro}
+                                </span>
+                              )}
                             </td>
                             <td className="col-referencia">
-                              {x.item.referencia.tipo === "valor" ? formatarMoeda(x.item.referencia.valor) : <span className={`chip ${x.item.referencia.tipo === "sigiloso" ? "amarelo" : "cinza"}`}>{textoReferencia(x.item.referencia)}</span>}
-                              {x.item.porValorTotal && <small className="texto-fraco">valor total</small>}
+                              {x.item.referencia.tipo === "valor" ? (
+                                formatarMoeda(x.item.referencia.valor)
+                              ) : (
+                                <span
+                                  className={`chip ${x.item.referencia.tipo === "sigiloso" ? "amarelo" : "cinza"}`}
+                                >
+                                  {textoReferencia(x.item.referencia)}
+                                </span>
+                              )}
+                              {x.item.porValorTotal && (
+                                <small className="texto-fraco">
+                                  valor total
+                                </small>
+                              )}
                             </td>
                             <td>
-                              <div className="entrada"><input value={x.valor} onChange={(e) => mudar(i, { valor: e.target.value })} inputMode="decimal" disabled={bloqueado} aria-label={`Valor do item ${x.item.numero}`} /></div>
+                              <div className="entrada">
+                                <input
+                                  value={x.valor}
+                                  onChange={(e) =>
+                                    mudar(i, { valor: e.target.value })
+                                  }
+                                  inputMode="decimal"
+                                  disabled={bloqueado}
+                                  aria-label={`Valor do item ${x.item.numero}`}
+                                />
+                              </div>
                             </td>
                             <td>
-                              <div className="entrada"><input value={x.quantidade} onChange={(e) => mudar(i, { quantidade: e.target.value })} inputMode="decimal" disabled={bloqueado || !x.item.srp} aria-label={`Quantidade do item ${x.item.numero}`} /></div>
+                              <div className="entrada">
+                                <input
+                                  value={x.quantidade}
+                                  onChange={(e) =>
+                                    mudar(i, { quantidade: e.target.value })
+                                  }
+                                  inputMode="decimal"
+                                  disabled={bloqueado}
+                                  title={
+                                    x.item.srp
+                                      ? ""
+                                      : "Sem registro de preços: normalmente a quantidade toda do edital"
+                                  }
+                                  aria-label={`Quantidade do item ${x.item.numero}`}
+                                />
+                              </div>
                             </td>
-                            <td>{x.item.material ? <div className="entrada"><input value={x.marca} onChange={(e) => mudar(i, { marca: e.target.value })} disabled={bloqueado} aria-label={`Marca do item ${x.item.numero}`} /></div> : <span className="texto-fraco">—</span>}</td>
-                            <td>{x.item.material ? <div className="entrada"><input value={x.modelo} onChange={(e) => mudar(i, { modelo: e.target.value })} disabled={bloqueado} aria-label={`Modelo do item ${x.item.numero}`} /></div> : <span className="texto-fraco">—</span>}</td>
-                            <td className="col-total">{x.item.desconto ? `${x.valor}%` : d.valor ? formatarMoeda(totalDe(x)) : "—"}</td>
+                            <td>
+                              {x.item.material ? (
+                                <div className="entrada">
+                                  <input
+                                    value={x.marca}
+                                    onChange={(e) =>
+                                      mudar(i, { marca: e.target.value })
+                                    }
+                                    disabled={bloqueado}
+                                    aria-label={`Marca do item ${x.item.numero}`}
+                                  />
+                                </div>
+                              ) : (
+                                <span className="texto-fraco">—</span>
+                              )}
+                            </td>
+                            <td>
+                              {x.item.material ? (
+                                <div className="entrada">
+                                  <input
+                                    value={x.modelo}
+                                    onChange={(e) =>
+                                      mudar(i, { modelo: e.target.value })
+                                    }
+                                    disabled={bloqueado}
+                                    aria-label={`Modelo do item ${x.item.numero}`}
+                                  />
+                                </div>
+                              ) : (
+                                <span className="texto-fraco">—</span>
+                              )}
+                            </td>
+                            <td className="col-total">
+                              {x.item.desconto
+                                ? `${x.valor}%`
+                                : d.valor
+                                  ? formatarMoeda(totalDe(x))
+                                  : "—"}
+                            </td>
                           </tr>
                         );
                       })}
                     </tbody>
                   </table>
                 </div>
-                {linhas.length === 0 && <p className="texto-fraco">O Compras.gov.br não devolveu itens para esta compra.</p>}
+                {linhas.length === 0 && (
+                  <p className="texto-fraco">
+                    O Compras.gov.br não devolveu itens para esta compra.
+                  </p>
+                )}
                 <div className="rodape-um-clique">
-                  <button className="botao-link sem-margem" onClick={() => setVerCompleto(true)}>
-                    <ExternalLink size={14} /> Abrir o cadastro completo (anexos, declarações)
+                  <button
+                    className="botao-link sem-margem"
+                    onClick={() => setVerCompleto(true)}
+                  >
+                    <ExternalLink size={14} /> Abrir o cadastro completo
+                    (anexos, declarações)
                   </button>
                   <div>
-                    {problemas.length > 0 && <span className="texto-vermelho pequeno">{problemas[0]}</span>}
+                    {problemas.length > 0 && (
+                      <span className="texto-vermelho pequeno">
+                        {problemas[0]}
+                      </span>
+                    )}
                     <strong>{formatarMoeda(total)}</strong>
-                    <button className="botao acento" onClick={confirmar} disabled={!marcadas.length || problemas.length > 0 || enviando || encerrado}>
-                      {enviando ? <Loader2 className="girando" /> : <Send />} Confirmar e cadastrar {marcadas.length || ""} {marcadas.length === 1 ? "item" : "itens"}
+                    <button
+                      className="botao acento"
+                      onClick={confirmar}
+                      disabled={
+                        !marcadas.length ||
+                        problemas.length > 0 ||
+                        enviando ||
+                        encerrado
+                      }
+                    >
+                      {enviando ? <Loader2 className="girando" /> : <Send />}{" "}
+                      Confirmar e cadastrar {marcadas.length || ""}{" "}
+                      {marcadas.length === 1 ? "item" : "itens"}
                     </button>
                   </div>
                 </div>
@@ -317,7 +644,15 @@ export function CadastroUmClique({ licitacaoId, aoFechar }: { licitacaoId: numbe
   );
 }
 
-function EscolherCompra({ opcoes, licitacao, aoEscolher }: { opcoes: CompraEncontrada[]; licitacao: Licitacao; aoEscolher: (chave: string) => void }) {
+function EscolherCompra({
+  opcoes,
+  licitacao,
+  aoEscolher,
+}: {
+  opcoes: CompraEncontrada[];
+  licitacao: Licitacao;
+  aoEscolher: (chave: string) => void;
+}) {
   if (!opcoes.length)
     return (
       <p className="alerta aviso">
@@ -328,14 +663,24 @@ function EscolherCompra({ opcoes, licitacao, aoEscolher }: { opcoes: CompraEncon
     );
   return (
     <div className="resultado-busca-compra">
-      <span className="texto-suave pequeno">Achei mais de uma compra com esse número nessa UASG. Qual é a desta licitação?</span>
+      <span className="texto-suave pequeno">
+        Achei mais de uma compra com esse número nessa UASG. Qual é a desta
+        licitação?
+      </span>
       <ul>
         {opcoes.map((c) => (
           <li key={c.chave}>
-            <button className="compra-achada" onClick={() => aoEscolher(c.chave)}>
+            <button
+              className="compra-achada"
+              onClick={() => aoEscolher(c.chave)}
+            >
               <strong>{c.titulo}</strong>
               {c.orgao && <span className="pequeno">{c.orgao}</span>}
-              {c.objeto && <span className="texto-suave pequeno objeto-achado">{c.objeto}</span>}
+              {c.objeto && (
+                <span className="texto-suave pequeno objeto-achado">
+                  {c.objeto}
+                </span>
+              )}
             </button>
           </li>
         ))}
@@ -345,7 +690,12 @@ function EscolherCompra({ opcoes, licitacao, aoEscolher }: { opcoes: CompraEncon
 }
 
 /** A licitação é do Compras.gov.br? (link com a chave, portal ou UASG + número sem outro portal) */
-export function ehDoCompras(l: { portal: string | null; uasg: string | null; numero: string | null; link?: string | null }) {
+export function ehDoCompras(l: {
+  portal: string | null;
+  uasg: string | null;
+  numero: string | null;
+  link?: string | null;
+}) {
   if (chaveDoLink(l.link)) return true;
   const portal = (l.portal ?? "").toLowerCase();
   if (portal) return /compras\.gov|comprasnet|compras gov/.test(portal);
@@ -353,7 +703,13 @@ export function ehDoCompras(l: { portal: string | null; uasg: string | null; num
 }
 
 /** Botão do card do quadro e da ficha. */
-export function BotaoUmClique({ licitacaoId, compacto = false }: { licitacaoId: number; compacto?: boolean }) {
+export function BotaoUmClique({
+  licitacaoId,
+  compacto = false,
+}: {
+  licitacaoId: number;
+  compacto?: boolean;
+}) {
   const [aberto, setAberto] = useState(false);
   return (
     <>
@@ -366,14 +722,20 @@ export function BotaoUmClique({ licitacaoId, compacto = false }: { licitacaoId: 
         onKeyDown={(e) => e.stopPropagation()}
         title="Cadastrar a proposta no Compras.gov.br com os itens do orçamento"
       >
-        <Zap size={compacto ? 13 : 16} /> {compacto ? "Cadastrar" : "Cadastrar no Compras.gov.br"}
+        <Zap size={compacto ? 13 : 16} />{" "}
+        {compacto ? "Cadastrar" : "Cadastrar no Compras.gov.br"}
       </button>
       {aberto && (
-        <span onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-          <CadastroUmClique licitacaoId={licitacaoId} aoFechar={() => setAberto(false)} />
+        <span
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <CadastroUmClique
+            licitacaoId={licitacaoId}
+            aoFechar={() => setAberto(false)}
+          />
         </span>
       )}
     </>
   );
 }
-

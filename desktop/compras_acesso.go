@@ -20,14 +20,14 @@ import (
 const (
 	ce  = `^/comprasnet-fase-externa(?:/public)?`
 	cmp = `/compras/\d{17}`
-	it  = `/itens/\d{1,5}`
+	it  = `/itens/-?\d{1,5}` // grupos têm número negativo (ex.: -1)
 	id  = `[\w-][\w.-]{0,39}`
 )
 
 var leiturasPermitidas = []*regexp.Regexp{
 	regexp.MustCompile(ce + `/v1` + cmp + it + `/(?:propostas|propostas-iniciais)$`),
-	regexp.MustCompile(ce + `/v1` + cmp + `/em-selecao-fornecedores/itens/\d{1,5}/propostas$`),
-	regexp.MustCompile(ce + `/v1` + cmp + `/em-selecao-fornecedores/participacoes/` + id + `/itens/\d{1,5}/propostas$`),
+	regexp.MustCompile(ce + `/v1` + cmp + `/em-selecao-fornecedores/itens/-?\d{1,5}/propostas$`),
+	regexp.MustCompile(ce + `/v1` + cmp + `/em-selecao-fornecedores/participacoes/` + id + `/itens/-?\d{1,5}/propostas$`),
 	regexp.MustCompile(ce + `/v1` + cmp + it + `/participacoes/` + id + `/(?:anexos|diligencias|diligencias/` + id + `)$`),
 	regexp.MustCompile(ce + `/v2` + cmp + it + `/participacoes/` + id + `/anexos/` + id + `$`),
 	regexp.MustCompile(ce + `/v2` + cmp + it + `/participacoes/` + id + `/diligencias/anexos-(?:governo|participante)/` + id + `$`),
@@ -37,12 +37,13 @@ var leiturasPermitidas = []*regexp.Regexp{
 	regexp.MustCompile(ce + `/v1` + cmp + it + `/fase-recursal/\d{1,4}/recursos/` + id + `$`),
 	regexp.MustCompile(ce + `/v2` + cmp + it + `/fase-recursal/\d{1,4}(?:/recursos/` + id + `(?:/contrarrazoes/` + id + `)?)?/arquivos$`),
 	regexp.MustCompile(ce + `/v2` + cmp + it + `/relatorio-diligencias$`),
-	regexp.MustCompile(`^/comprasnet-mensagem/v2/chat/\d{17}/itens/\d{1,5}$`),
+	regexp.MustCompile(`^/comprasnet-mensagem/v2/chat/\d{17}/itens/-?\d{1,5}$`),
 	regexp.MustCompile(`^/comprasnet-disputa/v1` + cmp + it + `/lances(?:/por-participante)?$`),
 	// Cadastro de proposta: a compra, a sua participação, os itens (com a sua proposta) e os textos das declarações.
 	regexp.MustCompile(ce + `/v1` + cmp + `$`),
 	regexp.MustCompile(ce + `/v1` + cmp + `/participacao$`),
 	regexp.MustCompile(ce + `/v1` + cmp + `/itens$`),
+	regexp.MustCompile(ce + `/v1` + cmp + it + `/itens-grupo$`), // itens dentro de um grupo
 	regexp.MustCompile(ce + `/v1/declaracoes$`),
 	regexp.MustCompile(ce + `/v1/enums$`), // listas oficiais (ex.: níveis da declaração de equidade de gênero)
 }

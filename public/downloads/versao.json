@@ -1,9 +1,9 @@
 {
-  "versao": "3.1.13",
+  "versao": "3.1.14",
   "data": "2026-11-12",
   "novidades": [
-    "Janela de login do gov.br não abre mais toda preta: ao esconder e mostrar de novo, o aplicativo avisa o navegador interno para redesenhar.",
-    "Se o navegador da janela de login travar ou cair, ela é recarregada (ou aberta de novo) sozinha.",
-    "Página de login \"crua\" (sem cores, com erro do hCaptcha) é recarregada com o cache limpo."
+    "Cadastro em GRUPO: o grupo aparece com os itens dele (como no Compras.gov.br) e a proposta vai em cada item; marcar o grupo marca todos.",
+    "Quantidade: vem do Compras.gov.br ou, se ele não mandar, do edital da licitação do quadro; o campo agora pode ser editado.",
+    "Janela de login do gov.br não fica preta e se recupera sozinha se o navegador interno travar."
   ]
 }
