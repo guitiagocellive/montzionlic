@@ -120,6 +120,7 @@ func (m *motor) Rodar() {
 	go m.cicloTempoReal()
 	go m.cicloLeitura()
 	go m.cicloRobo()
+	go m.cicloCaptchaPronto()
 	go m.cicloAcompanhamento()
 	go m.cicloCacheAcomp()
 	go m.cicloColetorPropostas()
@@ -653,7 +654,9 @@ func (m *motor) cicloLeitura() {
 		time.Sleep(150 * time.Millisecond)
 		agora := time.Now()
 		m.mu.Lock()
-		if m.token == "" || m.fase != "pronto" || agora.Sub(m.ultimoPedido) < 300*time.Millisecond {
+		// Folga entre leituras: 300 ms (para não levar 429); na primeira leitura de cada compra, 80 ms, para a
+		// lista de disputas ficar pronta em 1 a 2 s em vez de ir aparecendo uma a uma.
+		if m.token == "" || m.fase != "pronto" || agora.Sub(m.ultimoPedido) < 80*time.Millisecond {
 			m.mu.Unlock()
 			continue
 		}
@@ -696,6 +699,10 @@ func (m *motor) cicloLeitura() {
 				melhor, prioridade, atraso = chave, pri, d
 			}
 		}
+		if melhor != "" && prioridade != 3 && agora.Sub(m.ultimoPedido) < 300*time.Millisecond {
+			m.mu.Unlock()
+			continue
+		}
 		if melhor == "" {
 			if !m.listaEm.IsZero() && agora.Sub(m.listaEm) > 5*time.Minute && !m.buscandoLista {
 				go m.atualizarLista()
@@ -708,6 +715,42 @@ func (m *motor) cicloLeitura() {
 		m.mu.Unlock()
 		go m.lerItens(melhor)
 	}
+}
+
+// precisaCaptchaPronto: há item com robô ligado em fase de lances perto do fim (≤ 2,5 min, aleatório ou "não esperar").
+func (m *motor) precisaCaptchaPronto() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.token == "" {
+		return false
+	}
+	agora := time.Now()
+	for k, cfg := range m.config {
+		if !cfg.Ligado {
+			continue
+		}
+		compra, numTxt, ok := strings.Cut(k, ":")
+		if !ok {
+			continue
+		}
+		c := m.compras[compra]
+		if c == nil {
+			continue
+		}
+		n, _ := strconv.Atoi(numTxt)
+		it := c.itens[n]
+		if it == nil {
+			continue
+		}
+		e := m.estadoAgora(it, agora)
+		if !fasesDeLance[e.Fase] || e.Fase == "LF" || e.Situacao == "G" {
+			continue
+		}
+		if e.Fase != "LA" || cfg.NaoAguardar || e.RestanteSeg == nil || *e.RestanteSeg <= 150 {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *motor) compraEmDisputa(c *compraMotor) bool {

@@ -1,9 +1,11 @@
 {
-  "versao": "3.1.14",
+  "versao": "3.1.15",
   "data": "2026-11-12",
   "novidades": [
-    "Cadastro em GRUPO: o grupo aparece com os itens dele (como no Compras.gov.br) e a proposta vai em cada item; marcar o grupo marca todos.",
-    "Quantidade: vem do Compras.gov.br ou, se ele não mandar, do edital da licitação do quadro; o campo agora pode ser editado.",
-    "Janela de login do gov.br não fica preta e se recupera sozinha se o navegador interno travar."
+    "Robô: o lance mínimo e o desconto só mudam com o robô PARADO (como no Siga Pregão). Ao ligar, vale o valor digitado inteiro — nunca mais um lance no meio da digitação.",
+    "Robô cobre pelo menor valor permitido (1 centavo ou o intervalo do edital) por padrão: mais lucro, sempre na melhor colocação até o mínimo.",
+    "Mais rápido nos segundos finais: o aplicativo deixa o captcha pronto e a classificação sai na hora.",
+    "Disputas: só aparecem as compras em disputa (as outras são conferidas em 1 a 2 s, sem ir sumindo uma a uma).",
+    "Avisos sonoros faltando 2 min, 1 min, 30 s e 10 s; cronômetro amarelo, vermelho e pulsando; o melhor lance treme quando alguém dá lance."
   ]
 }

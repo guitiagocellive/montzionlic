@@ -45,8 +45,71 @@ func contextoPerdido(err error) bool {
 	return strings.Contains(t, "context was destroyed") || strings.Contains(t, "sem resposta") || strings.Contains(t, "cannot find context") || strings.Contains(t, "target closed")
 }
 
-// captcha pede um código do captcha invisível à página oficial (um por vez).
+// Captchas gerados de antemão nos minutos finais das disputas com robô: a leitura da classificação (que exige
+// captcha) sai na hora, sem esperar o hCaptcha da página (que leva de 1 a 3 s). Um código vale ~2 min e uma vez.
+type captchaGuardado struct {
+	codigo string
+	em     time.Time
+}
+
+var (
+	captchaPoolMu sync.Mutex
+	captchaPool   []captchaGuardado
+)
+
+const validadeCaptcha = 90 * time.Second
+
+func pegarCaptchaPronto() string {
+	captchaPoolMu.Lock()
+	defer captchaPoolMu.Unlock()
+	for len(captchaPool) > 0 {
+		c := captchaPool[0]
+		captchaPool = captchaPool[1:]
+		if time.Since(c.em) < validadeCaptcha {
+			return c.codigo
+		}
+	}
+	return ""
+}
+
+// cicloCaptchaPronto mantém 2 captchas prontos enquanto alguma disputa com robô está perto do fim.
+func (m *motor) cicloCaptchaPronto() {
+	for {
+		time.Sleep(700 * time.Millisecond)
+		if !m.precisaCaptchaPronto() {
+			continue
+		}
+		captchaPoolMu.Lock()
+		vivos := captchaPool[:0]
+		for _, c := range captchaPool {
+			if time.Since(c.em) < validadeCaptcha {
+				vivos = append(vivos, c)
+			}
+		}
+		captchaPool = vivos
+		falta := len(captchaPool) < 2
+		captchaPoolMu.Unlock()
+		if !falta {
+			continue
+		}
+		if codigo, err := m.gerarCaptcha(); err == nil && codigo != "" {
+			captchaPoolMu.Lock()
+			captchaPool = append(captchaPool, captchaGuardado{codigo, time.Now()})
+			captchaPoolMu.Unlock()
+		}
+	}
+}
+
+// captcha: um captcha pronto (se houver) ou um novo, pedido à página oficial.
 func (m *motor) captcha() (string, error) {
+	if c := pegarCaptchaPronto(); c != "" {
+		return c, nil
+	}
+	return m.gerarCaptcha()
+}
+
+// gerarCaptcha pede um código do captcha invisível à página oficial (um por vez).
+func (m *motor) gerarCaptcha() (string, error) {
 	captchaMu.Lock()
 	defer captchaMu.Unlock()
 	var ultimo error

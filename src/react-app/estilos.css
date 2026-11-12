@@ -12579,3 +12579,103 @@ label.botao.desativado {
   font-size: 0.95rem;
   margin: 0 0 10px;
 }
+
+/* ---------- Disputas: cronômetro por faixa, tremida no lance novo, robô travado ---------- */
+.cronometro-disputa.aviso > span {
+  color: var(--amarelo, #f59e0b);
+}
+.cronometro-disputa.critico > span {
+  color: var(--vermelho);
+  font-size: 1.15em;
+}
+.cronometro-disputa.final > span {
+  color: #fff;
+  background: var(--vermelho);
+  padding: 2px 10px;
+  border-radius: 999px;
+  animation: batida 0.9s ease-in-out infinite;
+}
+.cronometro-disputa.final {
+  animation: none;
+}
+@keyframes batida {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--vermelho) 60%, transparent);
+  }
+  50% {
+    transform: scale(1.12);
+    box-shadow: 0 0 0 8px transparent;
+  }
+}
+.item-disputa.critico {
+  border-color: color-mix(in oklab, var(--vermelho) 45%, transparent);
+}
+.item-disputa.final {
+  border-color: var(--vermelho);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--vermelho) 25%, transparent);
+}
+.valor-disputa.tremer {
+  animation: tremer 0.55s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+@keyframes tremer {
+  10%,
+  90% {
+    transform: translateX(-2px);
+  }
+  20%,
+  80% {
+    transform: translateX(4px);
+  }
+  30%,
+  50%,
+  70% {
+    transform: translateX(-6px);
+  }
+  40%,
+  60% {
+    transform: translateX(6px);
+  }
+}
+.item-disputa.lance-novo {
+  animation: clarao 0.7s ease-out;
+}
+@keyframes clarao {
+  from {
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--vermelho) 55%, transparent);
+  }
+  to {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+.aviso-robo-travado {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--acento) 9%, transparent);
+  font-size: 0.78rem;
+  color: var(--texto-suave);
+}
+.item-disputa .entrada input:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+.conferindo-disputas {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-size: 0.84rem;
+  color: var(--texto-suave);
+}
+.botao-icone.desligado {
+  opacity: 0.55;
+}
+@media (prefers-reduced-motion: reduce) {
+  .valor-disputa.tremer,
+  .item-disputa.lance-novo,
+  .cronometro-disputa.final > span {
+    animation: none;
+  }
+}

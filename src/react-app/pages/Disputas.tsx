@@ -1,4 +1,4 @@
-import { Check, ChevronDown, ClipboardCopy, Download, ListOrdered, LogIn, Play, RefreshCw, Square, TriangleAlert, Zap } from "lucide-react";
+import { Check, ChevronDown, ClipboardCopy, Download, ListOrdered, LogIn, Play, RefreshCw, Square, TriangleAlert, Volume2, VolumeX, Zap } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { podeEditar, podeVer } from "../../shared/permissoes";
 import { type CompraDisputa, type ConfigItemRobo, FASES, ITEM_ROBO_PADRAO, type ItemDisputa, lerCompra, lerItemDisputa, SEGUNDOS_FINAIS } from "../../shared/robo";
@@ -55,6 +55,17 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
   const lancesEnviados = useRef(new Set<number>());
   const configRef = useRef(config);
   configRef.current = config;
+  const [som, setSom] = useState(() => {
+    try {
+      return localStorage.getItem("disputas-som") !== "0";
+    } catch {
+      return true;
+    }
+  });
+  // Itens em que alguém acabou de dar lance (o melhor lance mudou): treme por um instante.
+  const [tremendo, setTremendo] = useState<Map<string, number>>(new Map());
+  const melhoresAntes = useRef(new Map<string, number>());
+  const avisosDados = useRef(new Set<string>());
 
   // A ponte pode aparecer um pouco depois da página carregar.
   useEffect(() => {
@@ -100,6 +111,45 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
         .filter((x): x is CompraNaTela => !!x),
     [painel],
   );
+
+  // Alguém deu lance: o melhor lance do item mudou e não é o nosso → treme o item.
+  useEffect(() => {
+    const novos: string[] = [];
+    for (const c of compras)
+      for (const i of c.itens) {
+        const k = `${c.compra.chave}:${i.numero}`;
+        if (i.melhorLance == null) continue;
+        const antes = melhoresAntes.current.get(k);
+        melhoresAntes.current.set(k, i.melhorLance);
+        const nosso = i.nossoLance != null && i.melhorLance >= i.nossoLance - 1e-9;
+        if (antes != null && Math.abs(antes - i.melhorLance) > 1e-9 && !nosso) novos.push(k);
+      }
+    if (!novos.length) return;
+    const marca = Date.now();
+    setTremendo((t) => new Map([...t, ...novos.map((k) => [k, marca] as [string, number])]));
+    if (som) tocar("lance");
+    setTimeout(() => setTremendo((t) => new Map([...t].filter(([, m]) => m !== marca))), 700);
+  }, [compras]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Avisos sonoros do cronômetro: faltando 2 min, 1 min, 30 s e 10 s (cada um uma vez por item).
+  useEffect(() => {
+    if (!som) return;
+    const atrasoSeg = (agora - lidoEm) / 1000;
+    for (const c of compras)
+      for (const i of c.itens) {
+        if (i.restanteSeg == null || !EM_DISPUTA.has(i.fase)) continue;
+        const r = i.restanteSeg - atrasoSeg;
+        const k = `${c.compra.chave}:${i.numero}`;
+        for (const limite of [120, 60, 30, 10]) {
+          const chave = `${k}:${limite}`;
+          if (r <= limite && r > limite - 4 && !avisosDados.current.has(chave)) {
+            avisosDados.current.add(chave);
+            tocar(limite <= 10 ? "final" : limite <= 30 ? "urgente" : "aviso");
+          }
+          if (r > limite + 5) avisosDados.current.delete(chave); // cronômetro reiniciou (prorrogação)
+        }
+      }
+  }, [agora]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Configuração dos itens: vem da plataforma (vale para a equipe) e vai para o robô do aplicativo.
   const chavesCompras = compras.map((c) => c.compra.chave).join(",");
@@ -168,11 +218,20 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
     );
   }
 
+  // Como no Siga Pregão: o mínimo e o desconto só mudam com o robô PARADO. Ao ligar, vale o que está digitado.
+  // (Antes o robô usava o valor a cada tecla: digitando 290, no "2" ele já entendia mínimo 2 e dava lance.)
   function alternarRobo(k: string, item: ItemDisputa) {
     const cfg = config[k] ?? ITEM_ROBO_PADRAO;
-    if (!cfg.ligado && !(cfg.minimo && cfg.minimo > 0)) return avisar("Informe o lance mínimo antes de ligar o robô.", "erro");
-    if (!cfg.ligado && item.nossoLance != null && cfg.minimo! > item.nossoLance) avisar("O lance mínimo está acima do seu lance atual: o robô não vai baixar.", "erro");
-    mudarItem(k, { ligado: !cfg.ligado });
+    if (cfg.ligado) return mudarItem(k, { ligado: false });
+    const minimo = paraNumero(textos[`${k}:minimo`] ?? "") ?? cfg.minimo;
+    const textoDesconto = textos[`${k}:desconto`];
+    const desconto = textoDesconto != null ? (paraNumero(textoDesconto) ?? 0) : cfg.desconto;
+    if (!(minimo && minimo > 0)) return avisar("Informe o lance mínimo antes de ligar o robô.", "erro");
+    if (!(desconto >= 0 && desconto <= 50)) return avisar("O desconto precisa ficar entre 0 e 50%.", "erro");
+    if (item.nossoLance != null && minimo > item.nossoLance) avisar("O lance mínimo está acima do seu lance atual: o robô não vai baixar.", "erro");
+    const ref = item.nossoLance ?? item.melhorLance;
+    if (ref != null && minimo < ref * 0.6 && !window.confirm(`Confirma o lance mínimo de ${moeda(minimo, cfg.quatroCasas)}?\n\nEle está ${Math.round((1 - minimo / ref) * 100)}% abaixo de ${moeda(ref, cfg.quatroCasas)}.`)) return;
+    mudarItem(k, { minimo, desconto, ligado: true });
   }
 
   // Quanto tempo está em "Entrando na sala de disputa" (depois de 20 s aparecem as ajudas).
@@ -206,8 +265,9 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
 
   const visiveis = compras.filter((c) => (aba === "pregao" ? c.compra.modalidade !== "dispensa" : c.compra.modalidade === "dispensa"));
   // Em cima: compras com disputa acontecendo (ou ainda sendo verificadas). Embaixo, recolhidas: sem disputa agora.
-  const ativas = visiveis.filter((c) => !c.lida || c.emDisputa);
+  const ativas = visiveis.filter((c) => c.lida && c.emDisputa);
   const semDisputa = visiveis.filter((c) => c.lida && !c.emDisputa);
+  const conferindo = visiveis.filter((c) => !c.lida).length;
   const ultimoLance = painel?.ultimoLance ?? null;
 
   const cartaoCompra = ({ compra: c, itens, lida, erro }: CompraNaTela) => {
@@ -277,7 +337,7 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
                 const nosso = i.melhorLance != null && i.nossoLance != null && i.melhorLance >= i.nossoLance;
                 const msg = painel?.mensagens[k];
                 return (
-                  <div key={k} className={`item-disputa ${situacao} ${cfg.ligado ? "robo-ligado" : ""}`}>
+                  <div key={k} className={`item-disputa ${situacao} ${cfg.ligado ? "robo-ligado" : ""} ${faixaTempo(i.fase, restante)} ${tremendo.has(k) ? "lance-novo" : ""}`}>
                     <div className="item-disputa-titulo">
                       <strong>
                         ITEM {i.numero}
@@ -300,10 +360,10 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
                           <input
                             inputMode="decimal"
                             value={textos[`${k}:minimo`] ?? textoNumero(cfg.minimo)}
-                            onChange={(e) => {
-                              setTextos((t) => ({ ...t, [`${k}:minimo`]: e.target.value }));
-                              mudarItem(k, { minimo: paraNumero(e.target.value) });
-                            }}
+                            onChange={(e) => setTextos((t) => ({ ...t, [`${k}:minimo`]: e.target.value }))}
+                            onBlur={(e) => !cfg.ligado && mudarItem(k, { minimo: paraNumero(e.target.value) })}
+                            disabled={cfg.ligado}
+                            title={cfg.ligado ? "Pare o robô para alterar o lance mínimo" : ""}
                             aria-label={`Lance mínimo do item ${i.numero}`}
                           />
                         </span>
@@ -314,16 +374,19 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
                           <input
                             inputMode="decimal"
                             value={textos[`${k}:desconto`] ?? textoNumero(cfg.desconto)}
-                            onChange={(e) => {
-                              setTextos((t) => ({ ...t, [`${k}:desconto`]: e.target.value }));
-                              const n = paraNumero(e.target.value);
-                              if (n != null && n >= 0 && n <= 50) mudarItem(k, { desconto: n });
+                            onChange={(e) => setTextos((t) => ({ ...t, [`${k}:desconto`]: e.target.value }))}
+                            onBlur={(e) => {
+                              const n = paraNumero(e.target.value) ?? 0;
+                              if (!cfg.ligado && n >= 0 && n <= 50) mudarItem(k, { desconto: n });
                             }}
+                            disabled={cfg.ligado}
+                            placeholder="0"
+                            title={cfg.ligado ? "Pare o robô para alterar" : "0 = cobre pelo menor valor permitido (mais lucro)"}
                             aria-label={`Desconto do item ${i.numero}`}
                           />
                         </span>
                       </label>
-                      <div className="valor-disputa">
+                      <div className={`valor-disputa melhor-lance ${tremendo.has(k) ? "tremer" : ""}`} key={tremendo.has(k) ? `t${tremendo.get(k)}` : "parado"}>
                         <span>Melhor lance</span>
                         <strong className={nosso ? "texto-verde" : "texto-perigo"}>
                           {moeda(i.melhorLance, cfg.quatroCasas)} <em className={`selo-quem ${nosso ? "voce" : ""}`}>{nosso ? "VOCÊ" : "CONCORRENTE"}</em>
@@ -333,7 +396,7 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
                         <span>Meu lance</span>
                         <strong className={nosso ? "texto-verde" : "texto-perigo"}>{moeda(i.nossoLance, cfg.quatroCasas)}</strong>
                       </div>
-                      <div className={`cronometro-disputa ${restante != null && restante <= SEGUNDOS_FINAIS ? "final" : ""}`} title="Tempo que falta para a etapa terminar">
+                      <div className={`cronometro-disputa ${faixaTempo(i.fase, restante)}`} title="Tempo que falta para a etapa terminar">
                         <span>{i.fase === "AL" ? "aleatório" : restante != null ? relogio(restante) : "—"}</span>
                         {i.fase !== "AL" && restante != null && (
                           <small>
@@ -353,13 +416,14 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
                     </div>
                     <div className="item-disputa-opcoes">
                       <label>
-                        <input type="checkbox" checked={cfg.quatroCasas} onChange={(e) => mudarItem(k, { quatroCasas: e.target.checked })} /> Permitir lances com 4 casas decimais
+                        <input type="checkbox" checked={cfg.quatroCasas} disabled={cfg.ligado} onChange={(e) => mudarItem(k, { quatroCasas: e.target.checked })} /> Permitir lances com 4 casas decimais
                       </label>
                       <label>
-                        <input type="checkbox" checked={cfg.naoAguardar} onChange={(e) => mudarItem(k, { naoAguardar: e.target.checked })} /> Não esperar os últimos{" "}
+                        <input type="checkbox" checked={cfg.naoAguardar} disabled={cfg.ligado} onChange={(e) => mudarItem(k, { naoAguardar: e.target.checked })} /> Não esperar os últimos{" "}
                         {SEGUNDOS_FINAIS} segundos para cobrir
                       </label>
                     </div>
+                    {cfg.ligado && <p className="aviso-robo-travado">Robô ligado com mínimo de {moeda(cfg.minimo, cfg.quatroCasas)}. Para mudar o mínimo, pare o robô (■), altere e ligue de novo.</p>}
                     <div className="item-disputa-rodape">
                       <span className="texto-fraco pequeno">{FASES[i.fase] ?? i.fase}</span>
                       <span className={`mensagem-robo ${msg?.erro ? "erro" : ""}`}>{cfg.ligado ? (msg?.texto ?? "Robô ligado") : "Robô parado"}</span>
@@ -503,6 +567,23 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
             <span className="texto-fraco pequeno">
               {new Date(agora).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })} (horário de Brasília)
             </span>
+            <button
+              className={`botao-icone ${som ? "" : "desligado"}`}
+              onClick={() => {
+                const novo = !som;
+                setSom(novo);
+                try {
+                  localStorage.setItem("disputas-som", novo ? "1" : "0");
+                } catch {
+                  /* sem armazenamento: vale só nesta tela */
+                }
+                if (novo) tocar("aviso");
+              }}
+              aria-label={som ? "Desligar os avisos sonoros" : "Ligar os avisos sonoros"}
+              title={som ? "Avisos sonoros ligados (2 min, 1 min, 30 s, 10 s e lance novo)" : "Avisos sonoros desligados"}
+            >
+              {som ? <Volume2 /> : <VolumeX />}
+            </button>
             <button className="botao-icone" onClick={() => ponte.atualizar().catch((e) => avisar(mensagemDeErro(e), "erro"))} aria-label="Atualizar disputas" title="Atualizar disputas">
               <RefreshCw />
             </button>
@@ -510,7 +591,12 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
 
           {fase === "erro-lista" && painel?.aviso && <p className="alerta erro">{painel.aviso}</p>}
 
-          {ativas.length === 0 ? (
+          {conferindo > 0 && (
+            <p className="conferindo-disputas">
+              <RefreshCw size={14} className="girando" /> Conferindo {conferindo} compra(s) no Compras.gov.br…
+            </p>
+          )}
+          {ativas.length === 0 && conferindo > 0 ? null : ativas.length === 0 ? (
             <section className="cartao">
               <Vazio icone={<TriangleAlert />} titulo={`Nenhuma ${aba === "pregao" ? "disputa de pregão" : "dispensa"} acontecendo agora`}>
                 Quando uma disputa sua começar no Compras.gov.br, ela aparece aqui sozinha.
@@ -580,4 +666,45 @@ function JanelaClassificacao({ compra, item, titulo, quatro, aoFechar }: { compr
       </div>
     </Modal>
   );
+}
+
+/** Faixa do cronômetro: aviso (≤ 2 min), crítico (≤ 30 s, vermelho) e final (≤ 10 s, pulsando). */
+function faixaTempo(fase: string, restante: number | null) {
+  if (fase === "AL") return "final";
+  if (restante == null || !EM_DISPUTA.has(fase)) return "";
+  if (restante <= SEGUNDOS_FINAIS) return "final";
+  if (restante <= 30) return "critico";
+  if (restante <= 120) return "aviso";
+  return "";
+}
+
+let audio: AudioContext | null = null;
+/** Bipes curtos (sem arquivo de som): aviso, urgente, final e lance novo. */
+function tocar(tipo: "aviso" | "urgente" | "final" | "lance") {
+  try {
+    audio ??= new AudioContext();
+    if (audio.state === "suspended") void audio.resume();
+    const notas: Record<typeof tipo, [number, number][]> = {
+      aviso: [[880, 0.12], [1175, 0.18]],
+      urgente: [[988, 0.1], [988, 0.1], [1319, 0.22]],
+      final: [[1319, 0.08], [1568, 0.08], [1319, 0.08], [1568, 0.2]],
+      lance: [[660, 0.07]],
+    };
+    let t = audio.currentTime;
+    for (const [freq, dur] of notas[tipo]) {
+      const osc = audio.createOscillator();
+      const ganho = audio.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      ganho.gain.setValueAtTime(0.0001, t);
+      ganho.gain.exponentialRampToValueAtTime(tipo === "lance" ? 0.12 : 0.25, t + 0.015);
+      ganho.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      osc.connect(ganho).connect(audio.destination);
+      osc.start(t);
+      osc.stop(t + dur + 0.02);
+      t += dur + 0.05;
+    }
+  } catch {
+    /* sem áudio neste navegador */
+  }
 }

@@ -20,7 +20,7 @@ export interface ConfigItemRobo {
   quatroCasas: boolean;
 }
 
-export const ITEM_ROBO_PADRAO: ConfigItemRobo = { ligado: false, minimo: null, desconto: 0.5, naoAguardar: false, quatroCasas: false };
+export const ITEM_ROBO_PADRAO: ConfigItemRobo = { ligado: false, minimo: null, desconto: 0, naoAguardar: false, quatroCasas: false };
 
 /** Fases do item no Compras.gov.br (FaseItemEnum). */
 export const FASES: Record<string, string> = {
