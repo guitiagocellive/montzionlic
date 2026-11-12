@@ -264,6 +264,25 @@ func ligarPonte(arquivoPorta string, porta int, abrirCompras func() bool, escond
 
 // Abre o Montzion na janela própria do aplicativo. Só se o Windows não tiver o motor WebView2
 // (raro: vem no Windows 10 e 11) cai para o modo aplicativo do Edge/Chrome.
+// fecharMotorOrfao pede ao motor antigo (pela porta de controle dele) para fechar e espera ele sair.
+func fecharMotorOrfao(ws string, porta int) bool {
+	c, err := conectarCDP(ws)
+	if err != nil {
+		return false
+	}
+	_, _ = c.Chamar("", "Browser.close", nil, 3*time.Second)
+	c.Fechar()
+	limite := time.Now().Add(8 * time.Second)
+	for time.Now().Before(limite) {
+		if _, err := enderecoDevTools(porta, 0); err != nil {
+			time.Sleep(500 * time.Millisecond) // termina de soltar a pasta de dados
+			return true
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	return false
+}
+
 // fecharVersaoAberta fecha o Montzion que estiver aberto (pedido de fechar; se em 10 s não fechar, encerra o
 // processo dele) e espera ele soltar a trava. Devolve true se havia um aberto.
 func fecharVersaoAberta() bool {
@@ -315,9 +334,17 @@ func abrir() {
 		// Se o motor de uma abertura anterior ainda está vivo, usa a mesma porta (com outra, o Windows
 		// recusaria criar a janela e a ligação do robô não aconteceria).
 		if p := portaAtiva(arquivoPorta); p > 0 {
-			if _, err := enderecoDevTools(p, 0); err == nil {
-				porta = p
-				registrarLog("motor da janela já estava aberto (porta %d)", p)
+			if ws, err := enderecoDevTools(p, 0); err == nil {
+				// Motor (WebView2) de uma abertura anterior ainda vivo, sem o Montzion dele (ex.: depois de atualizar).
+				// Reaproveitá-lo deixava janelas do sistema presas à janela antiga, que não existe mais — como a
+				// escolha do certificado digital / PIN do token no login do gov.br, que ficava invisível.
+				// Agora ele é encerrado e o motor começa limpo; só se não fechar, é reaproveitado como antes.
+				if fecharMotorOrfao(ws, p) {
+					registrarLog("motor antigo da janela encerrado (porta %d); abrindo um novo", p)
+				} else {
+					porta = p
+					registrarLog("motor da janela já estava aberto (porta %d)", p)
+				}
 			}
 		}
 		if porta == 0 {

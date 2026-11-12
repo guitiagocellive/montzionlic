@@ -1,10 +1,10 @@
 {
-  "versao": "3.1.5",
+  "versao": "3.1.6",
   "data": "2026-11-12",
   "novidades": [
+    "Corrigido: login com certificado digital parado no gov.br. Ao abrir, o Montzion encerra o motor da janela que ficava preso de uma abertura anterior (era ele que escondia a escolha do certificado / PIN do token).",
     "Robô cobre NA HORA: assim que alguém passa na frente, ele dá o lance para voltar ao 1º lugar, até o seu lance mínimo. Esperar os últimos 10 segundos virou opção.",
     "Disputas: compras na etapa Disputa que não vinham na lista do Compras.gov.br agora aparecem (o robô também usa as suas participações).",
-    "Acompanhamento: itens e chat da licitação voltam a aparecer (o Compras.gov.br devolvia vazio sem o captcha).",
-    "Ao atualizar, o Montzion aberto fecha e a versão nova abre sozinha."
+    "Acompanhamento: itens e chat da licitação voltam a aparecer (o Compras.gov.br devolvia vazio sem o captcha)."
   ]
 }
