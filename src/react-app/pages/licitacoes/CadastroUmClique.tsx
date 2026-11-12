@@ -1,7 +1,6 @@
 import { CircleAlert, ExternalLink, Loader2, Send, Zap } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { cotacaoDaProposta } from "../../../shared/negocio";
-import type { Cotacao, ItemLicitacao, Licitacao, RascunhoProposta } from "../../../shared/tipos";
+import type { Licitacao, RascunhoProposta } from "../../../shared/tipos";
 import { api, mensagemDeErro } from "../../api";
 import { avisar, Modal } from "../../components/Ui";
 import { formatarMoeda } from "../../formato";
@@ -19,19 +18,18 @@ import {
   prazoEncerrado,
   problemaDaProposta,
   textoNumero,
+  textoValor,
   tituloDaChave,
   txt,
+  textoReferencia,
 } from "./comprasCadastro";
+import { type FichaQuadro, sugestoesDoQuadro } from "./sugestoesQuadro";
 
 // Cadastro com um clique: a licitação do quadro já tem número, UASG, itens e orçamento. A plataforma acha a compra
 // no Compras.gov.br, casa os itens pelo número, preenche valor (proposta/orçamento), marca e modelo (produto
 // cotado), marca os itens viáveis e só pede para confirmar. Nada é enviado sem a pessoa confirmar.
 
-interface Ficha {
-  licitacao: Licitacao;
-  itens: ItemLicitacao[];
-  cotacoes: Cotacao[];
-}
+type Ficha = FichaQuadro;
 
 interface Linha {
   item: ItemProposta;
@@ -46,42 +44,27 @@ interface Linha {
   erro: string;
 }
 
-const semZeros = (s: string | null | undefined) => (s ?? "").replace(/\D/g, "").replace(/^0+(?=\d)/, "");
-
-/** Monta as linhas: casa cada item do Compras.gov.br com o item da licitação (pelo número) e puxa o orçamento. */
+/**
+ * Monta as linhas: casa cada item do Compras.gov.br com o item da licitação (pelo número). O valor é o de
+ * referência do órgão; sigiloso ou não informado, calcula pelo orçamento. Marca só os viáveis.
+ */
 export function montarLinhas(itensCompras: ItemProposta[], ficha: Ficha, rascunho: RascunhoProposta | null): Linha[] {
-  const { licitacao: l, itens, cotacoes } = ficha;
-  const porNumero = new Map(itens.map((i) => [semZeros(i.numero), i]));
+  const sugestoes = sugestoesDoQuadro(itensCompras, ficha, rascunho);
   return itensCompras.map((it) => {
-    const nosso = porNumero.get(String(it.numero));
-    const linha: Linha = { item: it, marcado: false, valor: "", quantidade: textoNumero(it.quantidade), marca: "", modelo: "", origem: "", aviso: "", status: "", erro: "" };
+    const s = sugestoes.get(it.numero)!;
+    const linha: Linha = { item: it, marcado: false, valor: textoValor(s.valor), quantidade: textoNumero(it.quantidade), marca: s.marca, modelo: s.modelo, origem: s.origem, aviso: "", status: "", erro: "" };
     if (it.proposta) {
-      linha.valor = textoNumero(it.proposta.valor);
+      linha.valor = textoValor(it.proposta.valor);
       linha.marca = it.proposta.marca;
       linha.modelo = it.proposta.modelo;
       linha.quantidade = textoNumero(it.proposta.quantidade ?? it.quantidade);
       linha.origem = "Já cadastrada";
     }
     if (it.grupo) return { ...linha, aviso: "Item de grupo: cadastre pelo Compras.gov.br" };
-    if (!nosso) return { ...linha, aviso: it.proposta ? "" : "Este item não está na licitação do quadro" };
-    const escolhida = cotacaoDaProposta(cotacoes, nosso, l.imposto_percentual, l.lucro_percentual);
-    const r = rascunho?.itens?.[String(nosso.id)];
-    const valorRascunho = r?.valor ? paraNumero(r.valor) : null;
-    const valor = valorRascunho ?? (escolhida ? Math.round(escolhida.calculo.precoVenda * 100) / 100 : null);
-    if (!it.proposta) {
-      linha.valor = textoNumero(valor);
-      linha.marca = (r?.marca || escolhida?.cotacao.marca || "").trim();
-      linha.modelo = (escolhida?.cotacao.produto || "").trim();
-      linha.origem = valorRascunho != null ? "Valor da proposta" : escolhida ? "Preço de venda do orçamento" : "";
-    }
-    const estimado = it.valorEstimado ?? nosso.valor_referencia;
-    const v = paraNumero(linha.valor);
-    if (!nosso.participar || r?.incluir === false) linha.aviso = "Marcado para não participar";
-    else if (v == null) linha.aviso = "Sem orçamento: informe o valor";
-    else if (!it.desconto && estimado != null && v > estimado + 1e-9) linha.aviso = `Acima do estimado (${formatarMoeda(estimado)})`;
-    else if (escolhida && !it.desconto && v < escolhida.calculo.precoMinimo - 1e-9) linha.aviso = "Abaixo do custo com impostos";
-    // Viável: participa, tem valor dentro do estimado e ainda não foi cadastrado (ou mudou).
-    linha.marcado = !linha.aviso && !it.proposta;
+    if (!s.noQuadro) return { ...linha, aviso: it.proposta ? "" : "Este item não está na licitação do quadro" };
+    if (!s.participar) linha.aviso = "Marcado para não participar";
+    else if (!it.proposta) linha.aviso = s.aviso;
+    linha.marcado = !linha.aviso && !it.proposta && s.valor != null;
     return linha;
   });
 }
@@ -173,7 +156,8 @@ export function CadastroUmClique({ licitacaoId, aoFechar }: { licitacaoId: numbe
     modelo: x.modelo,
   });
   const problemas = marcadas.map((x) => problemaDaProposta(x.item, dadosDe(x))).filter(Boolean);
-  const total = useMemo(() => marcadas.reduce((s, x) => s + (x.item.desconto ? 0 : dadosDe(x).valor * dadosDe(x).quantidade), 0), [linhas]); // eslint-disable-line react-hooks/exhaustive-deps
+  const totalDe = (x: Linha) => (x.item.desconto ? 0 : x.item.porValorTotal ? dadosDe(x).valor : dadosDe(x).valor * dadosDe(x).quantidade);
+  const total = useMemo(() => marcadas.reduce((s, x) => s + totalDe(x), 0), [linhas]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const mudar = (i: number, n: Partial<Linha>) => setLinhas((ls) => ls.map((x, j) => (j === i ? { ...x, ...n } : x)));
 
@@ -263,7 +247,8 @@ export function CadastroUmClique({ licitacaoId, aoFechar }: { licitacaoId: numbe
                       <tr>
                         <th aria-label="Cadastrar" />
                         <th>Item</th>
-                        <th>Valor unit.</th>
+                        <th>Referência</th>
+                        <th>Valor</th>
                         <th>Qtde</th>
                         <th>Marca</th>
                         <th>Modelo</th>
@@ -291,15 +276,19 @@ export function CadastroUmClique({ licitacaoId, aoFechar }: { licitacaoId: numbe
                               {x.aviso && <span className="pequeno texto-amarelo">{x.aviso}</span>}
                               {x.erro && <span className="pequeno texto-vermelho">{x.erro}</span>}
                             </td>
-                            <td>
-                              <input value={x.valor} onChange={(e) => mudar(i, { valor: e.target.value })} inputMode="decimal" disabled={bloqueado} aria-label={`Valor do item ${x.item.numero}`} />
+                            <td className="col-referencia">
+                              {x.item.referencia.tipo === "valor" ? formatarMoeda(x.item.referencia.valor) : <span className={`chip ${x.item.referencia.tipo === "sigiloso" ? "amarelo" : "cinza"}`}>{textoReferencia(x.item.referencia)}</span>}
+                              {x.item.porValorTotal && <small className="texto-fraco">valor total</small>}
                             </td>
                             <td>
-                              <input value={x.quantidade} onChange={(e) => mudar(i, { quantidade: e.target.value })} inputMode="decimal" disabled={bloqueado || !x.item.srp} aria-label={`Quantidade do item ${x.item.numero}`} />
+                              <div className="entrada"><input value={x.valor} onChange={(e) => mudar(i, { valor: e.target.value })} inputMode="decimal" disabled={bloqueado} aria-label={`Valor do item ${x.item.numero}`} /></div>
                             </td>
-                            <td>{x.item.material ? <input value={x.marca} onChange={(e) => mudar(i, { marca: e.target.value })} disabled={bloqueado} aria-label={`Marca do item ${x.item.numero}`} /> : <span className="texto-fraco">—</span>}</td>
-                            <td>{x.item.material ? <input value={x.modelo} onChange={(e) => mudar(i, { modelo: e.target.value })} disabled={bloqueado} aria-label={`Modelo do item ${x.item.numero}`} /> : <span className="texto-fraco">—</span>}</td>
-                            <td className="col-total">{x.item.desconto ? `${x.valor}%` : d.valor ? formatarMoeda(d.valor * d.quantidade) : "—"}</td>
+                            <td>
+                              <div className="entrada"><input value={x.quantidade} onChange={(e) => mudar(i, { quantidade: e.target.value })} inputMode="decimal" disabled={bloqueado || !x.item.srp} aria-label={`Quantidade do item ${x.item.numero}`} /></div>
+                            </td>
+                            <td>{x.item.material ? <div className="entrada"><input value={x.marca} onChange={(e) => mudar(i, { marca: e.target.value })} disabled={bloqueado} aria-label={`Marca do item ${x.item.numero}`} /></div> : <span className="texto-fraco">—</span>}</td>
+                            <td>{x.item.material ? <div className="entrada"><input value={x.modelo} onChange={(e) => mudar(i, { modelo: e.target.value })} disabled={bloqueado} aria-label={`Modelo do item ${x.item.numero}`} /></div> : <span className="texto-fraco">—</span>}</td>
+                            <td className="col-total">{x.item.desconto ? `${x.valor}%` : d.valor ? formatarMoeda(totalDe(x)) : "—"}</td>
                           </tr>
                         );
                       })}

@@ -29,6 +29,12 @@ export const paraNumero = (s: string) => {
   return Number.isFinite(n) ? n : null;
 };
 export const textoNumero = (n: number | null | undefined) => (n == null ? "" : String(Math.round(n * 10000) / 10000).replace(".", ","));
+/** Valor em reais para o campo: 2 casas (4 quando o valor tem mais precisão). */
+export const textoValor = (n: number | null | undefined) => {
+  if (n == null) return "";
+  const quatro = Math.abs(Math.round(n * 100) - n * 100) > 1e-6;
+  return n.toFixed(quatro ? 4 : 2).replace(".", ",");
+};
 
 export interface PropostaDoItem {
   valor: number | null;
@@ -37,6 +43,13 @@ export interface PropostaDoItem {
   modelo: string;
   pais: string;
   margem: string;
+}
+
+/** Valor de referência do item (o máximo que o órgão aceita pagar), como a tela oficial mostra. */
+export type Referencia = { tipo: "valor"; valor: number } | { tipo: "sigiloso"; valor: null } | { tipo: "nao-informado"; valor: null };
+
+export function textoReferencia(r: Referencia) {
+  return r.tipo === "valor" ? null : r.tipo === "sigiloso" ? "Sigiloso" : "Não informado";
 }
 
 export interface ItemProposta {
@@ -51,7 +64,11 @@ export interface ItemProposta {
   margem: boolean;
   anexoObrigatorio: boolean;
   grupo: boolean;
+  /** Mesmo número de referencia.valor (null quando sigiloso ou não informado). */
   valorEstimado: number | null;
+  referencia: Referencia;
+  /** Disputa pelo valor total do item (o valor da proposta é o total, não o unitário). */
+  porValorTotal: boolean;
   proposta: PropostaDoItem | null;
 }
 
@@ -65,6 +82,15 @@ export function lerItem(b: unknown, srp: boolean): ItemProposta | null {
   const desconto = x.isPorMaiorDesconto === true || criterio === "2";
   const valores = obj(p.valores);
   const trat = txt(x.tipoTratamentoDiferenciadoMeEpp);
+  // Igual à tela oficial: sigiloso até homologar; sem valor = "Não informado".
+  const porValorTotal = x.disputaPorValorUnitario === false;
+  const ref = valorDe(porValorTotal ? x.valorEstimadoTotal : (x.valorEstimadoUnitario ?? x.valorEstimado ?? x.valorUnitarioEstimado));
+  const referencia: Referencia =
+    x.possuiOrcamentoSigiloso === true && x.homologado !== true
+      ? { tipo: "sigiloso", valor: null }
+      : ref != null && ref > 0
+        ? { tipo: "valor", valor: ref }
+        : { tipo: "nao-informado", valor: null };
   return {
     numero: n,
     descricao: txt(x.descricao ?? x.descricaoDetalhada) || `Item ${n}`,
@@ -77,7 +103,9 @@ export function lerItem(b: unknown, srp: boolean): ItemProposta | null {
     margem: x.utilizaMargemPreferencia === true,
     anexoObrigatorio: x.isObrigatorioEnvioAnexo === true,
     grupo: x.isGrupo === true,
-    valorEstimado: valorDe(x.valorEstimadoUnitario ?? x.valorEstimado ?? x.valorUnitarioEstimado),
+    valorEstimado: referencia.valor,
+    referencia,
+    porValorTotal,
     proposta: tem
       ? {
           valor: valorDe(valores.valorPropostaInicial) ?? valorDe(valores.valorPropostaInicialOuLances),
@@ -194,6 +222,46 @@ export async function enviarProposta(chave: string, it: ItemProposta, d: DadosPr
   };
   await pedir({ metodo: p ? "PUT" : "POST", caminho: `${FE}/v1/compras/${chave}/itens/${it.numero}/participacao`, corpo });
 }
+
+// ---------------- Valor a cadastrar ----------------
+
+export interface Sugestao {
+  valor: number | null;
+  marca: string;
+  modelo: string;
+  origem: string;
+  /** Motivo para não cadastrar sem olhar (vazio = viável). */
+  aviso: string;
+}
+
+/**
+ * Valor da proposta no cadastro: SEMPRE o valor de referência do órgão (o lance mínimo só vale na disputa).
+ * Orçamento sigiloso ou não informado: calcula pelo orçamento (preço de venda com o lucro e os impostos da licitação)
+ * ou usa o valor digitado na aba Proposta.
+ * @param venda preço de venda unitário pelo orçamento; @param custo custo unitário com impostos (lucro zero)
+ */
+export function valorSugerido(
+  it: ItemProposta,
+  o: { venda: number | null; custo: number | null; valorDigitado: number | null; marca: string; modelo: string },
+): Sugestao {
+  const q = it.quantidade ?? 1;
+  const vezes = (v: number | null) => (v == null ? null : Math.round((it.porValorTotal ? v * q : v) * 100) / 100);
+  const venda = vezes(o.venda);
+  const custo = vezes(o.custo);
+  const base = { marca: o.marca, modelo: o.modelo };
+  if (it.desconto) return { ...base, valor: null, origem: "", aviso: "Item por maior desconto: informe o desconto" };
+  if (it.referencia.tipo === "valor") {
+    const ref = it.referencia.valor;
+    const aviso = custo != null && custo > ref + 1e-9 ? `Seu custo com impostos (${dinheiro(custo)}) passa da referência` : "";
+    return { ...base, valor: ref, origem: "Valor de referência", aviso };
+  }
+  const rotulo = textoReferencia(it.referencia)!;
+  if (o.valorDigitado != null) return { ...base, valor: o.valorDigitado, origem: `${rotulo} · valor da aba Proposta`, aviso: "" };
+  if (venda != null) return { ...base, valor: venda, origem: `${rotulo} · calculado pelo orçamento`, aviso: "" };
+  return { ...base, valor: null, origem: rotulo, aviso: `${rotulo}: sem orçamento para calcular, informe o valor` };
+}
+
+const dinheiro = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 // ---------------- Declaração de equidade de gênero (níveis oficiais) ----------------
 
