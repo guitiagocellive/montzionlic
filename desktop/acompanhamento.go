@@ -645,8 +645,8 @@ func (m *motor) lerAcomp(caminho, query string, captcha bool) (respostaDireta, e
 	return respostaDireta{Status: status, Corpo: corpo}, nil
 }
 
-// falhou: o pedido não chegou ou o Compras.gov.br recusou (vazio com "ok" não é falha; 204 = sem conteúdo).
-func falhou(r respostaDireta, err error) bool { return err != nil || !okHTTP(r.Status) }
+// leituraFalhou: o pedido não chegou ou o Compras.gov.br recusou (vazio com "ok" não é falha; 204 = sem conteúdo).
+func leituraFalhou(r respostaDireta, err error) bool { return err != nil || !okHTTP(r.Status) }
 
 func motivoLeitura(r respostaDireta, err error) string {
 	if err != nil {
@@ -687,7 +687,7 @@ func (m *motor) detalharDireto(c compraAcomp) *detalheCompra {
 			status, dados, err3 := m.pedir("GET", "/comprasnet-disputa/v1/compras/"+k+"/itens/em-disputa", nil)
 			if err3 == nil && okHTTP(status) && len(listaQualquer(dados)) > 0 {
 				d.Itens, d.OrigemItens = juntarLista(listaQualquer(dados)), "disputa"
-			} else if falhou(r, err) || falhou(r2, err2) || falhou(respostaDireta{Status: status}, err3) {
+			} else if leituraFalhou(r, err) || leituraFalhou(r2, err2) || leituraFalhou(respostaDireta{Status: status}, err3) {
 				d.Erros = append(d.Erros, "itens: seleção "+motivoLeitura(r, err)+" / todos "+motivoLeitura(r2, err2)+" / disputa "+motivoLeitura(respostaDireta{Status: status, Corpo: dados}, err3))
 			} else {
 				d.Itens, d.OrigemItens = juntarLista(nil), "itens" // a compra respondeu, só que sem itens
