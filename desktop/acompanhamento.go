@@ -131,8 +131,8 @@ const scriptAcompanhamento = `(async (entrada) => {
       const t = await r.text();
       let d = null;
       try { d = t ? JSON.parse(t) : null; } catch (e) {}
-      return { status: r.status, dados: d, texto: r.ok ? "" : t.slice(0, 160), paginas: r.headers.get("pages-count"), total: r.headers.get("register-count") };
-    } catch (e) { return { status: 0, dados: null, texto: String(e).slice(0, 160) }; }
+      return { status: r.status, ok: r.ok, dados: d, texto: r.ok ? "" : t.slice(0, 160), paginas: r.headers.get("pages-count"), total: r.headers.get("register-count") };
+    } catch (e) { return { status: 0, ok: false, dados: null, texto: String(e).slice(0, 160) }; }
   };
   // A resposta pode ser a lista ou um objeto com a lista dentro (o nome do campo varia entre as telas).
   const lista = (d) => {
@@ -153,7 +153,8 @@ const scriptAcompanhamento = `(async (entrada) => {
     const todas = [];
     for (let pagina = 0; pagina < maxPaginas; pagina++) {
       const r = await pegar("/comprasnet-fase-externa/v1/compras/participacoes?filtro=" + filtro + "&pagina=" + pagina + "&tamanhoPagina=10", true);
-      if (r.status !== 200) {
+      // 200 ou 206 (o Compras.gov.br responde listas paginadas com 206 "conteúdo parcial").
+      if (!r.ok) {
         saida.erros.push("participações (" + filtro + ", página " + (pagina + 1) + "): " + r.status + " " + r.texto);
         return pagina === 0 ? null : todas;
       }
@@ -171,16 +172,16 @@ const scriptAcompanhamento = `(async (entrada) => {
     const d = { erros: [] };
     const e = encodeURIComponent(c.chave);
     const p = await pegar("/comprasnet-fase-externa/v1/compras/" + e + "/participacao", false);
-    if (p.status === 200) d.participacao = p.dados; else d.erros.push("participação: " + p.status);
+    if (p.ok) d.participacao = p.dados; else d.erros.push("participação: " + p.status);
     const it = await pegar("/comprasnet-fase-externa/v1/compras/" + e + "/itens/em-selecao-fornecedores?filtro=2&pagina=0&tamanhoPagina=100", true);
-    if (it.status === 200 && lista(it.dados).length) { d.itens = lista(it.dados).slice(0, 150); d.origemItens = "selecao"; }
+    if (it.ok && lista(it.dados).length) { d.itens = lista(it.dados).slice(0, 150); d.origemItens = "selecao"; }
     else {
       const it2 = await pegar("/comprasnet-fase-externa/v1/compras/" + e + "/itens?pagina=0&tamanhoPagina=100", true);
-      if (it2.status === 200) { d.itens = lista(it2.dados).slice(0, 150); d.origemItens = "itens"; }
+      if (it2.ok) { d.itens = lista(it2.dados).slice(0, 150); d.origemItens = "itens"; }
       else d.erros.push("itens: " + it.status + "/" + it2.status + " " + it2.texto);
     }
     const m = await pegar("/comprasnet-mensagem/v2/chat/" + e + "?legadoAsp=" + !!c.legado + "&size=50&page=0", true);
-    if (m.status === 200) d.mensagens = lista(m.dados).slice(0, 80); else d.erros.push("mensagens: " + m.status);
+    if (m.ok) d.mensagens = lista(m.dados).slice(0, 80); else d.erros.push("mensagens: " + m.status);
     saida.detalhes[c.chave] = d;
   }
   return JSON.stringify(saida);

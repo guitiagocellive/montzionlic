@@ -1,8 +1,8 @@
 {
-  "versao": "3.0.9",
+  "versao": "3.1.0",
   "data": "2026-11-12",
   "novidades": [
-    "Acompanhamento: corrigido \"nenhuma participação\" — agora lê todas as páginas de \"Minhas participações\", como a tela oficial.",
+    "Acompanhamento: corrigido \"nenhuma participação\" — o Compras.gov.br responde as listas com o código 206 e o aplicativo descartava a resposta. Agora as suas participações aparecem.",
     "Cada item abre as telas do Compras.gov.br na plataforma: propostas de todas as empresas (colocação, marca, modelo, valor, situação), anexos de cada empresa para baixar, lances, chat do item, diligências e fase recursal.",
     "Botão \"Conferir anexos das empresas à sua frente\": mostra quem não enviou anexos.",
     "Ações sem sair da plataforma, sempre com confirmação: enviar e excluir anexos, intenção de recurso, recurso e contrarrazão."
