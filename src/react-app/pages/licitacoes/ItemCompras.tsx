@@ -1,4 +1,5 @@
-import { ChevronDown, ChevronLeft, ChevronRight, Download, FileUp, Loader2, Paperclip, RefreshCw, Send, Trash2 } from "lucide-react";
+import { ErroCompras } from "../../robo/ErroCompras";
+import { ChevronDown, ChevronLeft, ChevronRight, Download, FileUp, Loader2, Paperclip, Send, Trash2 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type AnexoCompras,
@@ -115,12 +116,7 @@ function Estado({ carregando, erro, recarregar, children }: { carregando: boolea
     );
   if (erro)
     return (
-      <div className="alerta erro linha-erro-item">
-        <span>{erro}</span>
-        <button className="botao secundario pequeno" onClick={recarregar}>
-          <RefreshCw /> Tentar de novo
-        </button>
-      </div>
+      <ErroCompras erro={erro} aoTentar={recarregar} />
     );
   return <>{children}</>;
 }

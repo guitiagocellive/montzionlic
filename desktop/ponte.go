@@ -715,6 +715,9 @@ func (p *ponte) executar(tipo, compra string, item int, valor float64, fase stri
 		if !chaveValida.MatchString(compra) || item <= 0 || !(valor > 0) || len(fase) > 4 {
 			return mapa{"erro": "Lance inválido."}
 		}
+		if p.motor != nil {
+			return p.motor.LanceManual(compra, item, valor, fase)
+		}
 		status, corpo, err := p.api("POST", fmt.Sprintf("/comprasnet-disputa/v1/compras/%s/itens/%d/lances", url.PathEscape(compra), item), mapa{"valorInformado": valor, "faseItem": fase})
 		if err != nil {
 			return mapa{"erro": err.Error()}

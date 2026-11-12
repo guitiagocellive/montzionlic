@@ -388,6 +388,7 @@ export async function buscarCompras(numeroTexto: string, uasgTexto: string, comC
   } catch {
     /* PNCP fora do ar: segue para o Compras.gov.br */
   }
+  let falha: unknown = null; // erro que não é "compra não existe" (sem sessão, rede...)
   if (comCompras) {
     const anoAtual = new Date().getFullYear();
     const anos = ano ? [ano] : [String(anoAtual), String(anoAtual - 1)];
@@ -409,14 +410,18 @@ export async function buscarCompras(numeroTexto: string, uasgTexto: string, comC
             fonte: "compras",
           });
         } catch (e) {
+          const msg = mensagemDeErro(e);
+          if (!/vinculad|participante|não encontrad|nao encontrad|404|not found/i.test(msg)) falha ??= e;
           // A compra existe, só que a empresa ainda não participa dela.
-          if (/vinculad|participante/i.test(mensagemDeErro(e))) {
+          if (/vinculad|participante/i.test(msg)) {
             achadas.set(chave, { chave, titulo: tituloDaChave(chave), orgao: `UASG ${uasg}`, objeto: "", encerramento: null, situacao: "", fonte: "compras" });
           }
         }
       }),
     );
   }
+  // Nada achado porque o Compras.gov.br não respondeu (ex.: sem sessão): mostra o erro, não "não achei".
+  if (!achadas.size && falha) throw falha;
   // Mais recentes primeiro.
   return [...achadas.values()].sort((a, b) => b.chave.slice(13).localeCompare(a.chave.slice(13)) || a.chave.localeCompare(b.chave));
 }

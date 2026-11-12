@@ -131,10 +131,9 @@ func decidir(e estadoItem, c *configItem) decisao {
 	}
 	nosso := *e.Nosso
 	if e.Fase == "LF" {
-		if minimo >= nosso {
-			return decisao{Tipo: "fechada", Motivo: "Etapa fechada: nosso lance já está no mínimo"}
-		}
-		return decisao{Enviar: true, Tipo: "fechada", Valor: minimo, Motivo: "Etapa fechada: lance único no mínimo (" + reaisTexto(minimo, q) + ")"}
+		// Etapa fechada: lance único e às cegas. O robô NÃO envia sozinho: sugere o mínimo e a pessoa confirma
+		// o valor na tela (se tiver sido convocada para a etapa fechada).
+		return decisao{Tipo: "fechada-manual", Motivo: "Etapa fechada: confira e envie o seu lance único (sugestão: " + reaisTexto(minimo, q) + ")"}
 	}
 	if e.Situacao == "G" {
 		return decisao{Tipo: "ganhando", Motivo: "Ganhando"}

@@ -1,3 +1,4 @@
+import { ErroCompras } from "../../robo/ErroCompras";
 import {
   Building2,
   CalendarClock,
@@ -152,7 +153,7 @@ export function NovaProposta({
           O ano é opcional: sem ele, a busca olha este ano e o anterior.
         </span>
       </form>
-      {busca.erro && <p className="alerta erro">{busca.erro}</p>}
+      {busca.erro && <ErroCompras erro={busca.erro} aoTentar={procurar} />}
       {busca.carregando && (
         <p className="texto-suave carregando-marcas">
           <Loader2 className="girando" size={16} /> Procurando no PNCP e no
@@ -254,12 +255,7 @@ export function CadastroProposta({
             Compras.gov.br…
           </p>
         ) : estado.erro ? (
-          <div className="alerta erro linha-erro-item">
-            <span>{estado.erro}</span>
-            <button className="botao secundario pequeno" onClick={recarregar}>
-              Tentar de novo
-            </button>
-          </div>
+          <ErroCompras erro={estado.erro} aoTentar={recarregar} />
         ) : dados ? (
           <ConteudoCadastro
             chave={chave}

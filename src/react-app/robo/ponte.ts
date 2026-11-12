@@ -102,6 +102,10 @@ export interface PainelRobo {
   ultimoLance: { valor: number; em: number; reacaoMs: number } | null;
   /** Último lance enviado em cada item ("compra:item"), com a resposta do Compras.gov.br. */
   ultimosPorItem?: Record<string, { valor: number; ok: boolean; mensagem: string; em: number }>;
+  /** Disputas que acabaram: em que posição ficamos em cada item. */
+  resultados?: { compra: string; item: number; descricao: string; posicao: number; total: number; nosso: number | null; primeiro: number | null; robo: boolean; em: number }[];
+  /** Situação do fornecedor na rodada: código → nome (CONVOCADO, PARTICIPANTE_NAO_CONVOCADO_FASE_FECHADA...). */
+  enumsRodada?: Record<string, string> | null;
   /** Os 3 últimos lances de cada item, o mais novo primeiro (posicao = colocação que o lance buscava). */
   recentesPorItem?: Record<string, { valor: number; ok: boolean; mensagem: string; em: number; posicao?: number; tipo?: string }[]>;
 }

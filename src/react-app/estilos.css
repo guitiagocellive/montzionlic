@@ -12713,3 +12713,117 @@ label.botao.desativado {
   font-variant-numeric: tabular-nums;
   min-width: 64px;
 }
+
+/* ---------- Disputas: etapa fechada, conexão, resultados ---------- */
+.etapa-fechada {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 170px auto;
+  gap: 10px;
+  align-items: center;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--acento) 10%, transparent);
+  border: 1px solid color-mix(in oklab, var(--acento) 35%, transparent);
+  font-size: 0.84rem;
+}
+.etapa-fechada > div {
+  display: grid;
+  gap: 2px;
+}
+.etapa-fechada > div span {
+  color: var(--texto-suave);
+  font-size: 0.78rem;
+}
+p.etapa-fechada {
+  display: block;
+}
+.etapa-fechada.nao {
+  background: var(--vermelho-fundo);
+  border-color: color-mix(in oklab, var(--vermelho) 40%, transparent);
+  color: var(--vermelho);
+}
+.etapa-fechada.ok {
+  background: color-mix(in oklab, var(--verde) 10%, transparent);
+  border-color: color-mix(in oklab, var(--verde) 35%, transparent);
+  color: var(--verde);
+}
+@media (max-width: 760px) {
+  .etapa-fechada {
+    grid-template-columns: 1fr;
+  }
+}
+.alerta-conexao {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: piscar-suave 1.6s ease-in-out infinite;
+}
+@keyframes piscar-suave {
+  50% {
+    opacity: 0.7;
+  }
+}
+.resultados-disputa {
+  display: grid;
+  gap: 16px;
+}
+.resultados-disputa h3 {
+  margin: 0 0 8px;
+  font-size: 0.92rem;
+}
+.resultados-disputa ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.resultados-disputa li {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--superficie-2);
+}
+.resultados-disputa li > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.resultados-disputa .medalha {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  font-weight: 700;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+}
+.resultados-disputa li.primeiro .medalha {
+  background: linear-gradient(135deg, #facc15, #f59e0b);
+  color: #422006;
+  border: 0;
+}
+.resultados-disputa li.podio .medalha {
+  background: color-mix(in oklab, var(--acento) 25%, var(--superficie));
+}
+
+/* ---------- Erro do Compras.gov.br com "Entrar com gov.br" ---------- */
+.erro-compras {
+  flex-wrap: wrap;
+}
+.erro-compras em {
+  display: block;
+  margin-top: 4px;
+  font-style: normal;
+  color: var(--texto-suave);
+}
+.botoes-erro-compras {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}

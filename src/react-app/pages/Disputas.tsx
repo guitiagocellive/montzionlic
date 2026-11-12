@@ -55,6 +55,7 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
   const lancesEnviados = useRef(new Set<number>());
   const configRef = useRef(config);
   configRef.current = config;
+  const painelRef = useRef<PainelRobo | null>(null);
   const [som, setSom] = useState(() => {
     try {
       return localStorage.getItem("disputas-som") !== "0";
@@ -66,6 +67,20 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
   const [tremendo, setTremendo] = useState<Map<string, number>>(new Map());
   const melhoresAntes = useRef(new Map<string, number>());
   const avisosDados = useRef(new Set<string>());
+  // Resultado das disputas que acabaram: junta por alguns segundos (várias dispensas acabam às 14h) e mostra.
+  const [resultadosNaTela, setResultadosNaTela] = useState<NonNullable<PainelRobo["resultados"]> | null>(null);
+  const vistos = useRef<Set<string>>(
+    (() => {
+      try {
+        return new Set<string>(JSON.parse(localStorage.getItem("disputas-resultados-vistos") || "[]"));
+      } catch {
+        return new Set<string>();
+      }
+    })(),
+  );
+  const juntando = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [fechada, setFechada] = useState<Record<string, string>>({});
+  const [enviandoFechada, setEnviandoFechada] = useState<string | null>(null);
 
   // A ponte pode aparecer um pouco depois da página carregar.
   useEffect(() => {
@@ -85,6 +100,7 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
         if (!vivo) return;
         erros = 0;
         setPainel(p);
+        painelRef.current = p;
         setLidoEm(Date.now());
       } catch (e) {
         if (/Pedido desconhecido|desconhecido/i.test(mensagemDeErro(e))) setAntigo(true);
@@ -150,6 +166,53 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
         }
       }
   }, [agora]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Disputas encerradas: abre a janela com a posição em cada item.
+  useEffect(() => {
+    const novos = (painel?.resultados ?? []).filter((r) => !vistos.current.has(`${r.compra}:${r.item}:${r.em}`));
+    if (!novos.length || juntando.current) return;
+    juntando.current = setTimeout(() => {
+      juntando.current = null;
+      const todos = (painelRef.current?.resultados ?? []).filter((r) => !vistos.current.has(`${r.compra}:${r.item}:${r.em}`));
+      if (!todos.length) return;
+      todos.forEach((r) => vistos.current.add(`${r.compra}:${r.item}:${r.em}`));
+      try {
+        localStorage.setItem("disputas-resultados-vistos", JSON.stringify([...vistos.current].slice(-300)));
+      } catch {
+        /* sem armazenamento */
+      }
+      setResultadosNaTela((atual) => [...(atual ?? []), ...todos]);
+      if (som) tocar("aviso");
+    }, 4000);
+  }, [painel?.resultados]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Pregões podem durar horas: se a ligação com o Compras.gov.br cair com robô ligado, avisa na hora (e toca).
+  const roboLigado = Object.values(config).some((c) => c.ligado);
+  const conexaoRuim =
+    roboLigado && ligada && (!painel || agora - lidoEm > 4000 || (painel.fase !== "pronto" && painel.fase !== "erro-lista") || painel.conectado === false);
+  const ultimoAlarme = useRef(0);
+  useEffect(() => {
+    if (!conexaoRuim || !som || Date.now() - ultimoAlarme.current < 15000) return;
+    ultimoAlarme.current = Date.now();
+    tocar("urgente");
+  }, [conexaoRuim, agora]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function enviarFechada(k: string, compra: string, item: ItemDisputa, quatro: boolean) {
+    const valor = paraNumero(fechada[k] ?? "");
+    if (!(valor && valor > 0)) return avisar("Informe o valor do lance fechado.", "erro");
+    if (item.nossoLance != null && valor >= item.nossoLance) return avisar("O lance fechado precisa ser menor que o seu lance atual.", "erro");
+    if (!window.confirm(`Enviar o lance ÚNICO da etapa fechada no item ${item.numero}?\n\n${moeda(valor, quatro)}\n\nDepois de enviado, não dá para mudar.`)) return;
+    setEnviandoFechada(k);
+    try {
+      const r = await ponte.lance(compra, item.numero, valor, item.fase);
+      if (!r.ok) throw new Error(r.mensagem || `O Compras.gov.br recusou (${r.status}).`);
+      avisar(`Lance fechado de ${moeda(valor, quatro)} enviado.`);
+    } catch (e) {
+      avisar(mensagemDeErro(e), "erro");
+    } finally {
+      setEnviandoFechada(null);
+    }
+  }
 
   // Configuração dos itens: vem da plataforma (vale para a equipe) e vai para o robô do aplicativo.
   const chavesCompras = compras.map((c) => c.compra.chave).join(",");
@@ -423,9 +486,44 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
                         {SEGUNDOS_FINAIS} segundos para cobrir
                       </label>
                     </div>
+                    {i.fase === "LF" &&
+                      (() => {
+                        const nome = painel?.enumsRodada?.[i.situacaoRodada] ?? "";
+                        const naoConvocado = /NAO_CONVOCADO/.test(nome);
+                        const enviou = /ENVIOU_NOVO_LANCE_FASE_FECHADA|PARTICIPOU_FASE_FECHADA/.test(nome);
+                        const ignorou = /IGNOROU/.test(nome);
+                        if (naoConvocado) return <p className="etapa-fechada nao">Você não foi convocado para a etapa fechada deste item.</p>;
+                        if (enviou) return <p className="etapa-fechada ok">Lance fechado enviado. Agora é aguardar o resultado.</p>;
+                        if (ignorou) return <p className="etapa-fechada nao">A etapa fechada terminou sem o seu lance.</p>;
+                        return (
+                          <div className="etapa-fechada">
+                            <div>
+                              <strong>Etapa fechada{nome === "CONVOCADO" ? ": você foi convocado" : ""}</strong>
+                              <span>Lance único e às cegas. Confira o valor e envie você mesmo (sugestão: o seu mínimo).</span>
+                            </div>
+                            <span className="entrada">
+                              <input
+                                inputMode="decimal"
+                                value={fechada[k] ?? textoNumero(cfg.minimo)}
+                                onChange={(e) => setFechada((f) => ({ ...f, [k]: e.target.value }))}
+                                aria-label={`Lance fechado do item ${i.numero}`}
+                                placeholder="0,00"
+                              />
+                            </span>
+                            <button className="botao acento" disabled={enviandoFechada === k} onClick={() => enviarFechada(k, c.chave, i, cfg.quatroCasas)}>
+                              Enviar lance fechado
+                            </button>
+                          </div>
+                        );
+                      })()}
                     {cfg.ligado && <p className="aviso-robo-travado">Robô ligado com mínimo de {moeda(cfg.minimo, cfg.quatroCasas)}. Para mudar o mínimo, pare o robô (■), altere e ligue de novo.</p>}
                     <div className="item-disputa-rodape">
-                      <span className="texto-fraco pequeno">{FASES[i.fase] ?? i.fase}</span>
+                      <span className="texto-fraco pequeno">
+                        {FASES[i.fase] ?? i.fase}
+                        {i.variacaoMinima != null && i.variacaoMinima > 0 && (
+                          <> · intervalo mínimo entre lances (edital): {i.tipoVariacao === "P" ? `${textoNumero(i.variacaoMinima)}%` : moeda(i.variacaoMinima, cfg.quatroCasas)}</>
+                        )}
+                      </span>
                       <span className={`mensagem-robo ${msg?.erro ? "erro" : ""}`}>{cfg.ligado ? (msg?.texto ?? "Robô ligado") : "Robô parado"}</span>
                     </div>
                     {(() => {
@@ -608,6 +706,13 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
           </div>
 
           {fase === "erro-lista" && painel?.aviso && <p className="alerta erro">{painel.aviso}</p>}
+          {conexaoRuim && (
+            <p className="alerta erro alerta-conexao">
+              <TriangleAlert size={16} /> Robô ligado, mas a ligação com o Compras.gov.br está instável
+              {painel?.fase === "sem-login" || painel?.conectado === false ? " (sessão expirada: clique em Entrar com gov.br)" : ""}. Confira a internet e o
+              aplicativo.
+            </p>
+          )}
 
           {conferindo > 0 && (
             <p className="conferindo-disputas">
@@ -634,6 +739,9 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
             </details>
           )}
         </>
+      )}
+      {resultadosNaTela && resultadosNaTela.length > 0 && (
+        <JanelaResultados resultados={resultadosNaTela} compras={compras} aoFechar={() => setResultadosNaTela(null)} />
       )}
       {classificacao && <JanelaClassificacao {...classificacao} quatro={(config[`${classificacao.compra}:${classificacao.item}`] ?? ITEM_ROBO_PADRAO).quatroCasas} aoFechar={() => setClassificacao(null)} />}
     </>
@@ -725,4 +833,44 @@ function tocar(tipo: "aviso" | "urgente" | "final" | "lance") {
   } catch {
     /* sem áudio neste navegador */
   }
+}
+
+/** Fim das disputas: em que posição ficamos em cada item, agrupado por licitação. */
+function JanelaResultados({ resultados, compras, aoFechar }: { resultados: NonNullable<PainelRobo["resultados"]>; compras: CompraNaTela[]; aoFechar: () => void }) {
+  const porCompra = new Map<string, typeof resultados>();
+  for (const r of resultados) porCompra.set(r.compra, [...(porCompra.get(r.compra) ?? []), r]);
+  const titulo = (chave: string) => {
+    const c = compras.find((x) => x.compra.chave === chave)?.compra ?? lerCompra({ chaveCompra: chave });
+    return c ? [c.titulo, c.orgao].filter(Boolean).join(" · ") : chave;
+  };
+  return (
+    <Modal titulo="Disputas encerradas" aoFechar={aoFechar}>
+      <div className="resultados-disputa">
+        {[...porCompra.entries()].map(([chave, itens]) => (
+          <section key={chave}>
+            <h3>{titulo(chave)}</h3>
+            <ul>
+              {itens
+                .sort((a, b) => a.item - b.item)
+                .map((r) => (
+                  <li key={`${r.item}-${r.em}`} className={r.posicao === 1 ? "primeiro" : r.posicao > 0 && r.posicao <= 3 ? "podio" : ""}>
+                    <span className="medalha">{r.posicao > 0 ? `${r.posicao}º` : "—"}</span>
+                    <div>
+                      <strong>
+                        Item {r.item}
+                        {r.descricao ? ` - ${r.descricao}` : ""}
+                      </strong>
+                      <span className="texto-fraco pequeno">
+                        {r.posicao > 0 ? `${r.posicao}º lugar${r.total ? ` de ${r.total}` : ""}` : "posição não informada"} · seu lance {moeda(r.nosso, false)}
+                        {r.posicao !== 1 && r.primeiro != null && ` · 1º lugar com ${moeda(r.primeiro, false)}`}
+                      </span>
+                    </div>
+                  </li>
+                ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+    </Modal>
+  );
 }

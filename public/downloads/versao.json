@@ -1,8 +1,11 @@
 {
-  "versao": "3.1.16",
+  "versao": "3.1.17",
   "data": "2026-11-12",
   "novidades": [
-    "Disputas: cada item mostra os 3 últimos lances do robô com a hora, o valor e o objetivo (\"lance para ficar em 1º lugar\", \"em 2º lugar\"...); recusa aparece em vermelho com o motivo.",
-    "Lances mais rápidos nos segundos finais: o aplicativo usa HTTP/2 e mantém a conexão com o Compras.gov.br aberta, sem abrir conexão nova na hora do lance."
+    "Fim das disputas: abre uma janela com a sua posição em cada item de cada licitação (seu lance e o do 1º lugar). Várias que acabam juntas (ex.: dispensas às 14h) vêm na mesma janela.",
+    "Etapa fechada: o robô não envia sozinho. Ele sugere o seu mínimo e você confirma e envia; se você não foi convocado para a etapa fechada, a tela avisa.",
+    "Pregões longos: se a ligação com o Compras.gov.br cair com o robô ligado, aparece um alerta vermelho e toca um aviso.",
+    "O item mostra o intervalo mínimo entre lances do edital (o robô sempre respeita esse valor).",
+    "Sem sessão no Compras.gov.br: além de \"Tentar de novo\", agora tem \"Entrar com gov.br\" ali mesmo (quadro, cadastro e acompanhamento) e a plataforma tenta de novo sozinha depois do login."
   ]
 }

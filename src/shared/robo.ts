@@ -59,7 +59,7 @@ export interface EstadoItem {
 
 export type TipoDecisao =
   | "desligado" | "sem-minimo" | "aguardando-fase" | "ganhando" | "aguardando-final" | "lance" | "colocacao"
-  | "melhor-possivel" | "precisa-classificacao" | "no-minimo" | "fechada" | "sem-proposta";
+  | "melhor-possivel" | "precisa-classificacao" | "no-minimo" | "fechada" | "fechada-manual" | "sem-proposta";
 
 export interface Decisao {
   acao: "aguardar" | "enviar";
@@ -103,10 +103,9 @@ export function decidir(estado: EstadoItem, item: ConfigItemRobo | undefined): D
   if (!FASES_DE_LANCE.has(estado.fase)) return { acao: "aguardar", tipo: "aguardando-fase", motivo: FASES[estado.fase] ?? "Aguardando a fase de lances" };
   if (estado.nossoLance == null) return { acao: "aguardar", tipo: "sem-proposta", motivo: "Sem lance nosso neste item" };
 
-  // Etapa fechada: lance único, sem ver os outros. Vai no mínimo.
+  // Etapa fechada: lance único, sem ver os outros. A pessoa confirma o valor na tela (sugestão: o mínimo).
   if (estado.fase === "LF") {
-    if (minimo >= estado.nossoLance) return { acao: "aguardar", tipo: "fechada", motivo: "Etapa fechada: nosso lance já está no mínimo" };
-    return { acao: "enviar", tipo: "fechada", valor: minimo, motivo: `Etapa fechada: lance único no mínimo (${reais(minimo, q)})` };
+    return { acao: "aguardar", tipo: "fechada-manual", motivo: `Etapa fechada: confira e envie o seu lance único (sugestão: ${reais(minimo, q)})` };
   }
 
   if (estado.situacao === "G") return { acao: "aguardar", tipo: "ganhando", motivo: "Ganhando" };
@@ -211,6 +210,8 @@ export interface ItemDisputa extends EstadoItem {
   fimEm: number | null;
   /** Colocação pela última classificação lida pelo robô. */
   colocacao: { posicao: number; total: number } | null;
+  /** Situação do fornecedor na rodada (código do Compras.gov.br; o nome vem em painel.enumsRodada). */
+  situacaoRodada: string;
 }
 
 /** Converte um item vindo de /comprasnet-disputa/v1/compras/{compra}/itens/em-disputa. */
@@ -222,6 +223,7 @@ export function lerItemDisputa(bruto: Record<string, unknown>): ItemDisputa {
     quantidade: numero(bruto.quantidade),
     valorEstimado: numero(bruto.valorEstimado),
     fimEm: numero(bruto.fimEm),
+    situacaoRodada: bruto.situacaoParticipacaoRodada == null ? "" : String(bruto.situacaoParticipacaoRodada),
     colocacao: (() => {
       const c = bruto.classificacaoRobo as { posicao?: number; total?: number } | undefined;
       return c && c.posicao ? { posicao: Number(c.posicao), total: Number(c.total) || 0 } : null;

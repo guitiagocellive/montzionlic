@@ -23,7 +23,7 @@ func TestDecidir(t *testing.T) {
 		{"segundos finais sem classificação: NÃO vai ao mínimo", estadoItem{Fase: "LA", RestanteSeg: f(3), Melhor: f(850), Nosso: f(1000), Situacao: "P"}, false, 0, "precisa-classificacao"},
 		{"sem classificação e com tempo: não desce ao mínimo", estadoItem{Fase: "LA", Melhor: f(850), Nosso: f(1000), Situacao: "P"}, false, 0, "precisa-classificacao"},
 		{"no mínimo para", estadoItem{Fase: "LA", RestanteSeg: f(3), Melhor: f(890), Nosso: f(900), Situacao: "P"}, false, 0, "no-minimo"},
-		{"fechada vai no mínimo", estadoItem{Fase: "LF", Melhor: f(950), Nosso: f(1000)}, true, 900, "fechada"},
+		{"fechada: não envia sozinho, sugere o mínimo", estadoItem{Fase: "LF", Melhor: f(950), Nosso: f(1000)}, false, 0, "fechada-manual"},
 		{"aleatório cobre sem esperar", estadoItem{Fase: "AL", Melhor: f(980), Nosso: f(1000), Situacao: "P"}, true, 975.10, "lance"},
 		{"fora da fase", estadoItem{Fase: "F", Melhor: f(980), Nosso: f(1000)}, false, 0, "aguardando-fase"},
 		{"intervalo do edital (R$ 10)", estadoItem{Fase: "LA", RestanteSeg: f(5), Melhor: f(980), Nosso: f(1000), Situacao: "P", Variacao: f(10), TipoVariacao: "V"}, true, 970, "lance"},

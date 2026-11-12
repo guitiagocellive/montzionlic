@@ -100,16 +100,20 @@ type motor struct {
 
 	acomp acompanhamento // aba Acompanhamento (participações, itens, mensagens)
 
-	ranking   map[string]*classificacaoItem // classificação (melhor lance de cada participante) por item
-	recentes  map[string][]registroLance
-	passoConc map[string]bool          // itens em que o Compras exigiu o intervalo também sobre o concorrente
-	ultimos   map[string]registroLance // último lance enviado por item (com a resposta do Compras.gov.br)
+	ranking  map[string]*classificacaoItem // classificação (melhor lance de cada participante) por item
+	recentes map[string][]registroLance
+	// Resultado de cada disputa que acabou (para a tela mostrar em que posição ficamos em cada item).
+	resultados  []resultadoDisputa
+	fimVisto    map[string]bool
+	enumsRodada map[string]string        // situacaoParticipacaoRodada: valor -> nome (CONVOCADO, PARTICIPANTE_NAO_CONVOCADO_FASE_FECHADA...)
+	passoConc   map[string]bool          // itens em que o Compras exigiu o intervalo também sobre o concorrente
+	ultimos     map[string]registroLance // último lance enviado por item (com a resposta do Compras.gov.br)
 }
 
 func novoMotor(p *ponte) *motor {
 	m := &motor{
 		p: p, compras: map[string]*compraMotor{}, config: map[string]configItem{}, mensagens: map[string]mensagemItem{},
-		enviando: map[string]time.Time{}, fechadaOK: map[string]bool{}, inscricoes: map[string]string{}, ranking: map[string]*classificacaoItem{}, ultimos: map[string]registroLance{}, recentes: map[string][]registroLance{}, passoConc: map[string]bool{},
+		enviando: map[string]time.Time{}, fechadaOK: map[string]bool{}, inscricoes: map[string]string{}, ranking: map[string]*classificacaoItem{}, ultimos: map[string]registroLance{}, recentes: map[string][]registroLance{}, fimVisto: map[string]bool{}, passoConc: map[string]bool{},
 		fase: "sem-login", versaoSistema: "6.4.4", plataforma: "WEB",
 		// HTTP/2 (quando o Compras.gov.br aceita): o lance vai pela conexão já aberta, mesmo com outras leituras em
 		// andamento, sem esperar um aperto de mão TLS novo (100–300 ms a mais justamente nos segundos finais).
@@ -557,6 +561,12 @@ func (m *motor) atualizarLista() {
 	registrarLog("robô: %d compra(s) na lista (%d encerradas ficaram de fora)", len(ordem), descartadas)
 	m.definirFase("pronto", "")
 	m.inscreverTodas()
+	m.mu.Lock()
+	semEnums := m.enumsRodada == nil
+	m.mu.Unlock()
+	if semEnums {
+		go m.carregarEnumsRodada()
+	}
 }
 
 func (m *motor) roboNaCompra(chave string) bool {
@@ -581,8 +591,12 @@ func (m *motor) mesclar(c *compraMotor, novo map[string]any, agora time.Time) st
 		it = &itemMotor{bruto: map[string]any{}}
 		c.itens[int(*n)] = it
 	}
+	faseAntes := textoDe(it.bruto["fase"])
 	for k, v := range novo {
 		it.bruto[k] = v
+	}
+	if fasesDeLance[faseAntes] && textoDe(it.bruto["fase"]) == "E" {
+		m.fimDaDisputa(c.chave, int(*n))
 	}
 	if _, ok := novo["tempoRestanteEmSegundos"]; ok {
 		it.recebidoEm = agora
@@ -641,6 +655,7 @@ func (m *motor) lerItens(chave string) {
 		for n, it := range c.itens {
 			if !presentes[n] && fasesDeLance[textoDe(it.bruto["fase"])] {
 				it.bruto["fase"] = "E"
+				m.fimDaDisputa(chave, n)
 			}
 		}
 		m.mu.Unlock()
@@ -1099,6 +1114,110 @@ func (m *motor) enviarLance(compra string, numero int, k string, d decisao, fase
 	}
 }
 
+// ---------- fim da disputa: em que posição ficamos ----------
+
+type resultadoDisputa struct {
+	Compra    string   `json:"compra"`
+	Item      int      `json:"item"`
+	Descricao string   `json:"descricao"`
+	Posicao   int      `json:"posicao"` // 0 = não deu para saber
+	Total     int      `json:"total"`
+	Nosso     *float64 `json:"nosso"`
+	Primeiro  *float64 `json:"primeiro"`
+	Robo      bool     `json:"robo"`
+	Em        int64    `json:"em"`
+}
+
+// fimDaDisputa (com m.mu travado): a etapa do item acabou; lê a classificação final em segundo plano.
+func (m *motor) fimDaDisputa(compra string, numero int) {
+	k := chaveItem(compra, numero)
+	if m.fimVisto[k] {
+		return
+	}
+	c := m.compras[compra]
+	if c == nil || c.itens[numero] == nil {
+		return
+	}
+	e := lerItem(c.itens[numero].bruto)
+	if e.Nosso == nil { // sem proposta nossa neste item
+		return
+	}
+	m.fimVisto[k] = true
+	robo := m.config[k].Ligado
+	go func() {
+		time.Sleep(1500 * time.Millisecond) // o último lance assenta no Compras.gov.br
+		r := resultadoDisputa{Compra: compra, Item: numero, Descricao: e.Descricao, Nosso: e.Nosso, Primeiro: e.Melhor, Robo: robo, Em: time.Now().UnixMilli()}
+		if ci, err := m.lerClassificacao(compra, numero); err == nil && len(ci.todos) > 0 {
+			m.mu.Lock()
+			r.Total = len(ci.todos)
+			for i, p := range ci.todos {
+				if p.Nosso {
+					r.Posicao = i + 1
+					v := p.Valor
+					r.Nosso = &v
+				}
+			}
+			v := ci.todos[0].Valor
+			r.Primeiro = &v
+			m.mu.Unlock()
+		} else if e.Situacao == "G" {
+			r.Posicao = 1
+		}
+		m.mu.Lock()
+		m.resultados = append(m.resultados, r)
+		if len(m.resultados) > 60 {
+			m.resultados = m.resultados[len(m.resultados)-60:]
+		}
+		m.mu.Unlock()
+		registrarLog("robô: disputa encerrada compra %s item %d: posição %d de %d", mascararNumeros(compra), numero, r.Posicao, r.Total)
+	}()
+}
+
+// carregarEnumsRodada: nomes das situações do fornecedor na rodada (convocado para a etapa fechada etc.).
+func (m *motor) carregarEnumsRodada() {
+	status, dados, err := m.pedir("GET", "/comprasnet-disputa/v1/enums", nil)
+	if err != nil || status != 200 {
+		return
+	}
+	var lista []struct {
+		Name   string `json:"name"`
+		Values []struct {
+			Value    any    `json:"value"`
+			EnumName string `json:"enumName"`
+		} `json:"values"`
+	}
+	if json.Unmarshal(dados, &lista) != nil {
+		return
+	}
+	mapa := map[string]string{}
+	for _, e := range lista {
+		if e.Name != "SituacaoParticipacaoFaseDisputaEnum" {
+			continue
+		}
+		for _, v := range e.Values {
+			mapa[textoDe(v.Value)] = v.EnumName
+		}
+	}
+	if len(mapa) > 0 {
+		m.mu.Lock()
+		m.enumsRodada = mapa
+		m.mu.Unlock()
+	}
+}
+
+// LanceManual: lance digitado pela pessoa (etapa fechada), registrado como os do robô.
+func (m *motor) LanceManual(compra string, numero int, valor float64, fase string) mapa {
+	k := chaveItem(compra, numero)
+	m.enviarLance(compra, numero, k, decisao{Enviar: true, Tipo: "fechada", Valor: valor}, fase, false, 0)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	r := m.ultimos[k]
+	if !r.OK {
+		return mapa{"ok": false, "mensagem": r.Mensagem}
+	}
+	return mapa{"ok": true}
+}
+
 // ---------- painel para a página ----------
 
 func (m *motor) Painel() any {
@@ -1161,6 +1280,7 @@ func (m *motor) Painel() any {
 		"versao": versao, "fase": m.fase, "aviso": m.aviso, "conectado": m.token != "", "tempoReal": m.tempoReal,
 		"direto": !agora.Before(m.diretoAte), "descartadas": m.descartadas, "listaEm": m.listaEm.UnixMilli(),
 		"compras": compras, "mensagens": mensagens, "lances": lances, "ultimoLance": m.ultimo, "agora": agora.UnixMilli(), "ultimosPorItem": m.ultimos, "recentesPorItem": m.recentes,
+		"resultados": m.resultados, "enumsRodada": m.enumsRodada,
 	}
 }
 

@@ -1,5 +1,6 @@
+import { ErroCompras } from "../../robo/ErroCompras";
 import { CircleAlert, ExternalLink, Loader2, Send, Zap } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Licitacao, RascunhoProposta } from "../../../shared/tipos";
 import { api, mensagemDeErro } from "../../api";
 import { avisar, Modal } from "../../components/Ui";
@@ -139,6 +140,11 @@ export function CadastroUmClique({
   const [enviando, setEnviando] = useState(false);
   const [verCompleto, setVerCompleto] = useState(false);
   const [vez, setVez] = useState(0);
+  const tentarDeNovo = useCallback(() => {
+    setErro("");
+    setOpcoes(null);
+    setVez((v) => v + 1);
+  }, []);
   const app = temPonte();
 
   // 1) a licitação, o orçamento e o rascunho da proposta
@@ -178,7 +184,7 @@ export function CadastroUmClique({
       })
       .catch((e) => setErro(mensagemDeErro(e)))
       .finally(() => setProcurando(false));
-  }, [ficha, app, chave]);
+  }, [ficha, app, chave, vez]);
 
   // 3) os itens dessa compra e a proposta montada a partir do orçamento
   useEffect(() => {
@@ -314,15 +320,7 @@ export function CadastroUmClique({
             para cadastrar a proposta por aqui.
           </p>
         ) : erro ? (
-          <div className="alerta erro linha-erro-item">
-            <span>{erro}</span>
-            <button
-              className="botao secundario pequeno"
-              onClick={() => (setErro(""), setVez((v) => v + 1))}
-            >
-              Tentar de novo
-            </button>
-          </div>
+          <ErroCompras erro={erro} aoTentar={tentarDeNovo} />
         ) : !ficha || procurando || (chave && carregandoCompra && !compra) ? (
           <p className="texto-suave carregando-marcas">
             <Loader2 className="girando" size={16} />{" "}
