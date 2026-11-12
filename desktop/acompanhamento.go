@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -47,6 +49,9 @@ type acompanhamento struct {
 	pedidos       []string // compras que a página pediu para ler já
 	viuCampos     bool     // já registrou no log os nomes dos campos (para o diagnóstico)
 	versao        int      // muda quando algo muda (a página só baixa tudo de novo nessa hora)
+	sujo          bool     // mudou desde a última gravação em disco
+	doCache       bool     // o que está na memória veio do disco (última sessão), ainda sem leitura nova
+	cnpjCache     string
 }
 
 // Compra da lista de participações (chave e se é do sistema legado).
@@ -177,7 +182,7 @@ const scriptAcompanhamento = `(async (entrada) => {
     const it = await pegar("/comprasnet-fase-externa/v1/compras/" + e + "/itens/em-selecao-fornecedores?filtro=2&pagina=0&tamanhoPagina=100", true);
     if (it.ok && lista(it.dados).length) { d.itens = lista(it.dados).slice(0, 150); d.origemItens = "selecao"; }
     else {
-      const it2 = await pegar("/comprasnet-fase-externa/v1/compras/" + e + "/itens?pagina=0&tamanhoPagina=100", true);
+      const it2 = await pegar("/comprasnet-fase-externa/v1/compras/" + e + "/itens?situacoes=1,2,3,4,5,6,7,8,9,13,14&pagina=0&tamanhoPagina=100", true);
       if (it2.ok) { d.itens = lista(it2.dados).slice(0, 150); d.origemItens = "itens"; }
       else d.erros.push("itens: " + it.status + "/" + it2.status + " " + it2.texto);
     }
@@ -215,9 +220,9 @@ func (m *motor) cicloAcompanhamento() {
 			}
 		}
 		desde := time.Since(a.em)
-		precisa := a.forcar || len(a.pedidos) > 0 || desde > intervaloAcompanhamento || (faltam && desde > 20*time.Second)
+		precisa := a.forcar || len(a.pedidos) > 0 || desde > intervaloAcompanhamento || ((faltam || a.doCache) && desde > 20*time.Second)
 		// Durante a disputa com o robô ligado, só lê quando a pessoa pede (o captcha fica para a sala).
-		if robo && !a.forcar && len(a.pedidos) == 0 {
+		if robo && !a.forcar && len(a.pedidos) == 0 && a.andamento != nil && !a.doCache {
 			precisa = false
 		}
 		a.mu.Unlock()
@@ -305,30 +310,39 @@ func (m *motor) coletarAcompanhamento() {
 }
 
 func (m *motor) lerAcompanhamento(lista, finalizadas bool, escolhidas []compraAcomp) error {
-	// Direto do aplicativo; a página só se o direto não chegar ao Compras.gov.br.
-	v, err := m.lerAcompanhamentoDireto(lista, finalizadas, escolhidas)
+	// Direto do aplicativo (rápido, publica a lista antes dos detalhes); a página só se o direto falhar ou vier vazio.
+	err := m.lerAcompanhamentoDireto(lista, finalizadas, escolhidas)
+	if err == nil {
+		return nil
+	}
+	registrarLog("acompanhamento: leitura direta: %v; usando a página", err)
+	s := m.p.sessaoLogada(false)
+	if s == nil {
+		return fmt.Errorf("entre no Compras.gov.br para acompanhar as participações")
+	}
+	if err := m.p.garantirSala(s); err != nil {
+		return err
+	}
+	entrada, _ := json.Marshal(mapa{"lista": lista, "finalizadas": finalizadas, "detalhar": escolhidas})
+	saida, err := m.p.avaliar(s.sessao, scriptAcompanhamento+"("+string(entrada)+")", 3*time.Minute)
 	if err != nil {
-		registrarLog("acompanhamento: leitura direta falhou (%v); usando a página", err)
-		s := m.p.sessaoLogada(false)
-		if s == nil {
-			return fmt.Errorf("entre no Compras.gov.br para acompanhar as participações")
-		}
-		if err := m.p.garantirSala(s); err != nil {
-			return err
-		}
-		entrada, _ := json.Marshal(mapa{"lista": lista, "finalizadas": finalizadas, "detalhar": escolhidas})
-		saida, err := m.p.avaliar(s.sessao, scriptAcompanhamento+"("+string(entrada)+")", 3*time.Minute)
-		if err != nil {
-			return fmt.Errorf("não foi possível ler as participações: %v", err)
-		}
-		v = leituraAcomp{}
-		if json.Unmarshal([]byte(saida), &v) != nil {
-			return fmt.Errorf("resposta estranha do Compras.gov.br")
-		}
+		return fmt.Errorf("não foi possível ler as participações: %v", err)
+	}
+	var v leituraAcomp
+	if json.Unmarshal([]byte(saida), &v) != nil {
+		return fmt.Errorf("resposta estranha do Compras.gov.br")
 	}
 	if v.Erro != "" {
 		return fmt.Errorf("sessão do Compras.gov.br expirada: entre de novo")
 	}
+	return m.aplicarLeitura(v, lista)
+}
+
+// aplicarLeitura junta uma leitura (lista e/ou detalhes) ao que já foi lido e avisa a página (versão nova).
+func (m *motor) aplicarLeitura(v leituraAcomp, comLista bool) error {
+	m.mu.Lock()
+	cnpj := m.cnpj
+	m.mu.Unlock()
 	agora := time.Now()
 	a := &m.acomp
 	a.mu.Lock()
@@ -364,6 +378,13 @@ func (m *motor) lerAcompanhamento(lista, finalizadas bool, escolhidas []compraAc
 			registrarLog("acompanhamento: compra %s: %s", mascararNumeros(k), strings.Join(d.Erros, " | "))
 		}
 	}
+	a.versao++
+	a.sujo = true
+	if !comLista {
+		return nil
+	}
+	a.doCache = false
+	a.cnpjCache = cnpj
 	// Remove detalhes de compras que saíram das duas listas.
 	todas := map[string]bool{}
 	for _, lista := range []json.RawMessage{a.andamento, a.finalizadas} {
@@ -415,8 +436,16 @@ func (m *motor) lerAcompanhamento(lista, finalizadas bool, escolhidas []compraAc
 
 // Acompanhamento devolve o que já foi lido. compra: a página quer essa compra lida agora; atualizar: ler tudo já.
 func (m *motor) Acompanhamento(compra string, atualizar bool, desde int) any {
+	m.mu.Lock()
+	cnpjAgora := m.cnpj
+	m.mu.Unlock()
 	a := &m.acomp
 	a.mu.Lock()
+	if a.doCache && a.cnpjCache != "" && cnpjAgora != "" && a.cnpjCache != cnpjAgora {
+		// Guardado de outra empresa: descarta.
+		a.andamento, a.finalizadas, a.detalhes, a.doCache = nil, nil, map[string]*detalheCompra{}, false
+		a.versao++
+	}
 	if atualizar {
 		a.forcar = true
 	}
@@ -437,6 +466,7 @@ func (m *motor) Acompanhamento(compra string, atualizar bool, desde int) any {
 		return resposta
 	}
 	resposta := mapa{
+		"deCache":     a.doCache,
 		"versao":      a.versao,
 		"andamento":   a.andamento,
 		"finalizadas": a.finalizadas,
@@ -504,14 +534,15 @@ const fe = "/comprasnet-fase-externa"
 
 func okHTTP(st int) bool { return st >= 200 && st < 300 }
 
-// lerAcompanhamentoDireto faz a mesma leitura do script da página, mas direto do aplicativo e com até 4
-// compras ao mesmo tempo. Só devolve erro se não conseguir falar com o Compras.gov.br.
-func (m *motor) lerAcompanhamentoDireto(lista, finalizadas bool, escolhidas []compraAcomp) (leituraAcomp, error) {
+// lerAcompanhamentoDireto lê direto do aplicativo: primeiro a lista (já publicada para a página), depois o
+// detalhe das compras, 4 ao mesmo tempo, cada uma publicada assim que chega. Devolve erro (para usar a página)
+// se não conseguir falar com o Compras.gov.br ou se a lista vier vazia.
+func (m *motor) lerAcompanhamentoDireto(lista, finalizadas bool, escolhidas []compraAcomp) error {
 	v := leituraAcomp{Detalhes: map[string]*detalheCompra{}}
 	participacoes := func(filtro string, maxPaginas int) (json.RawMessage, error) {
 		var todas []json.RawMessage
 		for pagina := 0; pagina < maxPaginas; pagina++ {
-			r, err := m.consultarDireto("GET", fe+"/v1/compras/participacoes", fmt.Sprintf("filtro=%s&pagina=%d&tamanhoPagina=10", filtro, pagina), true, nil, "")
+			r, err := m.consultarDiretoOpc("GET", fe+"/v1/compras/participacoes", fmt.Sprintf("filtro=%s&pagina=%d&tamanhoPagina=10", filtro, pagina), true, nil, "", pagina == 0)
 			if err != nil {
 				return nil, err
 			}
@@ -524,7 +555,7 @@ func (m *motor) lerAcompanhamentoDireto(lista, finalizadas bool, escolhidas []co
 			}
 			l := listaQualquer(r.Corpo)
 			if pagina == 0 {
-				v.Formatos = append(v.Formatos, fmt.Sprintf("filtro %s: %d na 1ª página, páginas=%s total=%s", filtro, len(l), r.Cab.Get("pages-count"), r.Cab.Get("register-count")))
+				v.Formatos = append(v.Formatos, fmt.Sprintf("direto filtro %s: %d na 1ª página, páginas=%s total=%s", filtro, len(l), r.Cab.Get("pages-count"), r.Cab.Get("register-count")))
 			}
 			todas = append(todas, l...)
 			paginas := 0
@@ -538,18 +569,33 @@ func (m *motor) lerAcompanhamentoDireto(lista, finalizadas bool, escolhidas []co
 	if lista {
 		a, err := participacoes("2", 8)
 		if err != nil {
-			return v, err
+			return err
 		}
-		v.Andamento = a
+		var f json.RawMessage
 		if finalizadas {
-			f, err := participacoes("6", 3)
-			if err != nil {
-				return v, err
+			if f, err = participacoes("6", 3); err != nil {
+				return err
 			}
-			v.Finalizadas = f
+		}
+		if len(listaDe(a)) == 0 && len(listaDe(f)) == 0 {
+			return fmt.Errorf("lista vazia (%s %s)", strings.Join(v.Erros, " | "), strings.Join(v.Formatos, " | "))
+		}
+		v.Andamento, v.Finalizadas = a, f
+		if err := m.aplicarLeitura(v, true); err != nil {
+			return err
+		}
+		v.Erros, v.Formatos = nil, nil
+		// Primeira leitura: já detalha as compras em andamento ainda sem detalhe (até 12 por vez).
+		if len(escolhidas) == 0 {
+			m.acomp.mu.Lock()
+			for _, x := range listaDe(m.acomp.andamento) {
+				if k := chaveDaParticipacao(x); k != "" && m.acomp.detalhes[k] == nil && len(escolhidas) < 12 {
+					escolhidas = append(escolhidas, compraAcomp{k, legadoDaParticipacao(x)})
+				}
+			}
+			m.acomp.mu.Unlock()
 		}
 	}
-	var mu sync.Mutex
 	var wg sync.WaitGroup
 	fila := make(chan compraAcomp)
 	for i := 0; i < 4; i++ {
@@ -558,9 +604,7 @@ func (m *motor) lerAcompanhamentoDireto(lista, finalizadas bool, escolhidas []co
 			defer wg.Done()
 			for c := range fila {
 				d := m.detalharDireto(c)
-				mu.Lock()
-				v.Detalhes[c.Chave] = d
-				mu.Unlock()
+				_ = m.aplicarLeitura(leituraAcomp{Detalhes: map[string]*detalheCompra{c.Chave: d}}, false)
 			}
 		}()
 	}
@@ -569,7 +613,7 @@ func (m *motor) lerAcompanhamentoDireto(lista, finalizadas bool, escolhidas []co
 	}
 	close(fila)
 	wg.Wait()
-	return v, nil
+	return nil
 }
 
 func (m *motor) detalharDireto(c compraAcomp) *detalheCompra {
@@ -584,7 +628,7 @@ func (m *motor) detalharDireto(c compraAcomp) *detalheCompra {
 	if err == nil && okHTTP(r.Status) && len(listaQualquer(r.Corpo)) > 0 {
 		d.Itens, d.OrigemItens = juntarLista(listaQualquer(r.Corpo)), "selecao"
 	} else {
-		r2, err2 := m.consultarDireto("GET", fe+"/v1/compras/"+k+"/itens", "pagina=0&tamanhoPagina=100", true, nil, "")
+		r2, err2 := m.consultarDireto("GET", fe+"/v1/compras/"+k+"/itens", "situacoes=1,2,3,4,5,6,7,8,9,13,14&pagina=0&tamanhoPagina=100", true, nil, "")
 		if err2 == nil && okHTTP(r2.Status) {
 			d.Itens, d.OrigemItens = juntarLista(listaQualquer(r2.Corpo)), "itens"
 		} else {
@@ -593,8 +637,66 @@ func (m *motor) detalharDireto(c compraAcomp) *detalheCompra {
 	}
 	if r, err := m.consultarDireto("GET", "/comprasnet-mensagem/v2/chat/"+k, fmt.Sprintf("legadoAsp=%v&size=50&page=0", c.Legado), true, nil, ""); err == nil && okHTTP(r.Status) {
 		d.Mensagens = juntarLista(listaQualquer(r.Corpo))
+	} else if err == nil && r.Status == 404 {
+		d.Mensagens = juntarLista(nil) // compra sem mensagens
 	} else if err == nil {
 		d.Erros = append(d.Erros, fmt.Sprintf("mensagens: %d", r.Status))
 	}
 	return d
+}
+
+// ---------- última leitura guardada no computador (a aba abre na hora, antes da leitura nova) ----------
+
+type cacheAcomp struct {
+	Andamento     json.RawMessage           `json:"andamento"`
+	Finalizadas   json.RawMessage           `json:"finalizadas"`
+	Detalhes      map[string]*detalheCompra `json:"detalhes"`
+	Em            int64                     `json:"em"`
+	FinalizadasEm int64                     `json:"finalizadasEm"`
+	Cnpj          string                    `json:"cnpj"`
+}
+
+func arquivoCacheAcomp() string { return filepath.Join(pastaInstalacao(), "acompanhamento.json") }
+
+func (m *motor) carregarCacheAcomp() {
+	dados, err := os.ReadFile(arquivoCacheAcomp())
+	if err != nil {
+		return
+	}
+	var c cacheAcomp
+	if json.Unmarshal(dados, &c) != nil || len(listaDe(c.Andamento))+len(listaDe(c.Finalizadas)) == 0 {
+		return
+	}
+	a := &m.acomp
+	a.mu.Lock()
+	a.andamento, a.finalizadas, a.detalhes = c.Andamento, c.Finalizadas, c.Detalhes
+	if a.detalhes == nil {
+		a.detalhes = map[string]*detalheCompra{}
+	}
+	a.em, a.finalizadasEm, a.cnpjCache = time.UnixMilli(c.Em), time.UnixMilli(c.FinalizadasEm), c.Cnpj
+	a.doCache, a.versao = true, 1
+	a.mu.Unlock()
+}
+
+// cicloCacheAcomp grava a leitura no disco (no máximo a cada 5 s, só quando mudou).
+func (m *motor) cicloCacheAcomp() {
+	for {
+		time.Sleep(5 * time.Second)
+		a := &m.acomp
+		a.mu.Lock()
+		if !a.sujo || a.doCache {
+			a.mu.Unlock()
+			continue
+		}
+		a.sujo = false
+		dados, err := json.Marshal(cacheAcomp{a.andamento, a.finalizadas, a.detalhes, a.em.UnixMilli(), a.finalizadasEm.UnixMilli(), a.cnpjCache})
+		a.mu.Unlock()
+		if err != nil {
+			continue
+		}
+		tmp := arquivoCacheAcomp() + ".tmp"
+		if os.WriteFile(tmp, dados, 0o600) == nil {
+			_ = os.Rename(tmp, arquivoCacheAcomp())
+		}
+	}
 }

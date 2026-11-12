@@ -125,6 +125,8 @@ export function Acompanhamento() {
   }
 
   const fase = painel?.fase ?? "";
+  // Já tem a última leitura guardada no computador: mostra a lista na hora e atualiza por trás.
+  const temGuardado = (painel?.andamento?.length ?? 0) + (painel?.finalizadas?.length ?? 0) > 0;
   const lista = aba === "finalizadas" ? finalizadas : aba === "andamento" ? andamento : andamento.filter((c) => FILTROS[aba].fases.includes(c.faseCodigo));
   const compraAberta = [...andamento, ...finalizadas].find((c) => c.chave === aberta) ?? null;
   const emPrimeiro = andamento.reduce((s, c) => s + c.itens.filter((i) => i.colocacao === 1 && i.chance !== "fora").length, 0);
@@ -183,7 +185,7 @@ export function Acompanhamento() {
             <h2>Carregando…</h2>
           </div>
         </section>
-      ) : !painel.conectado || fase === "sem-login" || fase === "aguardando-login" ? (
+      ) : !temGuardado && (!painel.conectado || fase === "sem-login" || fase === "aguardando-login") ? (
         <section className="cartao disputas-aviso entrar">
           <LogIn />
           <div>
@@ -194,7 +196,7 @@ export function Acompanhamento() {
             </button>
           </div>
         </section>
-      ) : fase === "entrando" || (!painel.em && !painel.andamento) ? (
+      ) : !temGuardado && (fase === "entrando" || (!painel.em && !painel.andamento)) ? (
         <section className="cartao disputas-aviso entrar">
           {painel.problema ? <TriangleAlert /> : <RefreshCw className="girando" />}
           <div>
@@ -217,6 +219,19 @@ export function Acompanhamento() {
       ) : (
         <>
           {painel.problema && <p className="alerta erro">{painel.problema}</p>}
+          {(painel.deCache || !painel.conectado) && (
+            <div className="alerta aviso linha-erro-item">
+              <span>
+                Mostrando a última leitura{painel.em ? ` (${new Date(painel.em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })})` : ""}.{" "}
+                {painel.conectado ? "Atualizando com o Compras.gov.br…" : "Entre no Compras.gov.br para atualizar."}
+              </span>
+              {!painel.conectado && (
+                <button className="botao acento pequeno" onClick={() => ponte.entrar(fase === "aguardando-login").catch((e) => avisar(mensagemDeErro(e), "erro"))}>
+                  <LogIn /> {fase === "aguardando-login" ? "Mostrar a janela de login" : "Entrar com gov.br"}
+                </button>
+              )}
+            </div>
+          )}
           {(painel.andamento?.length ?? 0) > andamento.length && (
             <p className="alerta aviso">
               O Compras.gov.br devolveu {painel.andamento?.length} participações, mas {painel.andamento!.length - andamento.length} vieram num formato que eu ainda não reconheço.{" "}

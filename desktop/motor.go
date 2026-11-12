@@ -105,6 +105,7 @@ func novoMotor(p *ponte) *motor {
 		httpc: &http.Client{Timeout: 8 * time.Second, Transport: &http.Transport{Proxy: http.ProxyFromEnvironment, MaxIdleConnsPerHost: 4, IdleConnTimeout: 90 * time.Second}},
 	}
 	m.carregarConfig()
+	m.carregarCacheAcomp()
 	return m
 }
 
@@ -114,6 +115,7 @@ func (m *motor) Rodar() {
 	go m.cicloLeitura()
 	go m.cicloRobo()
 	go m.cicloAcompanhamento()
+	go m.cicloCacheAcomp()
 }
 
 func chaveItem(compra string, numero int) string { return compra + ":" + strconv.Itoa(numero) }
@@ -471,7 +473,12 @@ func (m *motor) atualizarLista() {
 	if a == nil {
 		return
 	}
-	bruto, err := m.p.buscarLista(a)
+	// Direto do aplicativo (segundos); a página do Compras.gov.br só se o direto falhar.
+	bruto, err := m.buscarListaDireta()
+	if err != nil {
+		registrarLog("robô: lista direta falhou (%v); usando a página", err)
+		bruto, err = m.p.buscarLista(a)
+	}
 	if err != nil {
 		m.definirFase("erro-lista", err.Error())
 		m.mu.Lock()

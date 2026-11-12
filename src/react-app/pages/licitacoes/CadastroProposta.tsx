@@ -158,7 +158,7 @@ export function CadastroProposta({ chave, cnpj, aoFechar }: { chave: string; cnp
       const p = obj((await pedir({ caminho: `${FE}/v1/compras/${chave}/participacao` }).catch(() => ({ dados: {} }))).dados);
       const todos: unknown[] = [];
       for (let pagina = 0; pagina < 10; pagina++) {
-        const r = await pedir({ caminho: `${FE}/v1/compras/${chave}/itens`, captcha: true, query: `pagina=${pagina}&tamanhoPagina=50` });
+        const r = await pedir({ caminho: `${FE}/v1/compras/${chave}/itens`, captcha: true, query: `situacoes=1,2,3,4,5,6,7,8,9,13,14&pagina=${pagina}&tamanhoPagina=50` });
         const l = lista(r.dados);
         todos.push(...l);
         const paginas = Number(r.cabecalhos?.["pages-count"] ?? 0);

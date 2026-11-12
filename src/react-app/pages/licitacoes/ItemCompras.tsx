@@ -172,7 +172,7 @@ export function ItemCompras({
         const d = await consultar(`${base}/propostas-iniciais`).catch(() => {
           throw e;
         });
-        return { ...lerItemComPropostas({ propostasItem: propostasDoItem(d) }, cnpj), iniciais: true };
+        return { ...lerItemComPropostas({ propostasItem: propostasDoItem(d, item.numero) }, cnpj), iniciais: true };
       }
     },
     `${compra.chave}:${item.numero}`,

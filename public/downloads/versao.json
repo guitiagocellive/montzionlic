@@ -1,11 +1,11 @@
 {
-  "versao": "3.1.2",
+  "versao": "3.1.3",
   "data": "2026-11-12",
   "novidades": [
-    "Bem mais rápido e sem o erro \"Execution context was destroyed\": o aplicativo consulta o Compras.gov.br direto, com a sua sessão, e só usa a página oficial para o captcha quando ele é exigido.",
-    "A tela não redesenha mais tudo a cada poucos segundos: só quando algo muda.",
-    "Chat certo em cada lugar: na compra, o chat da licitação; em Minha proposta, o seu chat com o pregoeiro naquele item; em Todas as propostas, o chat de cada empresa com o pregoeiro.",
-    "Todas as propostas pela mesma tela da fase de seleção do Compras.gov.br.",
-    "Novo: cadastrar proposta pela plataforma (declarações, valor, quantidade, marca, modelo, anexo), alterar e excluir."
+    "Corrigido \"nenhuma participação\": o Compras.gov.br devolve a lista vazia quando a consulta vai sem captcha; agora o aplicativo repete com o captcha e, se precisar, usa a página oficial.",
+    "Disputas e Acompanhamento carregam em segundos (a lista do robô também passou a ser lida direto).",
+    "Ao abrir o aplicativo, a última leitura aparece na hora e é atualizada por trás.",
+    "Corrigido o vai-e-volta da página do Compras.gov.br (\"compra não encontrada\") que causava o erro de contexto.",
+    "Itens das compras e propostas iniciais lidos no formato certo."
   ]
 }

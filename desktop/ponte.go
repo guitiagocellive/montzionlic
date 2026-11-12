@@ -973,8 +973,11 @@ const scriptLista = `(async () => {
 
 // garantirSala deixa a aba logada numa página da sala de disputa (é onde existe o captcha invisível).
 func (p *ponte) garantirSala(a *sessaoAlvo) error {
-	if s, _ := p.avaliar(a.sessao, `String(!!(window.hcaptcha || window.grecaptcha) && location.pathname.includes("/seguro/fornecedor"))`, 3*time.Second); s != "true" {
-		if _, err := p.cdp.Chamar(a.sessao, "Page.navigate", mapa{"url": p.cfg.paginaDisputas()}, 15*time.Second); err != nil {
+	// Qualquer página da sala (comprasnet-web) com o captcha serve. Antes só "/seguro/fornecedor": a página
+	// "disputa" sem compra cai em "compra-nao-encontrada" e o aplicativo reabria a sala sem parar.
+	if s, _ := p.avaliar(a.sessao, `String(!!(window.hcaptcha || window.grecaptcha) && location.pathname.startsWith("/comprasnet-web/") && !location.pathname.includes("acesso-nao-autorizado"))`, 3*time.Second); s != "true" {
+		alvo := strings.TrimRight(p.cfg.Compras, "/") + "/comprasnet-web/seguro/fornecedor/compras"
+		if _, err := p.cdp.Chamar(a.sessao, "Page.navigate", mapa{"url": alvo}, 15*time.Second); err != nil {
 			return fmt.Errorf("não foi possível abrir a sala de disputa: %v", err)
 		}
 		limite := time.Now().Add(20 * time.Second)

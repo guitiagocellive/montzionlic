@@ -116,22 +116,21 @@ func (m *motor) requisicao(metodo, caminho, query string, captcha string, corpo 
 	}
 	defer r.Body.Close()
 	dados, _ := io.ReadAll(io.LimitReader(r.Body, 40<<20))
-	if (r.StatusCode == 403 || r.StatusCode == 0) && len(dados) > 0 && !json.Valid(dados) && bytes.Contains(bytes.ToLower(dados), []byte("<html")) {
-		return respostaDireta{}, fmt.Errorf("bloqueado (%d)", r.StatusCode)
+	if len(dados) > 0 && !json.Valid(dados) && bytes.Contains(bytes.ToLower(dados), []byte("<html")) {
+		// Página HTML no lugar da resposta da API (login, bloqueio): quem chamou usa a página oficial.
+		return respostaDireta{}, fmt.Errorf("bloqueado (%d, resposta não-JSON)", r.StatusCode)
 	}
 	return respostaDireta{Status: r.StatusCode, Corpo: dados, Cab: r.Header}, nil
 }
 
-func recusouSemCaptcha(r respostaDireta) bool {
-	if r.Status != 400 && r.Status != 403 && r.Status != 412 && r.Status != 422 && r.Status != 428 {
-		return false
-	}
-	return bytes.Contains(bytes.ToLower(r.Corpo), []byte("captcha"))
+// consultarDireto: tenta sem captcha nas telas que ainda não se sabe se exigem. Se o Compras.gov.br recusar
+// (qualquer resposta de erro) ou devolver uma lista vazia suspeita, repete com o captcha da página e anota a
+// tela como "exige captcha" quando a segunda tentativa der certo.
+func (m *motor) consultarDireto(metodo, caminho, query string, captcha bool, corpo []byte, tipo string) (respostaDireta, error) {
+	return m.consultarDiretoOpc(metodo, caminho, query, captcha, corpo, tipo, false)
 }
 
-// consultarDireto: tenta sem captcha nas telas que ainda não se sabe se exigem; se o Compras.gov.br pedir,
-// anota a tela e repete com o captcha da página.
-func (m *motor) consultarDireto(metodo, caminho, query string, captcha bool, corpo []byte, tipo string) (respostaDireta, error) {
+func (m *motor) consultarDiretoOpc(metodo, caminho, query string, captcha bool, corpo []byte, tipo string, vazioSuspeito bool) (respostaDireta, error) {
 	padrao := metodo + " " + padraoDoCaminho(caminho)
 	_, exigido := captchaExigido.Load(padrao)
 	codigo := ""
@@ -146,22 +145,34 @@ func (m *motor) consultarDireto(metodo, caminho, query string, captcha bool, cor
 	if err != nil {
 		return r, err
 	}
-	if codigo == "" && recusouSemCaptcha(r) {
-		captchaExigido.Store(padrao, true)
-		c, err := m.captcha()
-		if err != nil {
-			return respostaDireta{}, err
+	if captcha && codigo == "" {
+		recusou := !okHTTP(r.Status) && r.Status != 404
+		vazio := vazioSuspeito && okHTTP(r.Status) && len(listaQualquer(r.Corpo)) == 0
+		if recusou || vazio {
+			if c, errC := m.captcha(); errC == nil {
+				if r2, err2 := m.requisicao(metodo, caminho, query, c, corpo, tipo); err2 == nil {
+					if okHTTP(r2.Status) && (recusou || len(listaQualquer(r2.Corpo)) > 0) {
+						captchaExigido.Store(padrao, true)
+						registrarLog("compras: %s exige captcha", padrao)
+					}
+					r, codigo = r2, c
+				}
+			}
 		}
-		r, err = m.requisicao(metodo, caminho, query, c, corpo, tipo)
 	}
 	if r.Status == 401 {
-		// Token vencido: o aplicativo renova pela página e tenta uma vez.
+		// Token vencido: o aplicativo renova pela página e tenta uma vez (com captcha novo se precisar).
 		if s := m.p.sessaoLogada(true); s != nil {
 			m.renovarToken(s)
+			if codigo != "" {
+				if c, errC := m.captcha(); errC == nil {
+					codigo = c
+				}
+			}
 			return m.requisicao(metodo, caminho, query, codigo, corpo, tipo)
 		}
 	}
-	return r, err
+	return r, nil
 }
 
 func corpoMultipart(a *arquivoEnvio) ([]byte, string, error) {
@@ -324,4 +335,33 @@ func juntarLista(l []json.RawMessage) json.RawMessage {
 	}
 	b, _ := json.Marshal(l)
 	return b
+}
+
+// buscarListaDireta: compras em disputa (Lei 14.133 e sistema legado), como a sala de disputa pede.
+func (m *motor) buscarListaDireta() (json.RawMessage, error) {
+	todas := []map[string]any{}
+	falhas := 0
+	for _, legado := range []bool{false, true} {
+		r, err := m.consultarDiretoOpc("GET", "/comprasnet-fase-externa/v1/compras/em-disputa", fmt.Sprintf("legadoAsp=%v&tamanhoPagina=100&pagina=0", legado), true, nil, "", true)
+		if err != nil {
+			return nil, err
+		}
+		if !okHTTP(r.Status) {
+			falhas++
+			registrarLog("robô: lista direta (legado=%v): %d %s", legado, r.Status, mensagemErro(r.Corpo))
+			continue
+		}
+		for _, x := range listaQualquer(r.Corpo) {
+			var o map[string]any
+			if json.Unmarshal(x, &o) == nil {
+				o["legadoAsp"] = legado
+				todas = append(todas, o)
+			}
+		}
+	}
+	if falhas == 2 {
+		return nil, fmt.Errorf("o Compras.gov.br recusou a lista de disputas")
+	}
+	b, _ := json.Marshal(todas)
+	return b, nil
 }

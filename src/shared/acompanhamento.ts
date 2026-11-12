@@ -325,6 +325,8 @@ export interface PainelAcompanhamento {
   /** Muda quando algo muda; com "igual" o aplicativo só avisa que nada mudou desde a versão pedida. */
   versao?: number;
   igual?: boolean;
+  /** A lista veio da última leitura guardada no computador (ainda sem leitura nova). */
+  deCache?: boolean;
 }
 
 export interface CompraAcomp extends Participacao {
@@ -505,7 +507,12 @@ export function lerItemComPropostas(dados: unknown, meuCnpj: string) {
 }
 
 /** Item com as propostas de todas as empresas ("propostasItem"), na ordem de classificação. */
-export function propostasDoItem(dados: unknown): PropostaEmpresa[] {
+export function propostasDoItem(dados: unknown, numeroItem?: number): PropostaEmpresa[] {
+  // Às vezes vem uma lista de itens, cada um com as propostas dentro (propostasIniciais / propostasItem).
+  if (Array.isArray(dados) && dados.some((x) => Array.isArray(obj(x).propostasIniciais) || Array.isArray(obj(x).propostasItem))) {
+    const comPropostas = dados.filter((x) => Array.isArray(obj(x).propostasIniciais) || Array.isArray(obj(x).propostasItem));
+    dados = comPropostas.find((x) => numeroItem != null && numero(obj(x).numero) === numeroItem) ?? comPropostas[0];
+  }
   const d = obj(dados);
   const lista = Array.isArray(dados) ? dados : Array.isArray(d.propostasItem) ? d.propostasItem : Array.isArray(d.propostas) ? d.propostas : Array.isArray(d.propostasIniciais) ? d.propostasIniciais : [];
   return (lista as unknown[]).map(lerProposta).sort((a, b) => (a.colocacao ?? 999) - (b.colocacao ?? 999) || (a.valor ?? 0) - (b.valor ?? 0));
