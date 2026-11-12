@@ -15,6 +15,7 @@ import { AbaDados } from "./AbaDados";
 import { AbaItens } from "./AbaItens";
 import { AbaOrcamento } from "./AbaOrcamento";
 import { AbaProposta } from "./AbaProposta";
+import { BotaoUmClique, ehDoCompras } from "./CadastroUmClique";
 import { AbaResultado } from "./AbaResultado";
 import { ModalGanhamos } from "./ModalGanhamos";
 import { PainelEtapa } from "./PainelEtapa";
@@ -296,6 +297,14 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
         </aside>
 
         <div className="ficha-principal">
+          {ehDoCompras(l) && !["perdida", "ganha"].includes(l.etapa) && (
+            <div className="faixa-um-clique">
+              <span>
+                <strong>Cadastro com um clique</strong> · a plataforma acha esta compra no Compras.gov.br e monta a proposta com os itens do orçamento.
+              </span>
+              <BotaoUmClique licitacaoId={l.id} />
+            </div>
+          )}
           <PainelEtapa
             licitacao={l}
             participando={participando.length}

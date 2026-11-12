@@ -1,10 +1,11 @@
 {
-  "versao": "3.1.10",
+  "versao": "3.1.11",
   "data": "2026-11-12",
   "novidades": [
-    "Acompanhamento: os itens e o chat de cada compra voltam a aparecer. Quando o pedido direto do aplicativo falha, ele faz o mesmo pedido pela janela do Compras.gov.br.",
-    "Compra na etapa Disputa mostra os itens da sala de disputa (os mesmos que o robô usa).",
-    "Se ainda assim não der para ler, a janela da compra mostra o motivo, e o \"Copiar diagnóstico\" registra o erro exato.",
-    "Robô: o lance mínimo é só o LIMITE. Ele busca a melhor colocação possível até o mínimo (ex.: 1º R$ 500, 2º R$ 800, você R$ 1.000, mínimo R$ 700 → R$ 799,99, 2º lugar)."
+    "Cadastro com um clique pelo quadro: o botão \"Cadastrar\" no card acha a compra no Compras.gov.br, puxa os itens do orçamento (valor, marca e modelo), marca os viáveis e só pede para confirmar.",
+    "Cadastrar proposta agora é por busca: digite só o número e a UASG, escolha a compra na lista e cadastre.",
+    "Na busca de licitações, compras do Compras.gov.br têm o botão \"Cadastrar proposta\".",
+    "Equidade de gênero como na tela oficial: Sim/Não e, se Sim, o nível (Bronze, Prata, Ouro...) da lista oficial do Compras.gov.br.",
+    "Janela de cadastro com visual novo: etapas, prazo com contagem, itens mais legíveis e aviso de valor acima do estimado."
   ]
 }

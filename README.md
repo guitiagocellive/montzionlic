@@ -137,6 +137,20 @@ Não existe cadastro público: só um administrador adiciona pessoas.
     teste), no máximo 40 consultas por minuto.
   Código: `desktop/acompanhamento.go`, `desktop/compras_acesso.go`, `src/shared/acompanhamento.ts`,
   `src/react-app/pages/licitacoes/Acompanhamento.tsx`, `src/react-app/pages/licitacoes/ItemCompras.tsx`.
+- **Cadastro de proposta no Compras.gov.br** (pelo aplicativo do Windows), por três caminhos:
+  - **Busca por número + UASG** (Acompanhamento → "Cadastrar proposta"): procura no PNCP (o link do Compras.gov.br
+    que o PNCP guarda traz a chave da compra) e, se não achar, testa direto no Compras.gov.br as modalidades
+    pregão/dispensa/concorrência deste ano e do anterior. Lista as compras; clicar abre a janela de cadastro.
+  - **Um clique pelo quadro** (botão "Cadastrar" no card e faixa na ficha): acha a compra (link guardado ou número +
+    UASG), casa os itens do Compras.gov.br com os da licitação pelo número e preenche valor (o da aba Proposta ou o
+    preço de venda da cotação escolhida/mais barata), marca e modelo (produto cotado). Marca só os viáveis: sem
+    orçamento, acima do estimado, abaixo do custo com impostos ou "não participar" ficam desmarcados com aviso. Mostra
+    a tabela para conferir, pede confirmação e envia item por item; guarda o link da compra na licitação.
+  - **Busca de licitações**: resultado/ficha do PNCP de compra do Compras.gov.br ganha "Cadastrar proposta".
+  - Declarações como na tela oficial: aceite, ME/EPP, programa de integridade e equidade de gênero (Sim/Não e, se
+    Sim, o nível da lista oficial `GET /comprasnet-fase-externa/v1/enums`). Antes de aceitar, o Compras.gov.br não
+    mostra os itens ("Usuário não é vinculado..."), e a janela pede as declarações primeiro.
+  - Código: `src/react-app/pages/licitacoes/comprasCadastro.ts`, `CadastroProposta.tsx`, `CadastroUmClique.tsx`.
 - **Disputas / robô de lances** (Licitações → Disputas): o robô roda **dentro do aplicativo do Windows**
   (`desktop/motor.go`), não na página — continua dando lances mesmo com a página fechada.
   - **Login como no Siga Pregão:** "Entrar com gov.br" abre uma janela direto no login de fornecedor do gov.br

@@ -1,3 +1,4 @@
+import { BotaoCadastrarCompra } from "./CadastroProposta";
 import {
   Ban,
   Building,
@@ -539,6 +540,7 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
                           <Globe />
                         </a>
                       )}
+                      <BotaoCadastrarCompra link={r.linkPortal} />
                       {idQuadro ? (
                         <a className="botao secundario pequeno" {...link(`/licitacoes/${idQuadro}`)}>
                           <SquareArrowOutUpRight /> No quadro

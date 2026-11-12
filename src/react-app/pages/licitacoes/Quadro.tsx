@@ -10,6 +10,7 @@ import { Kanban } from "../../components/Kanban";
 import { avisar, Carregando, CampoSelect, Modal } from "../../components/Ui";
 import { formatarDataCurta, formatarMoeda, hojeIso, textoPrazo } from "../../formato";
 import { navegar } from "../../rota";
+import { BotaoUmClique, ehDoCompras } from "./CadastroUmClique";
 
 export function QuadroLicitacoes({ usuario }: { usuario: Usuario }) {
   const editar = podeEditar(usuario.permissoes, "licitacoes");
@@ -204,6 +205,11 @@ function CardLicitacao({ l, hoje }: { l: LicitacaoResumo; hoje: string }) {
         </div>
         {l.valor_estimado != null && l.valor_estimado > 0 && <span className="card-valor">{valorCurto(l.valor_estimado)}</span>}
       </div>
+      {ativa && l.total_cotacoes > 0 && ehDoCompras(l) && (
+        <div className="card-um-clique">
+          <BotaoUmClique licitacaoId={l.id} compacto />
+        </div>
+      )}
     </>
   );
 }

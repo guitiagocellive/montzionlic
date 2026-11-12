@@ -11832,17 +11832,63 @@ label.botao.desativado {
 /* ---------- Cadastro de proposta no Compras.gov.br ---------- */
 .nova-proposta {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
+.busca-compra {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+.busca-compra label,
 .nova-proposta label {
   display: grid;
   gap: 4px;
   font-size: 0.84rem;
 }
-.nova-proposta .linha-campos {
+.resultado-busca-compra {
   display: grid;
-  grid-template-columns: 1fr 120px;
-  gap: 10px;
+  gap: 8px;
+  margin-top: 14px;
+}
+.resultado-busca-compra ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.compra-achada {
+  width: 100%;
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--borda);
+  background: var(--superficie-2);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+.compra-achada:hover,
+.compra-achada:focus-visible {
+  border-color: var(--acento);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px color-mix(in oklab, var(--acento) 14%, transparent);
+}
+.compra-achada span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.objeto-achado,
+.objeto-cadastro {
+  display: -webkit-box !important;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .cadastro-proposta {
   display: grid;
@@ -11853,29 +11899,81 @@ label.botao.desativado {
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--borda);
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, color-mix(in oklab, var(--acento) 9%, var(--superficie-2)), var(--superficie-2));
+  border: 1px solid var(--borda);
 }
 .cabeca-cadastro > div {
   display: grid;
   gap: 3px;
+  min-width: 0;
+}
+.cabeca-cadastro > div:first-child {
+  flex: 1 1 380px;
 }
 .cabeca-cadastro strong {
-  font-size: 1.05rem;
+  font-size: 1.08rem;
 }
 .prazo-cadastro {
   text-align: right;
   justify-items: end;
+  align-content: start;
 }
 .prazo-cadastro span:first-child {
   font-size: 0.74rem;
   color: var(--texto-fraco);
 }
+.prazo-cadastro.encerrado strong {
+  color: var(--vermelho);
+}
+.passos-cadastro {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.passos-cadastro li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 6px 6px;
+  border-radius: 999px;
+  background: var(--superficie-2);
+  color: var(--texto-fraco);
+  font-size: 0.82rem;
+}
+.passos-cadastro li > span {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--borda);
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+.passos-cadastro li.atual {
+  color: var(--texto);
+}
+.passos-cadastro li.atual > span {
+  background: var(--acento);
+  color: #fff;
+}
+.passos-cadastro li.feito {
+  color: var(--verde);
+}
+.passos-cadastro li.feito > span {
+  background: color-mix(in oklab, var(--verde) 18%, transparent);
+  color: var(--verde);
+}
 .declaracoes-proposta {
   display: grid;
   gap: 10px;
-  padding: 14px;
-  border-radius: 14px;
+  padding: 14px 16px;
+  border-radius: 16px;
   border: 1px solid var(--borda);
 }
 .declaracoes-proposta h3,
@@ -11889,49 +11987,126 @@ label.botao.desativado {
   gap: 8px;
   color: var(--verde);
   font-size: 0.88rem;
+  background: color-mix(in oklab, var(--verde) 6%, transparent);
 }
 .textos-declaracoes {
-  max-height: 200px;
-  overflow-y: auto;
+  max-height: 110px;
+  overflow: hidden;
+  position: relative;
   padding: 10px 12px;
   border-radius: 10px;
   background: var(--superficie-2);
   font-size: 0.8rem;
   color: var(--texto-suave);
 }
+.textos-declaracoes:not(.aberto)::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 40px;
+  background: linear-gradient(transparent, var(--superficie-2));
+}
+.textos-declaracoes.aberto {
+  max-height: 320px;
+  overflow-y: auto;
+}
 .textos-declaracoes p {
   margin: 0 0 8px;
   white-space: pre-wrap;
 }
+.declaracoes-proposta .virado {
+  transform: rotate(180deg);
+}
 .perguntas-declaracao {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
-.perguntas-declaracao fieldset {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 14px;
+.pergunta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 14px;
   align-items: center;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-.perguntas-declaracao legend {
-  width: 100%;
-  margin-bottom: 4px;
-  font-size: 0.84rem;
-}
-.perguntas-declaracao label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--superficie-2);
   font-size: 0.86rem;
 }
-.perguntas-declaracao input {
-  width: auto;
+.pergunta .nivel-equidade,
+.pergunta .ajuda-declaracao {
+  grid-column: 1 / -1;
+}
+.nivel-equidade {
+  display: grid;
+  gap: 4px;
+  max-width: 280px;
+  font-size: 0.8rem;
+  color: var(--texto-suave);
+}
+.ajuda-declaracao {
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--texto-fraco);
+  line-height: 1.45;
+}
+.ajuda-declaracao svg {
+  vertical-align: -2px;
+}
+.sim-nao {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+}
+.sim-nao label {
+  display: flex;
+  align-items: center;
+  padding: 5px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.84rem;
+  color: var(--texto-suave);
+}
+.sim-nao input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.sim-nao label.marcado {
+  background: var(--acento);
+  color: #fff;
+}
+.sim-nao label:has(input:focus-visible) {
+  outline: 2px solid var(--acento);
+  outline-offset: 1px;
 }
 .declaracoes-proposta > .botao {
   justify-self: start;
+}
+.resumo-itens-proposta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.resumo-itens-proposta label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.aviso-itens-bloqueados {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--acento) 8%, transparent);
+  font-size: 0.84rem;
+}
+.itens-proposta {
+  display: grid;
+  gap: 10px;
 }
 .itens-proposta ul {
   list-style: none;
@@ -11956,27 +12131,105 @@ label.botao.desativado {
 }
 .desc-item-proposta {
   display: grid;
-  gap: 3px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
 }
-.desc-item-proposta .chip {
-  width: fit-content;
+.numero-item-proposta {
+  display: grid;
+  place-items: center;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+.texto-item-proposta {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-align: left;
+  cursor: pointer;
+}
+.texto-item-proposta.aberto {
+  -webkit-line-clamp: unset;
+}
+.etiquetas-item-proposta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 4px;
+  font-size: 0.75rem;
+  color: var(--texto-fraco);
+}
+.etiquetas-item-proposta span + span::before {
+  content: "·";
+  margin-right: 10px;
 }
 .campos-item-proposta {
-  display: grid;
-  grid-template-columns: 150px 130px minmax(0, 1fr) minmax(0, 1fr) auto;
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   align-items: end;
 }
 .campos-item-proposta label {
   display: grid;
   gap: 4px;
+  flex: 1 1 200px;
+  min-width: 0;
   font-size: 0.76rem;
   color: var(--texto-suave);
+}
+.campos-item-proposta label:nth-child(1) {
+  flex: 0 1 160px;
+}
+.campos-item-proposta label:nth-child(2) {
+  flex: 0 1 120px;
+}
+.campos-item-proposta input,
+.busca-compra input,
+.tabela-um-clique input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-sm);
+  background: var(--superficie);
+  color: var(--texto);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.campos-item-proposta input:focus,
+.busca-compra input:focus,
+.tabela-um-clique input:focus {
+  outline: none;
+  border-color: var(--acento);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--acento) 20%, transparent);
+}
+.campos-item-proposta input:disabled,
+.tabela-um-clique input:disabled {
+  opacity: 0.55;
+}
+.busca-compra input {
+  background: var(--superficie-2);
 }
 .acoes-item-proposta {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-left: auto;
 }
 .anexos-item-proposta {
   display: flex;
@@ -11985,16 +12238,155 @@ label.botao.desativado {
   gap: 8px;
 }
 @media (max-width: 860px) {
-  .campos-item-proposta {
+  .busca-compra {
     grid-template-columns: 1fr 1fr;
   }
-  .acoes-item-proposta {
+  .busca-compra .botao {
     grid-column: 1 / -1;
+  }
+  .campos-item-proposta label,
+  .campos-item-proposta label:nth-child(1),
+  .campos-item-proposta label:nth-child(2) {
+    flex: 1 1 140px;
   }
   .prazo-cadastro {
     text-align: left;
     justify-items: start;
   }
+  .pergunta {
+    grid-template-columns: 1fr;
+  }
+  .desc-item-proposta {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .desc-item-proposta > .chip {
+    grid-column: 2;
+  }
+}
+
+/* ---------- Cadastro com um clique ---------- */
+.faixa-um-clique {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  margin-bottom: 14px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in oklab, var(--acento) 35%, transparent);
+  background: color-mix(in oklab, var(--acento) 8%, var(--superficie));
+  font-size: 0.86rem;
+}
+.card-um-clique {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+.botao-um-clique {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--acento) 45%, transparent);
+  background: color-mix(in oklab, var(--acento) 12%, transparent);
+  color: var(--texto);
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.botao-um-clique:hover {
+  background: var(--acento);
+  color: #fff;
+}
+.tabela-um-clique {
+  overflow-x: auto;
+  border-radius: 14px;
+  border: 1px solid var(--borda);
+}
+.tabela-um-clique table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+}
+.tabela-um-clique th {
+  text-align: left;
+  padding: 10px 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--texto-fraco);
+  background: var(--superficie-2);
+  white-space: nowrap;
+}
+.tabela-um-clique td {
+  padding: 8px;
+  border-top: 1px solid var(--borda);
+  vertical-align: top;
+}
+.tabela-um-clique td:nth-child(3) {
+  width: 120px;
+}
+.tabela-um-clique td:nth-child(4) {
+  width: 90px;
+}
+.tabela-um-clique td:nth-child(5),
+.tabela-um-clique td:nth-child(6) {
+  width: 150px;
+}
+.tabela-um-clique td input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin-top: 10px;
+}
+.tabela-um-clique tr.marcado td {
+  background: color-mix(in oklab, var(--acento) 5%, transparent);
+}
+.tabela-um-clique tr.ok td {
+  background: color-mix(in oklab, var(--verde) 7%, transparent);
+}
+.tabela-um-clique tr.erro td {
+  background: var(--vermelho-fundo);
+}
+.tabela-um-clique .col-item {
+  min-width: 240px;
+}
+.tabela-um-clique .col-item > * {
+  display: block;
+}
+.tabela-um-clique .col-item strong {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tabela-um-clique .col-total {
+  white-space: nowrap;
+  font-weight: 600;
+  padding-top: 18px;
+}
+.texto-amarelo {
+  color: var(--amarelo, #fbbf24);
+}
+.texto-verde {
+  color: var(--verde);
+}
+.rodape-um-clique {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.rodape-um-clique > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.um-clique h3 svg {
+  vertical-align: -2px;
+  color: var(--acento);
 }
 
 /* ---------- Disputas: cronômetro, classificação e confirmação ---------- */

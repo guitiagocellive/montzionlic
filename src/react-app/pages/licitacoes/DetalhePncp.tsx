@@ -1,3 +1,4 @@
+import { BotaoCadastrarCompra } from "./CadastroProposta";
 import {
   CalendarClock,
   ChevronDown,
@@ -388,6 +389,7 @@ function Corpo({ resultado: r, etapa, aoMudarEtapa, idQuadro, podeImportar, impo
               <ExternalLink /> Abrir no {dados?.portal ?? r.portal}
             </a>
           )}
+          {!r.cancelado && <BotaoCadastrarCompra link={linkPortal} />}
           {r.cancelado && <span className="chip vermelho">Cancelada</span>}
           <span className="espaco" />
           {idQuadro ? (

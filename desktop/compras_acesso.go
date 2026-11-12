@@ -44,6 +44,7 @@ var leiturasPermitidas = []*regexp.Regexp{
 	regexp.MustCompile(ce + `/v1` + cmp + `/participacao$`),
 	regexp.MustCompile(ce + `/v1` + cmp + `/itens$`),
 	regexp.MustCompile(ce + `/v1/declaracoes$`),
+	regexp.MustCompile(ce + `/v1/enums$`), // listas oficiais (ex.: níveis da declaração de equidade de gênero)
 }
 
 // Ações do fornecedor (cada uma confirmada pela pessoa na plataforma antes de vir para cá).
