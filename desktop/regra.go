@@ -5,8 +5,8 @@ package main
 // Espera os 10 segundos finais do cronômetro (como o Siga Pregão); "Não esperar" cobre na hora.
 // Na hora de agir: se dá para ser 1º acima do mínimo, cobre o melhor lance. Se não dá, busca a MELHOR
 // COLOCAÇÃO POSSÍVEL pela classificação dos concorrentes: cobre o concorrente mais barato que ainda está acima
-// do mínimo (ex.: 2º com 1.100, 3º com 550 e mínimo 760 → lance 1.099,xx e fica em 2º), sem descer à toa até o
-// mínimo. Sem a classificação, só vai ao mínimo nos segundos finais. Nunca envia abaixo do mínimo.
+// do mínimo (ex.: 1º com 500, 2º com 800, nós com 1.000 e mínimo 700 → lance 799,99 e fica em 2º). O mínimo é só
+// o limite: o robô NUNCA vai direto ao mínimo sem saber a classificação, e nunca envia abaixo dele.
 
 import (
 	"fmt"
@@ -40,6 +40,9 @@ type estadoItem struct {
 	FimEm         *time.Time
 	// Melhor lance de cada concorrente (sem o nosso), pela classificação do item; nil = ainda não lida.
 	Concorrentes []float64
+	// O Compras.gov.br recusou um lance intermediário pelo intervalo mínimo: aplica o intervalo também sobre o
+	// lance do concorrente que vamos cobrir (e não só sobre o nosso).
+	PassoNoConcorrente bool
 }
 
 type decisao struct {
@@ -134,7 +137,6 @@ func decidir(e estadoItem, c *configItem) decisao {
 	if e.Situacao == "G" {
 		return decisao{Tipo: "ganhando", Motivo: "Ganhando"}
 	}
-	final := e.Fase == "AL" || (e.RestanteSeg != nil && *e.RestanteSeg <= segundosFinais)
 	if !c.NaoAguardar && e.Fase == "LA" && e.RestanteSeg != nil && *e.RestanteSeg > segundosFinais {
 		return decisao{Tipo: "aguardando-final", Motivo: fmt.Sprintf("Aguardando entrar nos últimos %d segundos para enviar lance", segundosFinais)}
 	}
@@ -154,9 +156,7 @@ func decidir(e estadoItem, c *configItem) decisao {
 	if e.Concorrentes != nil {
 		return melhorColocacao(e, c, minimo, nosso)
 	}
-	if final && minimo <= arredondarAbaixo(nosso-passoMinimo(nosso, e, q), q) {
-		return decisao{Enviar: true, Tipo: "minimo", Valor: minimo, Motivo: "Segundos finais sem a classificação: lance no mínimo (" + reaisTexto(minimo, q) + ")"}
-	}
+	// Sem a classificação não sabemos onde estão os outros: NÃO vai ao mínimo às cegas.
 	return decisao{Tipo: "precisa-classificacao", Motivo: "Não dá para ser 1º acima do mínimo: lendo a classificação para achar a melhor colocação"}
 }
 
@@ -226,19 +226,50 @@ func lerItem(b map[string]any) estadoItem {
 	return e
 }
 
-// melhorColocacao: o menor "degrau" possível acima do mínimo. Fica à frente de todo concorrente que está acima do
-// mínimo cobrindo o mais barato deles; os que estão abaixo do mínimo não dá para passar.
+// concorrentesAtuais: os lances dos outros participantes, sem o nosso (mesmo que a lista não diga qual é o nosso,
+// um valor igual ao nosso lance atual é o nosso) e com o melhor lance atual, caso alguém tenha coberto depois da
+// leitura da classificação.
+func concorrentesAtuais(e estadoItem, nosso float64) []float64 {
+	conc := make([]float64, 0, len(e.Concorrentes)+1)
+	tirouNosso := false
+	for _, v := range e.Concorrentes {
+		if !tirouNosso && math.Abs(v-nosso) < 0.00005 {
+			tirouNosso = true
+			continue
+		}
+		conc = append(conc, v)
+	}
+	if e.Melhor != nil && *e.Melhor < nosso-0.00005 {
+		tem := false
+		for _, v := range conc {
+			if v <= *e.Melhor+0.00005 {
+				tem = true
+				break
+			}
+		}
+		if !tem {
+			conc = append(conc, *e.Melhor)
+		}
+	}
+	return conc
+}
+
+// melhorColocacao: fica à frente de todo concorrente que está acima do mínimo, cobrindo o mais barato deles por
+// um centavo (o desconto escolhido vale para cobrir o 1º; aqui basta passar à frente gastando o mínimo possível);
+// os que estão abaixo do mínimo não dá para passar.
+// Ex.: 1º 500, 2º 800, nós 1.000, mínimo 700 → 799,99 (2º lugar).
 func melhorColocacao(e estadoItem, c *configItem, minimo, nosso float64) decisao {
 	q := c.QuatroCasas
+	conc := concorrentesAtuais(e, nosso)
 	alvoConc := math.Inf(1)
-	for _, v := range e.Concorrentes {
+	for _, v := range conc {
 		if v > minimo+1e-9 && v < alvoConc {
 			alvoConc = v
 		}
 	}
 	posicao := func(lance float64) int {
 		p := 1
-		for _, v := range e.Concorrentes {
+		for _, v := range conc {
 			if v <= lance+1e-9 { // empate: quem deu antes fica na frente
 				p++
 			}
@@ -246,21 +277,26 @@ func melhorColocacao(e estadoItem, c *configItem, minimo, nosso float64) decisao
 		return p
 	}
 	if math.IsInf(alvoConc, 1) {
-		return decisao{Tipo: "melhor-possivel", Motivo: fmt.Sprintf("Melhor colocação possível com o seu mínimo: %dº lugar (os concorrentes à frente estão abaixo do mínimo)", posicao(nosso))}
-	}
-	desconto := arredondarAcima(alvoConc*math.Max(c.Desconto, 0)/100, q)
-	lance := arredondarAbaixo(alvoConc-math.Max(desconto, passoMinimo(alvoConc, e, q)), q)
-	if lance < minimo {
-		lance = minimo
-	}
-	if lance >= alvoConc-1e-9 { // o degrau não cabe acima do mínimo
-		return decisao{Tipo: "melhor-possivel", Motivo: fmt.Sprintf("Melhor colocação possível com o seu mínimo: %dº lugar", posicao(nosso))}
+		return decisao{Tipo: "melhor-possivel", Motivo: fmt.Sprintf("Melhor colocação possível com o seu mínimo: %dº lugar (quem está à frente está abaixo do mínimo)", posicao(nosso))}
 	}
 	if nosso < alvoConc-1e-9 {
 		return decisao{Tipo: "melhor-possivel", Motivo: fmt.Sprintf("Na melhor colocação possível: %dº lugar (à frente do lance de %s)", posicao(nosso), reaisTexto(alvoConc, q))}
 	}
-	if !(lance < nosso-1e-9) {
-		return decisao{Tipo: "melhor-possivel", Motivo: fmt.Sprintf("Na melhor colocação possível: %dº lugar", posicao(nosso))}
+	menor := 1 / fatorCasas(q)
+	degrau := menor
+	if e.PassoNoConcorrente {
+		degrau = math.Max(degrau, passoMinimo(alvoConc, e, q))
+	}
+	lance := arredondarAbaixo(alvoConc-degrau, q)
+	// O intervalo mínimo do edital vale sobre o nosso próprio lance anterior.
+	if teto := arredondarAbaixo(nosso-passoMinimo(nosso, e, q), q); lance > teto {
+		lance = teto
+	}
+	if lance < minimo {
+		lance = minimo
+	}
+	if lance >= alvoConc-1e-9 || !(lance < nosso-1e-9) { // o degrau não cabe acima do mínimo
+		return decisao{Tipo: "melhor-possivel", Motivo: fmt.Sprintf("Melhor colocação possível com o seu mínimo: %dº lugar", posicao(nosso))}
 	}
 	return decisao{Enviar: true, Tipo: "colocacao", Valor: lance, Motivo: fmt.Sprintf("Melhor colocação possível (%dº lugar): cobrindo %s com %s", posicao(lance), reaisTexto(alvoConc, q), reaisTexto(lance, q))}
 }

@@ -20,7 +20,7 @@ func TestDecidir(t *testing.T) {
 		{"espera os 10 s finais (padrão)", estadoItem{Fase: "LA", RestanteSeg: f(30), Melhor: f(980), Nosso: f(1000), Situacao: "P"}, false, 0, "aguardando-final"},
 		{"cobre com 0,5%", estadoItem{Fase: "LA", RestanteSeg: f(9), Melhor: f(980), Nosso: f(1000), Situacao: "P"}, true, 975.10, "lance"},
 		{"ganhando não dá lance", estadoItem{Fase: "LA", RestanteSeg: f(5), Melhor: f(970), Nosso: f(970), Situacao: "G"}, false, 0, "ganhando"},
-		{"segundos finais sem classificação: mínimo", estadoItem{Fase: "LA", RestanteSeg: f(3), Melhor: f(902.13), Nosso: f(907.13), Situacao: "P"}, true, 900, "minimo"},
+		{"segundos finais sem classificação: NÃO vai ao mínimo", estadoItem{Fase: "LA", RestanteSeg: f(3), Melhor: f(850), Nosso: f(1000), Situacao: "P"}, false, 0, "precisa-classificacao"},
 		{"sem classificação e com tempo: não desce ao mínimo", estadoItem{Fase: "LA", Melhor: f(850), Nosso: f(1000), Situacao: "P"}, false, 0, "precisa-classificacao"},
 		{"no mínimo para", estadoItem{Fase: "LA", RestanteSeg: f(3), Melhor: f(890), Nosso: f(900), Situacao: "P"}, false, 0, "no-minimo"},
 		{"fechada vai no mínimo", estadoItem{Fase: "LF", Melhor: f(950), Nosso: f(1000)}, true, 900, "fechada"},
@@ -80,14 +80,14 @@ func TestMelhorColocacao(t *testing.T) {
 	cfg := &configItem{Ligado: true, Minimo: f(760), Desconto: 0.1, NaoAguardar: true}
 	e := estadoItem{Fase: "LA", Melhor: f(550), Nosso: f(1200), Situacao: "P", Concorrentes: []float64{550, 1100}}
 	d := decidir(e, cfg)
-	if !d.Enviar || d.Tipo != "colocacao" || d.Valor != 1098.9 {
-		t.Fatalf("deveria cobrir 1.100 (−0,1%% = 1.098,90) e ficar em 2º: %+v", d)
+	if !d.Enviar || d.Tipo != "colocacao" || d.Valor != 1099.99 {
+		t.Fatalf("deveria cobrir 1.100 com 1.099,99 e ficar em 2º: %+v", d)
 	}
 	if !strings.Contains(d.Motivo, "2º lugar") {
 		t.Errorf("motivo deveria dizer 2º lugar: %s", d.Motivo)
 	}
 	// Já à frente do de 1.100: não mexe.
-	e.Nosso = f(1098.9)
+	e.Nosso = f(1099.99)
 	if d := decidir(e, cfg); d.Enviar || d.Tipo != "melhor-possivel" {
 		t.Errorf("já na melhor colocação: não deveria dar lance: %+v", d)
 	}
@@ -100,6 +100,57 @@ func TestMelhorColocacao(t *testing.T) {
 	e = estadoItem{Fase: "LA", Melhor: f(1000), Nosso: f(1100), Situacao: "P", Concorrentes: []float64{1000, 1050}}
 	if d := decidir(e, cfg); !d.Enviar || d.Tipo != "lance" || d.Valor != 999 {
 		t.Errorf("deveria cobrir o 1º (1.000 → 999,00): %+v", d)
+	}
+}
+
+// O exemplo do usuário: 1º 500, 2º 800, nós 1.000, mínimo 700 → 799,99 (2º), nunca 700.
+func TestColocacaoExemploUsuario(t *testing.T) {
+	cfg := &configItem{Ligado: true, Minimo: f(700), Desconto: 0.5}
+	base := estadoItem{Fase: "LA", RestanteSeg: f(5), Melhor: f(500), Nosso: f(1000), Situacao: "P"}
+	// Sem a classificação: não dá lance (antes ia direto a 700).
+	if d := decidir(base, cfg); d.Enviar {
+		t.Fatalf("sem classificação não pode ir ao mínimo: %+v", d)
+	}
+	e := base
+	e.Concorrentes = []float64{500, 800}
+	d := decidir(e, cfg)
+	if !d.Enviar || d.Valor != 799.99 || !strings.Contains(d.Motivo, "2º lugar") {
+		t.Fatalf("deveria dar 799,99 e ficar em 2º: %+v", d)
+	}
+	// A lista da sala não diz qual é o nosso: o valor igual ao nosso lance é o nosso (não cobre a si mesmo).
+	e.Concorrentes = []float64{500, 800, 1000}
+	if d := decidir(e, cfg); !d.Enviar || d.Valor != 799.99 {
+		t.Fatalf("com o nosso na lista: deveria dar 799,99: %+v", d)
+	}
+	// Depois do lance: fica parado em 2º.
+	e.Nosso = f(799.99)
+	if d := decidir(e, cfg); d.Enviar {
+		t.Fatalf("já em 2º: não deveria dar outro lance: %+v", d)
+	}
+	// O de 800 desceu para 780: cobre de novo (779,99).
+	e.Concorrentes = []float64{500, 780}
+	if d := decidir(e, cfg); !d.Enviar || d.Valor != 779.99 {
+		t.Fatalf("deveria cobrir 780 com 779,99: %+v", d)
+	}
+	// O de 780 desceu para 690 (abaixo do mínimo): para no 3º, sem ir ao mínimo.
+	e.Nosso = f(779.99)
+	e.Concorrentes = []float64{500, 690}
+	if d := decidir(e, cfg); d.Enviar {
+		t.Fatalf("concorrentes abaixo do mínimo: não deveria dar lance: %+v", d)
+	}
+	// Intervalo do edital de R$ 5 sobre o nosso lance: de 1.000 para 799,99 cabe; de 801 não (fica 796).
+	e = base
+	e.Nosso, e.Variacao, e.TipoVariacao = f(801), f(5), "V"
+	e.Concorrentes = []float64{500, 800}
+	if d := decidir(e, cfg); !d.Enviar || d.Valor != 796 {
+		t.Fatalf("intervalo de R$ 5 sobre o nosso: deveria dar 796: %+v", d)
+	}
+	// Classificação lida antes e alguém cobriu com 650 depois (só o melhor geral mudou): o 650 entra na conta.
+	e = base
+	e.Melhor = f(650)
+	e.Concorrentes = []float64{800}
+	if d := decidir(e, cfg); !d.Enviar || d.Valor != 799.99 || !strings.Contains(d.Motivo, "2º lugar") {
+		t.Fatalf("com o melhor geral novo (650): deveria dar 799,99 em 2º: %+v", d)
 	}
 }
 

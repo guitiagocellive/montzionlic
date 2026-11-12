@@ -98,14 +98,15 @@ type motor struct {
 
 	acomp acompanhamento // aba Acompanhamento (participações, itens, mensagens)
 
-	ranking map[string]*classificacaoItem // classificação (melhor lance de cada participante) por item
-	ultimos map[string]registroLance      // último lance enviado por item (com a resposta do Compras.gov.br)
+	ranking   map[string]*classificacaoItem // classificação (melhor lance de cada participante) por item
+	passoConc map[string]bool               // itens em que o Compras exigiu o intervalo também sobre o concorrente
+	ultimos   map[string]registroLance      // último lance enviado por item (com a resposta do Compras.gov.br)
 }
 
 func novoMotor(p *ponte) *motor {
 	m := &motor{
 		p: p, compras: map[string]*compraMotor{}, config: map[string]configItem{}, mensagens: map[string]mensagemItem{},
-		enviando: map[string]time.Time{}, fechadaOK: map[string]bool{}, inscricoes: map[string]string{}, ranking: map[string]*classificacaoItem{}, ultimos: map[string]registroLance{},
+		enviando: map[string]time.Time{}, fechadaOK: map[string]bool{}, inscricoes: map[string]string{}, ranking: map[string]*classificacaoItem{}, ultimos: map[string]registroLance{}, passoConc: map[string]bool{},
 		fase: "sem-login", versaoSistema: "6.4.4", plataforma: "WEB",
 		httpc: &http.Client{Timeout: 8 * time.Second, Transport: &http.Transport{Proxy: http.ProxyFromEnvironment, MaxIdleConnsPerHost: 4, IdleConnTimeout: 90 * time.Second}},
 	}
@@ -945,13 +946,18 @@ func (m *motor) avaliar(k string) {
 		return
 	}
 	e := m.estadoAgora(it, agora)
-	// Classificação recente (e lida com o mesmo melhor lance de agora): a regra usa para a melhor colocação.
-	if r := m.ranking[k]; r != nil && !r.em.IsZero() && agora.Sub(r.em) < 6*time.Second && e.Melhor != nil && math.Abs(r.melhor-*e.Melhor) < 1e-9 {
+	// Classificação lida há pouco: a regra usa para a melhor colocação. Lances só descem, então uma leitura de
+	// alguns segundos atrás ainda serve (a regra junta o melhor lance atual, e a próxima leitura corrige o resto).
+	r := m.ranking[k]
+	if r != nil && !r.em.IsZero() && agora.Sub(r.em) < 20*time.Second {
 		e.Concorrentes = append([]float64{}, r.concorrentes...)
 	}
+	e.PassoNoConcorrente = m.passoConc[k]
 	d := decidir(e, &cfg)
-	if d.Tipo == "precisa-classificacao" {
-		m.pedirClassificacao(compra, numero, k)
+	// Mantém a classificação em dia sempre que não dá para ser 1º acima do mínimo, já antes dos 10 s finais,
+	// para o lance sair na hora certa e no valor certo (nunca o mínimo às cegas).
+	if intervalo := intervaloClassificacao(e, &cfg, d, r != nil && !r.em.IsZero()); intervalo > 0 {
+		m.pedirClassificacao(compra, numero, k, intervalo)
 	}
 	if !d.Enviar {
 		if m.mensagens[k].Texto != d.Motivo {
@@ -1023,6 +1029,11 @@ func (m *motor) enviarLance(compra string, numero int, k string, d decisao, fase
 		m.enviando[k] = time.Time{}
 	} else {
 		m.mensagens[k] = mensagemItem{Texto: "Lance recusado: " + msg, Erro: true}
+		// Recusado pelo intervalo mínimo ao cobrir um concorrente: daqui em diante aplica o intervalo também
+		// sobre o lance dele.
+		if d.Tipo == "colocacao" && strings.Contains(strings.ToLower(msg), "interval") {
+			m.passoConc[k] = true
+		}
 		m.enviando[k] = agora.Add(700 * time.Millisecond)
 		if c := m.compras[compra]; c != nil {
 			c.lidaEm = time.Time{} // relê o item para corrigir o que o robô sabe
@@ -1170,14 +1181,38 @@ type classificacaoItem struct {
 	erro         string
 }
 
-// pedirClassificacao lê a classificação em segundo plano (no máximo uma vez a cada 1,5 s por item) e reavalia.
-func (m *motor) pedirClassificacao(compra string, numero int, k string) {
+// intervaloClassificacao: de quanto em quanto tempo reler a classificação do item (0 = não precisa agora).
+func intervaloClassificacao(e estadoItem, c *configItem, d decisao, temLeitura bool) time.Duration {
+	if !fasesDeLance[e.Fase] || e.Fase == "LF" || e.Situacao == "G" || e.Nosso == nil || c.Minimo == nil || e.Melhor == nil {
+		return 0
+	}
+	if d.Tipo == "precisa-classificacao" {
+		if temLeitura {
+			return 1200 * time.Millisecond
+		}
+		return 800 * time.Millisecond
+	}
+	// Dá para ser 1º acima do mínimo? Então a classificação não muda a decisão.
+	q := c.QuatroCasas
+	minimo := arredondarAcima(*c.Minimo, q)
+	if arredondarAbaixo(*e.Melhor-passoMinimo(*e.Melhor, e, q), q) >= minimo || *e.Nosso <= minimo {
+		return 0
+	}
+	perto := c.NaoAguardar || e.Fase != "LA" || e.RestanteSeg == nil || *e.RestanteSeg <= 45
+	if !perto {
+		return 0
+	}
+	return 2 * time.Second
+}
+
+// pedirClassificacao lê a classificação em segundo plano (no máximo uma vez a cada "intervalo" por item) e reavalia.
+func (m *motor) pedirClassificacao(compra string, numero int, k string, intervalo time.Duration) {
 	r := m.ranking[k]
 	if r == nil {
 		r = &classificacaoItem{}
 		m.ranking[k] = r
 	}
-	if r.buscando || time.Since(r.pedidaEm) < 1500*time.Millisecond {
+	if r.buscando || time.Since(r.pedidaEm) < intervalo {
 		return
 	}
 	r.buscando, r.pedidaEm = true, time.Now()
@@ -1230,6 +1265,9 @@ func (m *motor) lerClassificacao(compra string, numero int) (*classificacaoItem,
 	for _, bruto := range listaQualquer(r.Corpo) {
 		var o map[string]any
 		if json.Unmarshal(bruto, &o) != nil {
+			continue
+		}
+		if o["excluido"] == true { // lance excluído pelo pregoeiro: não conta
 			continue
 		}
 		v := valorDoLance(o)

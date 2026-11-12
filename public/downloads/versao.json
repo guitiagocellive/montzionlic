@@ -1,11 +1,10 @@
 {
-  "versao": "3.1.8",
+  "versao": "3.1.9",
   "data": "2026-11-12",
   "novidades": [
-    "Análise de empresas: penalidades de qualquer CNPJ (inidôneos do TCU, CNIA/CNJ, CEIS e CNEP), pela consulta pública do TCU.",
-    "Nova aba \"Participações e desclassificações\": participações, vitórias × derrotas, valor disputado × vencido, desclassificações, inabilitações e os motivos — nas licitações em que a sua empresa também participou.",
-    "O aplicativo monta essa base sozinho, devagar e em segundo plano, com a tela pública \"Todas as propostas\" das suas licitações.",
-    "Robô busca a MELHOR COLOCAÇÃO POSSÍVEL: se não dá para ser 1º acima do seu mínimo, ele cobre o concorrente mais barato que ainda está acima do mínimo, em vez de descer direto ao mínimo.",
-    "Espera os últimos 10 segundos por padrão; a opção agora é \"Não esperar os últimos 10 segundos para cobrir\"."
+    "Robô corrigido: o lance mínimo é só o LIMITE. Ele não vai mais direto ao mínimo; busca a melhor colocação possível até o mínimo.",
+    "Exemplo: 1º com R$ 500, 2º com R$ 800, você com R$ 1.000 e mínimo R$ 700 → o robô dá R$ 799,99 e fica em 2º.",
+    "A classificação do item é lida antes dos 10 segundos finais e mantida em dia, para o lance sair na hora e no valor certo.",
+    "Lances excluídos pelo pregoeiro não contam na classificação."
   ]
 }

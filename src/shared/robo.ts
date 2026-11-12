@@ -53,9 +53,13 @@ export interface EstadoItem {
   /** Intervalo mínimo entre lances exigido no edital. */
   variacaoMinima: number | null;
   tipoVariacao: "V" | "P" | null;
+  /** Melhor lance de cada concorrente (sem o nosso), pela classificação do item; null = ainda não lida. */
+  concorrentes?: number[] | null;
 }
 
-export type TipoDecisao = "desligado" | "sem-minimo" | "aguardando-fase" | "ganhando" | "aguardando-final" | "lance" | "minimo" | "no-minimo" | "fechada" | "sem-proposta";
+export type TipoDecisao =
+  | "desligado" | "sem-minimo" | "aguardando-fase" | "ganhando" | "aguardando-final" | "lance" | "colocacao"
+  | "melhor-possivel" | "precisa-classificacao" | "no-minimo" | "fechada" | "sem-proposta";
 
 export interface Decisao {
   acao: "aguardar" | "enviar";
@@ -121,11 +125,50 @@ export function decidir(estado: EstadoItem, item: ConfigItemRobo | undefined): D
   if (alvo >= minimo && alvo < estado.nossoLance) {
     return { acao: "enviar", tipo: "lance", valor: alvo, motivo: `Cobrindo o melhor lance (${reais(melhor, q)}) com ${reais(alvo, q)}` };
   }
-  // Não dá para ser 1º acima do mínimo: vai no mínimo, se ele ainda baixa o nosso lance o suficiente.
-  if (minimo <= arredondarAbaixo(estado.nossoLance - passoMinimo(estado.nossoLance, estado, q), q)) {
-    return { acao: "enviar", tipo: "minimo", valor: minimo, motivo: `Não dá para ser 1º acima do mínimo: lance no mínimo (${reais(minimo, q)})` };
+  // Não dá para ser 1º acima do mínimo: melhor colocação possível pela classificação. O mínimo é só o limite:
+  // sem a classificação o robô NÃO vai ao mínimo às cegas.
+  if (!estado.concorrentes) {
+    return { acao: "aguardar", tipo: "precisa-classificacao", motivo: "Não dá para ser 1º acima do mínimo: lendo a classificação para achar a melhor colocação" };
   }
-  return { acao: "aguardar", tipo: "no-minimo", motivo: "No lance mínimo: melhor colocação possível" };
+  return melhorColocacao(estado, item, minimo, estado.nossoLance);
+}
+
+/** Lances dos outros (sem o nosso) mais o melhor lance atual, se alguém cobriu depois da leitura. */
+function concorrentesAtuais(estado: EstadoItem, nosso: number) {
+  const conc: number[] = [];
+  let tirouNosso = false;
+  for (const v of estado.concorrentes ?? []) {
+    if (!tirouNosso && Math.abs(v - nosso) < 0.00005) {
+      tirouNosso = true;
+      continue;
+    }
+    conc.push(v);
+  }
+  const melhor = estado.melhorLance;
+  if (melhor != null && melhor < nosso - 0.00005 && !conc.some((v) => v <= melhor + 0.00005)) conc.push(melhor);
+  return conc;
+}
+
+/** Cobre por um centavo o concorrente mais barato que ainda está acima do mínimo (ex.: 500/800, nós 1.000, mínimo 700 → 799,99). */
+function melhorColocacao(estado: EstadoItem, item: ConfigItemRobo, minimo: number, nosso: number): Decisao {
+  const q = item.quatroCasas;
+  const conc = concorrentesAtuais(estado, nosso);
+  const acima = conc.filter((v) => v > minimo + 1e-9);
+  const posicao = (lance: number) => 1 + conc.filter((v) => v <= lance + 1e-9).length;
+  if (!acima.length) {
+    return { acao: "aguardar", tipo: "melhor-possivel", motivo: `Melhor colocação possível com o seu mínimo: ${posicao(nosso)}º lugar (quem está à frente está abaixo do mínimo)` };
+  }
+  const alvoConc = Math.min(...acima);
+  if (nosso < alvoConc - 1e-9) {
+    return { acao: "aguardar", tipo: "melhor-possivel", motivo: `Na melhor colocação possível: ${posicao(nosso)}º lugar (à frente do lance de ${reais(alvoConc, q)})` };
+  }
+  let lance = arredondarAbaixo(alvoConc - 1 / casas(q), q);
+  lance = Math.min(lance, arredondarAbaixo(nosso - passoMinimo(nosso, estado, q), q)); // intervalo sobre o nosso lance
+  lance = Math.max(lance, minimo);
+  if (lance >= alvoConc - 1e-9 || !(lance < nosso - 1e-9)) {
+    return { acao: "aguardar", tipo: "melhor-possivel", motivo: `Melhor colocação possível com o seu mínimo: ${posicao(nosso)}º lugar` };
+  }
+  return { acao: "enviar", tipo: "colocacao", valor: lance, motivo: `Melhor colocação possível (${posicao(lance)}º lugar): cobrindo ${reais(alvoConc, q)} com ${reais(lance, q)}` };
 }
 
 /** Lê a configuração salva de um item (completa com os padrões e descarta valores inválidos). */

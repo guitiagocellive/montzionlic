@@ -159,8 +159,11 @@ Não existe cadastro público: só um administrador adiciona pessoas.
     de cada item (lance mínimo, desconto, 4 casas, "Não aguardar") e registra os lances na plataforma
     (`/api/robo`). Mostra "Tempo real"/"Consultando" e o tempo do último lance.
   - Regra igual em `src/shared/robo.ts` e `desktop/regra.go` (com testes em `desktop/regra_test.go`):
-    **sempre cobre na hora (esperar os 10 segundos finais é opcional)**, dá o menor lance que coloca a empresa em 1º (respeitando o
-    intervalo mínimo do edital) e, se não der, vai no lance mínimo.
+    **espera os 10 segundos finais (a opção "Não esperar os últimos 10 segundos para cobrir" cobre na hora)**; se
+    dá para ser 1º acima do mínimo, cobre o melhor lance; se não dá, busca a **melhor colocação possível** pela lista
+    de melhores lances da sala (`lances/por-participante`, mantida em dia a cada 2 s quando faltam até 45 s):
+    cobre por 1 centavo o concorrente mais barato que ainda está acima do mínimo (ex.: 1º 500, 2º 800, nós 1.000,
+    mínimo 700 → 799,99). O mínimo é só o limite: **nunca vai direto ao mínimo** sem saber a classificação.
 - **Datas** sempre pelo calendário da plataforma (`components/Calendario.tsx`): data única ou período início–fim
   com atalhos; o campo `Campo type="date"` já usa o calendário.
 - **Fornecedores** por nicho, com WhatsApp, site e catálogo.
