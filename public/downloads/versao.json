@@ -1,11 +1,9 @@
 {
-  "versao": "3.1.18",
+  "versao": "3.1.19",
   "data": "2026-11-12",
   "novidades": [
-    "Janela do gov.br: se você fechou no X, ao clicar de novo em \"Entrar com gov.br\" ela abre a página de login de novo (não fica mais na mesma tela parada).",
-    "Quando o gov.br demora ou a conexão cai (\"demorou muito tempo para responder\"), a janela tenta de novo sozinha pela página de login, até 3 vezes.",
-    "Novo botão \"Recarregar janela do gov.br\" (Disputas, Acompanhamento e nos avisos de sessão) para quando a página travar, ficar em branco ou der erro.",
-    "Acompanhamento mais leve: os avisos foram para o sino, os totais de em andamento e finalizadas vêm do Compras.gov.br, e cada licitação só é lida quando você clica nela.",
-    "Acompanhamento: favoritas (estrela) aparecem primeiro, apelido em cada licitação, busca e \"Carregar mais\" nas finalizadas."
+    "Acompanhamento: novo \"Testar leitura do Compras\" (no rodapé da página). Mede, com a sua sessão, quanto tempo a lista leva com 10, 25, 50 e 100 por página e quanto leva para abrir uma licitação.",
+    "Se o Compras.gov.br aceitar páginas maiores, o aplicativo passa a ler até 50 participações por pedido (ex.: 302 finalizadas em 7 pedidos em vez de 31). Se não aceitar, continua de 10 em 10, como o site.",
+    "\"Copiar resultado\" no teste, para mandar para a gente e decidirmos os próximos passos."
   ]
 }

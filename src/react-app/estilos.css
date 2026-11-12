@@ -13012,3 +13012,13 @@ p.etapa-fechada {
   text-transform: none;
   letter-spacing: 0;
 }
+
+/* Teste de leitura do Compras */
+.botao-testar-leitura { display: inline-flex; align-items: center; gap: 4px; }
+.teste-leitura { display: grid; gap: 14px; }
+.teste-leitura > .botao { justify-self: start; }
+.tabela-teste-leitura td:last-child, .tabela-teste-leitura th:last-child { text-align: left; }
+.teste-leitura .texto-erro { color: var(--vermelho); }
+.tabela-teste-leitura tr.escolhido td { background: color-mix(in srgb, var(--acento) 12%, transparent); font-weight: 600; }
+.resumo-teste-leitura p { margin: 0 0 4px; }
+@media (max-width: 640px) { .tabela-teste-leitura { font-size: 0.82rem; } .tabela-teste-leitura th:nth-child(5), .tabela-teste-leitura td:nth-child(5) { display: none; } }

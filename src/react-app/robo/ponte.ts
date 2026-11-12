@@ -114,6 +114,8 @@ export const ponte = {
   estado: () => chamar<EstadoPonte & { motor?: boolean; fase?: string; aviso?: string }>("estado", {}, 8_000),
   /** Abre a janela de login do gov.br (mostrar = abre mesmo se já estiver logado). */
   entrar: (mostrar = false) => chamar<{ ok: boolean; jaLogado?: boolean }>("entrar", { atualizar: mostrar }),
+  /** Mede a leitura das participações com páginas de 10, 25, 50 e 100 (com a sessão da pessoa) e passa a usar o melhor tamanho. */
+  testarLeitura: () => chamar<ResultadoTesteLeitura & { erro?: string }>("testarLeitura", {}, 180_000),
   /** Abre a página de login do gov.br de novo na janela do Compras (quando ela travou, deu erro ou ficou em branco). */
   recarregarLogin: () => chamar<{ ok: boolean }>("recarregar", {}),
   painel: () => chamar<PainelRobo>("painel", {}, 5_000),
@@ -138,3 +140,25 @@ export const ponte = {
   itens: (compra: string) => chamar<unknown>("itens", { compra }, 15_000),
   lance: (compra: string, item: number, valor: number, fase: string) => chamar<RespostaLance>("lance", { compra, item, valor, fase }, 15_000),
 };
+
+export interface MedidaLeitura {
+  teste: string;
+  tamanho?: number;
+  status: number;
+  ms: number;
+  veio: number;
+  total: number;
+  paginas: number;
+  kb: number;
+  aceitou: boolean;
+  erro?: string;
+}
+
+export interface ResultadoTesteLeitura {
+  medidas: MedidaLeitura[];
+  total: number;
+  usar: number;
+  antes: { pedidos: number; ms: number };
+  depois: { pedidos: number; ms: number };
+  diagnostico: string;
+}

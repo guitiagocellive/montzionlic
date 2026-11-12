@@ -1,4 +1,4 @@
-import { Bell, BellRing, ClipboardCopy, FilePlus2, Eye, Download, ExternalLink, LogIn, MessageSquare, Pencil, RefreshCw, Search, Send, Star, TriangleAlert } from "lucide-react";
+import { Bell, BellRing, Gauge, ClipboardCopy, FilePlus2, Eye, Download, ExternalLink, LogIn, MessageSquare, Pencil, RefreshCw, Search, Send, Star, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type AvisoAcomp, avisosDe, type CompraAcomp, dataDe, montarCompras, type PainelAcompanhamento, ROTULO_CHANCE } from "../../../shared/acompanhamento";
 import { api, mensagemDeErro } from "../../api";
@@ -7,7 +7,7 @@ import { formatarMoeda } from "../../formato";
 import { link } from "../../rota";
 import { CadastroProposta, NovaProposta } from "./CadastroProposta";
 import { COR_CHANCE, ItemCompras } from "./ItemCompras";
-import { noAplicativo, ponte, temPonte } from "../../robo/ponte";
+import { noAplicativo, ponte, type ResultadoTesteLeitura, temPonte } from "../../robo/ponte";
 import { BotaoRecarregarGovBr } from "../../robo/ErroCompras";
 
 // Aba Acompanhamento: as participações no Compras.gov.br (em andamento e finalizadas), com a colocação de
@@ -44,6 +44,7 @@ export function Acompanhamento() {
   const [novaProposta, setNovaProposta] = useState(false);
   const [cadastro, setCadastro] = useState<string | null>(null);
   const [verAvisos, setVerAvisos] = useState(false);
+  const [testeLeitura, setTesteLeitura] = useState(false);
   const [busca, setBusca] = useState("");
   const [marcas, setMarcas] = useState<Record<string, { favorito: boolean; apelido: string }>>({});
   const [apelidando, setApelidando] = useState<CompraAcomp | null>(null);
@@ -413,7 +414,12 @@ export function Acompanhamento() {
             <button className="botao-link sem-margem" onClick={copiarDiagnostico}>
               Copiar diagnóstico
             </button>
+            {" · "}
+            <button className="botao-link sem-margem botao-testar-leitura" onClick={() => setTesteLeitura(true)}>
+              <Gauge size={13} /> Testar leitura do Compras
+            </button>
           </p>
+          {testeLeitura && <JanelaTesteLeitura aoFechar={() => setTesteLeitura(false)} />}
         </>
       )}
     </>
@@ -438,6 +444,118 @@ function Avisos({ avisos, compras, aoAbrir }: { avisos: AvisoAcomp[]; compras: C
         })}
       </ul>
     </section>
+  );
+}
+
+const segundos = (ms: number) => (ms < 1000 ? `${ms} ms` : ms >= 10_000 ? `${Math.round(ms / 1000)} s` : `${(ms / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} s`);
+
+/** Mede a leitura das participações com páginas de 10, 25, 50 e 100 (na conta da pessoa) e mostra o que vale mais a pena. */
+function JanelaTesteLeitura({ aoFechar }: { aoFechar: () => void }) {
+  const [rodando, setRodando] = useState(false);
+  const [res, setRes] = useState<ResultadoTesteLeitura | null>(null);
+  const [erro, setErro] = useState("");
+  async function rodar() {
+    setRodando(true);
+    setErro("");
+    try {
+      const r = await ponte.testarLeitura();
+      if (r.erro) setErro(r.erro);
+      else setRes(r);
+    } catch (e) {
+      setErro(mensagemDeErro(e));
+    } finally {
+      setRodando(false);
+    }
+  }
+  const listas = res?.medidas.filter((m) => m.tamanho) ?? [];
+  const abrir = res?.medidas.find((m) => !m.tamanho);
+  return (
+    <Modal titulo="Testar leitura do Compras.gov.br" aoFechar={aoFechar} largo>
+      <div className="teste-leitura">
+        <p className="texto-suave">
+          O Compras.gov.br mostra as participações de 10 em 10. Este teste pede a 1ª página das suas finalizadas com 10, 25, 50 e 100 por página (um pedido de cada,
+          com pausa entre eles) e abre uma licitação em andamento, para medir o tempo. Usa a sua sessão e leva uns 10 segundos.
+        </p>
+        {!res && (
+          <button className="botao acento" onClick={rodar} disabled={rodando}>
+            {rodando ? <RefreshCw size={15} className="girando" /> : <Gauge size={15} />} {rodando ? "Testando…" : "Rodar o teste"}
+          </button>
+        )}
+        {erro && <p className="alerta erro">{erro}</p>}
+        {res && (
+          <>
+            <table className="tabela-lances-compras tabela-teste-leitura">
+              <thead>
+                <tr>
+                  <th>Teste</th>
+                  <th>Por página</th>
+                  <th>Veio</th>
+                  <th>Tempo</th>
+                  <th>Tamanho</th>
+                  <th>Resultado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {listas.map((m) => (
+                  <tr key={m.teste + m.tamanho} className={m.teste === "Finalizadas" && m.tamanho === res.usar ? "escolhido" : ""}>
+                    <td>{m.teste}</td>
+                    <td>{m.tamanho}</td>
+                    <td>
+                      {m.veio} de {m.total}
+                    </td>
+                    <td>{segundos(m.ms)}</td>
+                    <td>{m.kb} KB</td>
+                    <td>{m.erro ? <span className="texto-erro">{m.erro}</span> : m.aceitou ? "Aceitou" : m.veio ? `Limitou a ${m.veio}` : "Recusou (veio vazio)"}</td>
+                  </tr>
+                ))}
+                {abrir && (
+                  <tr>
+                    <td>{abrir.teste}</td>
+                    <td>—</td>
+                    <td>{abrir.veio} itens</td>
+                    <td>{segundos(abrir.ms)}</td>
+                    <td>—</td>
+                    <td>{abrir.erro ? <span className="texto-erro">{abrir.erro}</span> : "Ok"}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+            <div className="resumo-teste-leitura">
+              <p>
+                <strong>Todas as {res.total} finalizadas:</strong> com 10 por página seriam {res.antes.pedidos} pedidos (~{segundos(res.antes.ms)}).
+                {res.usar > 10 ? (
+                  <>
+                    {" "}
+                    Com {res.usar} por página, {res.depois.pedidos} pedidos (~{segundos(res.depois.ms)}).
+                  </>
+                ) : null}
+              </p>
+              <p className="texto-suave">
+                {res.usar > 10
+                  ? `A partir de agora o aplicativo lê ${res.usar} participações por pedido.`
+                  : "O Compras não aceitou páginas maiores: o aplicativo continua lendo de 10 em 10, como o site."}
+              </p>
+            </div>
+            <div className="linha-acoes">
+              <button
+                className="botao secundario"
+                onClick={() =>
+                  navigator.clipboard
+                    .writeText(res.diagnostico)
+                    .then(() => avisar("Resultado copiado. Cole na conversa para a gente decidir os próximos passos."))
+                    .catch(() => avisar("Não consegui copiar.", "erro"))
+                }
+              >
+                <ClipboardCopy size={15} /> Copiar resultado
+              </button>
+              <button className="botao secundario" onClick={rodar} disabled={rodando}>
+                <RefreshCw size={15} className={rodando ? "girando" : ""} /> Rodar de novo
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </Modal>
   );
 }
 

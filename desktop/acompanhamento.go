@@ -555,10 +555,11 @@ func okHTTP(st int) bool { return st >= 200 && st < 300 }
 // se não conseguir falar com o Compras.gov.br ou se a lista vier vazia.
 func (m *motor) lerAcompanhamentoDireto(lista, finalizadas bool, escolhidas []compraAcomp) error {
 	v := leituraAcomp{Detalhes: map[string]*detalheCompra{}}
+	tam := tamanhoPaginaAcomp()
 	participacoes := func(filtro string, maxPaginas int) (json.RawMessage, error) {
 		var todas []json.RawMessage
 		for pagina := 0; pagina < maxPaginas; pagina++ {
-			r, err := m.consultarDiretoOpc("GET", fe+"/v1/compras/participacoes", fmt.Sprintf("filtro=%s&pagina=%d&tamanhoPagina=10", filtro, pagina), true, nil, "", pagina == 0)
+			r, err := m.consultarDiretoOpc("GET", fe+"/v1/compras/participacoes", fmt.Sprintf("filtro=%s&pagina=%d&tamanhoPagina=%d", filtro, pagina, tam), true, nil, "", pagina == 0)
 			if err != nil {
 				return nil, err
 			}
@@ -590,21 +591,21 @@ func (m *motor) lerAcompanhamentoDireto(lista, finalizadas bool, escolhidas []co
 			todas = append(todas, l...)
 			paginas := 0
 			fmt.Sscan(r.Cab.Get("pages-count"), &paginas)
-			if len(l) < 10 || (paginas > 0 && pagina+1 >= paginas) {
+			if len(l) < tam || (paginas > 0 && pagina+1 >= paginas) {
 				break
 			}
 		}
 		return juntarLista(todas), nil
 	}
 	if lista {
-		a, err := participacoes("2", 8)
+		a, err := participacoes("2", paginasPara(80, tam))
 		if err != nil {
 			return err
 		}
 		var f json.RawMessage
 		if finalizadas {
 			m.acomp.mu.Lock()
-			paginas := max(1, m.acomp.paginasFinalizadas)
+			paginas := paginasPara(max(1, m.acomp.paginasFinalizadas)*10, tam)
 			m.acomp.mu.Unlock()
 			if f, err = participacoes("6", paginas); err != nil {
 				return err
@@ -768,19 +769,23 @@ func (m *motor) lerMaisFinalizadasAcomp() {
 		a.mu.Unlock()
 	}()
 	marcarUso()
+	tam := tamanhoPaginaAcomp()
+	if len(ja)%tam != 0 {
+		ja = nil // lida com outro tamanho de página: lê de novo desde o começo
+	}
 	todas := make([]json.RawMessage, 0, len(ja)+30)
 	for _, x := range ja {
 		b, _ := json.Marshal(x)
 		todas = append(todas, b)
 	}
-	for pagina := len(ja) / 10; pagina < paginas; pagina++ {
-		r, err := m.consultarDiretoOpc("GET", fe+"/v1/compras/participacoes", fmt.Sprintf("filtro=6&pagina=%d&tamanhoPagina=10", pagina), true, nil, "", true)
+	for pagina := len(ja) / tam; pagina < paginasPara(paginas*10, tam); pagina++ {
+		r, err := m.consultarDiretoOpc("GET", fe+"/v1/compras/participacoes", fmt.Sprintf("filtro=6&pagina=%d&tamanhoPagina=%d", pagina, tam), true, nil, "", true)
 		if err != nil || !okHTTP(r.Status) {
 			break
 		}
 		l := listaQualquer(r.Corpo)
 		todas = append(todas, l...)
-		if len(l) < 10 {
+		if len(l) < tam {
 			break
 		}
 	}
