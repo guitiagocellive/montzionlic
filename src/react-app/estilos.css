@@ -12581,21 +12581,21 @@ label.botao.desativado {
 }
 
 /* ---------- Disputas: cronômetro por faixa, tremida no lance novo, robô travado ---------- */
-.cronometro-disputa.aviso > span {
+.cronometro-disputa.tempo-aviso > span {
   color: var(--amarelo, #f59e0b);
 }
-.cronometro-disputa.critico > span {
+.cronometro-disputa.tempo-critico > span {
   color: var(--vermelho);
   font-size: 1.15em;
 }
-.cronometro-disputa.final > span {
+.cronometro-disputa.tempo-final > span {
   color: #fff;
   background: var(--vermelho);
   padding: 2px 10px;
   border-radius: 999px;
   animation: batida 0.9s ease-in-out infinite;
 }
-.cronometro-disputa.final {
+.cronometro-disputa.tempo-final {
   animation: none;
 }
 @keyframes batida {
@@ -12609,10 +12609,10 @@ label.botao.desativado {
     box-shadow: 0 0 0 8px transparent;
   }
 }
-.item-disputa.critico {
+.item-disputa.tempo-critico {
   border-color: color-mix(in oklab, var(--vermelho) 45%, transparent);
 }
-.item-disputa.final {
+.item-disputa.tempo-final {
   border-color: var(--vermelho);
   box-shadow: 0 0 0 2px color-mix(in oklab, var(--vermelho) 25%, transparent);
 }
@@ -12675,7 +12675,7 @@ label.botao.desativado {
 @media (prefers-reduced-motion: reduce) {
   .valor-disputa.tremer,
   .item-disputa.lance-novo,
-  .cronometro-disputa.final > span {
+  .cronometro-disputa.tempo-final > span {
     animation: none;
   }
 }

@@ -670,11 +670,11 @@ function JanelaClassificacao({ compra, item, titulo, quatro, aoFechar }: { compr
 
 /** Faixa do cronômetro: aviso (≤ 2 min), crítico (≤ 30 s, vermelho) e final (≤ 10 s, pulsando). */
 function faixaTempo(fase: string, restante: number | null) {
-  if (fase === "AL") return "final";
+  if (fase === "AL") return "tempo-final";
   if (restante == null || !EM_DISPUTA.has(fase)) return "";
-  if (restante <= SEGUNDOS_FINAIS) return "final";
-  if (restante <= 30) return "critico";
-  if (restante <= 120) return "aviso";
+  if (restante <= SEGUNDOS_FINAIS) return "tempo-final";
+  if (restante <= 30) return "tempo-critico";
+  if (restante <= 120) return "tempo-aviso";
   return "";
 }
 
