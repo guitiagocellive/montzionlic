@@ -102,6 +102,8 @@ export interface PainelRobo {
   ultimoLance: { valor: number; em: number; reacaoMs: number } | null;
   /** Último lance enviado em cada item ("compra:item"), com a resposta do Compras.gov.br. */
   ultimosPorItem?: Record<string, { valor: number; ok: boolean; mensagem: string; em: number }>;
+  /** Os 3 últimos lances de cada item, o mais novo primeiro (posicao = colocação que o lance buscava). */
+  recentesPorItem?: Record<string, { valor: number; ok: boolean; mensagem: string; em: number; posicao?: number; tipo?: string }[]>;
 }
 
 export const ponte = {

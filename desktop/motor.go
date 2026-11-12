@@ -55,6 +55,8 @@ type registroLance struct {
 	Mensagem string  `json:"mensagem"`
 	Em       int64   `json:"em"`
 	ReacaoMs int64   `json:"reacaoMs"`
+	Posicao  int     `json:"posicao,omitempty"` // colocação que o lance buscava
+	Tipo     string  `json:"tipo,omitempty"`
 }
 
 type mensagemItem struct {
@@ -99,16 +101,19 @@ type motor struct {
 	acomp acompanhamento // aba Acompanhamento (participações, itens, mensagens)
 
 	ranking   map[string]*classificacaoItem // classificação (melhor lance de cada participante) por item
-	passoConc map[string]bool               // itens em que o Compras exigiu o intervalo também sobre o concorrente
-	ultimos   map[string]registroLance      // último lance enviado por item (com a resposta do Compras.gov.br)
+	recentes  map[string][]registroLance
+	passoConc map[string]bool          // itens em que o Compras exigiu o intervalo também sobre o concorrente
+	ultimos   map[string]registroLance // último lance enviado por item (com a resposta do Compras.gov.br)
 }
 
 func novoMotor(p *ponte) *motor {
 	m := &motor{
 		p: p, compras: map[string]*compraMotor{}, config: map[string]configItem{}, mensagens: map[string]mensagemItem{},
-		enviando: map[string]time.Time{}, fechadaOK: map[string]bool{}, inscricoes: map[string]string{}, ranking: map[string]*classificacaoItem{}, ultimos: map[string]registroLance{}, passoConc: map[string]bool{},
+		enviando: map[string]time.Time{}, fechadaOK: map[string]bool{}, inscricoes: map[string]string{}, ranking: map[string]*classificacaoItem{}, ultimos: map[string]registroLance{}, recentes: map[string][]registroLance{}, passoConc: map[string]bool{},
 		fase: "sem-login", versaoSistema: "6.4.4", plataforma: "WEB",
-		httpc: &http.Client{Timeout: 8 * time.Second, Transport: &http.Transport{Proxy: http.ProxyFromEnvironment, MaxIdleConnsPerHost: 4, IdleConnTimeout: 90 * time.Second}},
+		// HTTP/2 (quando o Compras.gov.br aceita): o lance vai pela conexão já aberta, mesmo com outras leituras em
+		// andamento, sem esperar um aperto de mão TLS novo (100–300 ms a mais justamente nos segundos finais).
+		httpc: &http.Client{Timeout: 8 * time.Second, Transport: &http.Transport{Proxy: http.ProxyFromEnvironment, ForceAttemptHTTP2: true, MaxIdleConnsPerHost: 8, IdleConnTimeout: 5 * time.Minute}},
 	}
 	m.carregarConfig()
 	m.carregarCacheAcomp()
@@ -1040,8 +1045,14 @@ func (m *motor) enviarLance(compra string, numero int, k string, d decisao, fase
 	agora := time.Now()
 	m.mu.Lock()
 	m.seqLance++
-	reg := registroLance{ID: m.seqLance, Compra: compra, Item: numero, Valor: d.Valor, OK: ok, Mensagem: msg, Em: agora.UnixMilli(), ReacaoMs: reacao + agora.Sub(inicio).Milliseconds()}
+	reg := registroLance{ID: m.seqLance, Compra: compra, Item: numero, Valor: d.Valor, OK: ok, Mensagem: msg, Em: agora.UnixMilli(), ReacaoMs: reacao + agora.Sub(inicio).Milliseconds(), Posicao: d.Posicao, Tipo: d.Tipo}
 	m.ultimos[chaveItem(compra, numero)] = reg
+	// Os 3 últimos lances de cada item (o mais novo primeiro), para a tela mostrar o que o robô fez.
+	rec := append([]registroLance{reg}, m.recentes[chaveItem(compra, numero)]...)
+	if len(rec) > 3 {
+		rec = rec[:3]
+	}
+	m.recentes[chaveItem(compra, numero)] = rec
 	m.lances = append(m.lances, reg)
 	if ok {
 		m.ultimo = &reg
@@ -1149,7 +1160,7 @@ func (m *motor) Painel() any {
 	return mapa{
 		"versao": versao, "fase": m.fase, "aviso": m.aviso, "conectado": m.token != "", "tempoReal": m.tempoReal,
 		"direto": !agora.Before(m.diretoAte), "descartadas": m.descartadas, "listaEm": m.listaEm.UnixMilli(),
-		"compras": compras, "mensagens": mensagens, "lances": lances, "ultimoLance": m.ultimo, "agora": agora.UnixMilli(), "ultimosPorItem": m.ultimos,
+		"compras": compras, "mensagens": mensagens, "lances": lances, "ultimoLance": m.ultimo, "agora": agora.UnixMilli(), "ultimosPorItem": m.ultimos, "recentesPorItem": m.recentes,
 	}
 }
 

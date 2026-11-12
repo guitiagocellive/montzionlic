@@ -50,6 +50,8 @@ type decisao struct {
 	Tipo   string
 	Valor  float64
 	Motivo string
+	// Colocação que o lance busca (1 = cobrir o melhor; 0 = não se sabe, ex.: etapa fechada).
+	Posicao int
 }
 
 var nomesFases = map[string]string{
@@ -150,7 +152,7 @@ func decidir(e estadoItem, c *configItem) decisao {
 	desconto := arredondarAcima(melhor*math.Max(c.Desconto, 0)/100, q)
 	alvo := arredondarAbaixo(melhor-math.Max(desconto, passoMinimo(melhor, e, q)), q)
 	if alvo >= minimo && alvo < nosso {
-		return decisao{Enviar: true, Tipo: "lance", Valor: alvo, Motivo: "Cobrindo o melhor lance (" + reaisTexto(melhor, q) + ") com " + reaisTexto(alvo, q)}
+		return decisao{Enviar: true, Tipo: "lance", Valor: alvo, Posicao: 1, Motivo: "Cobrindo o melhor lance (" + reaisTexto(melhor, q) + ") com " + reaisTexto(alvo, q)}
 	}
 	// Não dá para ser 1º sem passar do mínimo: melhor colocação possível pela classificação.
 	if e.Concorrentes != nil {
@@ -298,7 +300,7 @@ func melhorColocacao(e estadoItem, c *configItem, minimo, nosso float64) decisao
 	if lance >= alvoConc-1e-9 || !(lance < nosso-1e-9) { // o degrau não cabe acima do mínimo
 		return decisao{Tipo: "melhor-possivel", Motivo: fmt.Sprintf("Melhor colocação possível com o seu mínimo: %dº lugar", posicao(nosso))}
 	}
-	return decisao{Enviar: true, Tipo: "colocacao", Valor: lance, Motivo: fmt.Sprintf("Melhor colocação possível (%dº lugar): cobrindo %s com %s", posicao(lance), reaisTexto(alvoConc, q), reaisTexto(lance, q))}
+	return decisao{Enviar: true, Tipo: "colocacao", Valor: lance, Posicao: posicao(lance), Motivo: fmt.Sprintf("Melhor colocação possível (%dº lugar): cobrindo %s com %s", posicao(lance), reaisTexto(alvoConc, q), reaisTexto(lance, q))}
 }
 
 // fimDaContagem lê a hora de término do item ("dataHoraFimContagem"), no horário de Brasília quando vem sem fuso.

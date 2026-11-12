@@ -12679,3 +12679,37 @@ label.botao.desativado {
     animation: none;
   }
 }
+
+/* ---------- Disputas: últimos lances do robô ---------- */
+.lances-recentes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 3px;
+}
+.lances-recentes li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 0.8rem;
+  color: var(--texto-fraco);
+}
+.lances-recentes li.ok b {
+  color: var(--verde);
+}
+.lances-recentes li.erro,
+.lances-recentes li.erro b {
+  color: var(--vermelho);
+}
+.lances-recentes li.novo {
+  color: var(--verde);
+  font-weight: 500;
+}
+.lances-recentes li.novo.erro {
+  color: var(--vermelho);
+}
+.lances-recentes .hora {
+  font-variant-numeric: tabular-nums;
+  min-width: 64px;
+}

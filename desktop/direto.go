@@ -141,7 +141,7 @@ type respostaDireta struct {
 	Cab    http.Header
 }
 
-var clienteLongo = &http.Client{Timeout: 90 * time.Second, Transport: &http.Transport{Proxy: http.ProxyFromEnvironment, MaxIdleConnsPerHost: 8, IdleConnTimeout: 90 * time.Second}}
+var clienteLongo = &http.Client{Timeout: 90 * time.Second, Transport: &http.Transport{Proxy: http.ProxyFromEnvironment, ForceAttemptHTTP2: true, MaxIdleConnsPerHost: 8, IdleConnTimeout: 5 * time.Minute}}
 
 func (m *motor) requisicao(metodo, caminho, query string, captcha string, corpo []byte, tipo string) (respostaDireta, error) {
 	m.mu.Lock()

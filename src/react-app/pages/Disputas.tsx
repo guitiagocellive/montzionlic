@@ -429,14 +429,32 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
                       <span className={`mensagem-robo ${msg?.erro ? "erro" : ""}`}>{cfg.ligado ? (msg?.texto ?? "Robô ligado") : "Robô parado"}</span>
                     </div>
                     {(() => {
-                      // Confirmação do Compras.gov.br: o que ele respondeu ao último lance enviado neste item.
+                      // Os 3 últimos lances do robô neste item: hora, valor e a colocação que cada um buscava.
                       const ultimo = painel?.ultimosPorItem?.[k] ?? [...(painel?.lances ?? [])].reverse().find((l) => l.compra === c.chave && l.item === i.numero);
-                      return ultimo ? (
-                        <p className={`confirmacao-lance ${ultimo.ok ? "ok" : "erro"}`}>
-                          Último lance enviado: <b>{moeda(ultimo.valor, cfg.quatroCasas)}</b> às {new Date(ultimo.em).toLocaleTimeString("pt-BR")} —{" "}
-                          {ultimo.ok ? "aceito pelo Compras.gov.br" : `recusado pelo Compras.gov.br${ultimo.mensagem ? `: ${ultimo.mensagem}` : ""}`}
-                        </p>
-                      ) : null;
+                      const recentes = painel?.recentesPorItem?.[k] ?? (ultimo ? [ultimo] : []);
+                      if (!recentes.length) return null;
+                      return (
+                        <ul className="lances-recentes" aria-label="Últimos lances do robô">
+                          {recentes.map((l, n) => {
+                            const p = (l as { posicao?: number }).posicao;
+                            const tipo = (l as { tipo?: string }).tipo;
+                            const objetivo = !l.ok
+                              ? `recusado pelo Compras.gov.br${l.mensagem ? `: ${l.mensagem}` : ""}`
+                              : tipo === "fechada"
+                                ? "lance único da etapa fechada"
+                                : p
+                                  ? `lance para ficar em ${p}º lugar`
+                                  : "aceito pelo Compras.gov.br";
+                            return (
+                              <li key={`${l.em}-${n}`} className={`${l.ok ? "ok" : "erro"} ${n === 0 ? "novo" : ""}`}>
+                                <span className="hora">{new Date(l.em).toLocaleTimeString("pt-BR")}</span>
+                                <b>{moeda(l.valor, cfg.quatroCasas)}</b>
+                                <span>{objetivo}</span>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      );
                     })()}
                   </div>
                 );
