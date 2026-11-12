@@ -147,6 +147,7 @@ export function CadastroProposta({ chave, cnpj, aoFechar }: { chave: string; cnp
   const [participacao, setParticipacao] = useState<Bruto>({});
   const [itens, setItens] = useState<ItemProposta[]>([]);
   const [declaracoes, setDeclaracoes] = useState<string[]>([]);
+  const [itensBloqueados, setItensBloqueados] = useState(false);
   const [vez, setVez] = useState(0);
   const recarregar = useCallback(() => setVez((v) => v + 1), []);
 
@@ -154,15 +155,27 @@ export function CadastroProposta({ chave, cnpj, aoFechar }: { chave: string; cnp
     let vivo = true;
     (async () => {
       setEstado({ carregando: true, erro: "" });
-      const c = obj((await pedir({ caminho: `${FE}/v1/compras/${chave}` }).catch(() => pedir({ caminho: `${FE}/v1/compras/${chave}`, captcha: true }))).dados);
-      const p = obj((await pedir({ caminho: `${FE}/v1/compras/${chave}/participacao` }).catch(() => ({ dados: {} }))).dados);
+      // Como a tela oficial: a participação traz os dados da compra e diz se a empresa já aceitou as declarações.
+      // Antes de aceitar, o Compras.gov.br recusa a lista de itens ("Usuário não é vinculado a nenhuma empresa
+      // participante da compra"): isso não é erro, é o passo das declarações.
+      let erroParticipacao: unknown = null;
+      const p = obj((await pedir({ caminho: `${FE}/v1/compras/${chave}/participacao` }).catch((e) => ((erroParticipacao = e), { dados: {} }))).dados);
+      const daCompra = obj((await pedir({ caminho: `${FE}/v1/compras/${chave}` }).catch(() => pedir({ caminho: `${FE}/v1/compras/${chave}`, captcha: true })).catch(() => ({ dados: {} }))).dados);
+      const c: Bruto = { ...obj(p.compra), ...daCompra };
+      if (!Object.keys(c).length && erroParticipacao) throw erroParticipacao;
       const todos: unknown[] = [];
-      for (let pagina = 0; pagina < 10; pagina++) {
-        const r = await pedir({ caminho: `${FE}/v1/compras/${chave}/itens`, captcha: true, query: `situacoes=1,2,3,4,5,6,7,8,9,13,14&pagina=${pagina}&tamanhoPagina=50` });
-        const l = lista(r.dados);
-        todos.push(...l);
-        const paginas = Number(r.cabecalhos?.["pages-count"] ?? 0);
-        if (l.length < 50 || (paginas && pagina + 1 >= paginas)) break;
+      let semVinculo = false;
+      try {
+        for (let pagina = 0; pagina < 10; pagina++) {
+          const r = await pedir({ caminho: `${FE}/v1/compras/${chave}/itens`, captcha: true, query: `situacoes=1,2,3,4,5,6,7,8,9,13,14&pagina=${pagina}&tamanhoPagina=50` });
+          const l = lista(r.dados);
+          todos.push(...l);
+          const paginas = Number(r.cabecalhos?.["pages-count"] ?? 0);
+          if (l.length < 50 || (paginas && pagina + 1 >= paginas)) break;
+        }
+      } catch (e) {
+        if (p.isFornecedorParticipante === true || !/vinculad|participante/i.test(mensagemDeErro(e))) throw e;
+        semVinculo = true;
       }
       const srp = c.comCaracteristicaSRP === true;
       // Textos das declarações: os que vêm na compra ou os do fundamento legal dela.
@@ -176,6 +189,7 @@ export function CadastroProposta({ chave, cnpj, aoFechar }: { chave: string; cnp
       setParticipacao(p);
       setItens(todos.map((b) => lerItem(b, srp)).filter((x): x is ItemProposta => !!x));
       setDeclaracoes(textos);
+      setItensBloqueados(semVinculo);
       setEstado({ carregando: false, erro: "" });
     })().catch((e) => vivo && setEstado({ carregando: false, erro: mensagemDeErro(e) }));
     return () => {
@@ -233,7 +247,13 @@ export function CadastroProposta({ chave, cnpj, aoFechar }: { chave: string; cnp
                   {comProposta.length} com proposta · total {formatarMoeda(total)}
                 </span>
               </div>
-              {!participando && <p className="texto-fraco pequeno">Aceite as declarações acima para liberar o cadastro dos itens.</p>}
+              {!participando && (
+                <p className="texto-fraco pequeno">
+                  {itensBloqueados
+                    ? "Aceite as declarações acima para participar: o Compras.gov.br só mostra os itens depois disso."
+                    : "Aceite as declarações acima para liberar o cadastro dos itens."}
+                </p>
+              )}
               <ul>
                 {itens.map((it) => (
                   <LinhaItemProposta key={it.numero} chave={chave} cnpj={cnpj} item={it} liberado={participando && !encerrado} aoSalvar={recarregar} />
