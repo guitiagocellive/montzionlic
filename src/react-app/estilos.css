@@ -11277,3 +11277,554 @@ label.botao.desativado {
   gap: 10px;
   font-size: 0.86rem;
 }
+
+/* ---------- Acompanhamento no desenho do Compras.gov.br ---------- */
+.lista-compras-topo {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 14px 0 8px;
+}
+.lista-compras-topo select {
+  width: auto;
+  min-width: 220px;
+}
+.lista-compras {
+  display: grid;
+  gap: 8px;
+}
+.linha-compra {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px minmax(0, 300px);
+  gap: 14px;
+  align-items: center;
+  width: 100%;
+  padding: 14px 18px;
+  border-radius: 14px;
+  border: 1px solid var(--borda);
+  background: var(--superficie);
+  color: var(--texto);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.linha-compra:hover {
+  border-color: var(--borda-forte);
+  transform: translateY(-1px);
+}
+.linha-compra.com-chamado {
+  border-left: 3px solid var(--vermelho);
+}
+.titulo-linha-compra {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.titulo-linha-compra strong {
+  font-size: 0.86rem;
+  letter-spacing: 0.01em;
+}
+.titulo-linha-compra > span:not(.objeto-acomp) {
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  color: var(--texto-suave);
+}
+.etapa-linha-compra {
+  font-size: 0.82rem;
+  color: var(--acento-texto);
+}
+.etapa-linha-compra small {
+  color: var(--texto-fraco);
+  margin-right: 4px;
+}
+.etiquetas-compra,
+.etiquetas-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.etiquetas-compra .chip svg {
+  vertical-align: -2px;
+}
+.janela-compra {
+  display: grid;
+  gap: 12px;
+}
+.cabeca-janela-compra {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--borda);
+}
+.cabeca-janela-compra > div {
+  display: grid;
+  gap: 4px;
+}
+.cabeca-janela-compra > div strong {
+  font-size: 1.1rem;
+}
+.passos-compra {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(80px, 1fr));
+  min-width: min(100%, 460px);
+}
+.passos-compra li {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  position: relative;
+  font-size: 0.72rem;
+  color: var(--texto-fraco);
+  text-align: center;
+}
+.passos-compra li i {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--borda-forte);
+  background: var(--superficie);
+  z-index: 1;
+}
+.passos-compra li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  width: 100%;
+  height: 2px;
+  background: var(--borda-forte);
+}
+.passos-compra li.feito i {
+  border-color: var(--acento);
+}
+.passos-compra li.atual {
+  color: var(--acento-texto);
+  font-weight: 600;
+}
+.passos-compra li.atual i {
+  border-color: var(--acento);
+  background: var(--acento);
+  box-shadow: 0 0 0 4px var(--acento-suave);
+}
+.voltar-itens {
+  justify-self: start;
+}
+.itens-compra {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.item-compra {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 190px 74px 200px auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--superficie-2);
+}
+.item-compra.chance-fora,
+.item-compra.chance-encerrado {
+  opacity: 0.7;
+}
+.desc-item-compra {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.desc-item-compra strong {
+  font-size: 0.86rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.etapa-item-compras {
+  font-size: 0.78rem;
+  color: #f97316;
+}
+.item-compra dl,
+.cabeca-item-compras dl {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 2px 10px;
+  margin: 0;
+  font-size: 0.76rem;
+}
+.item-compra dt,
+.cabeca-item-compras dt {
+  color: var(--texto-fraco);
+}
+.item-compra dd,
+.cabeca-item-compras dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.colocacao-item-compra {
+  display: grid;
+  text-align: center;
+}
+.colocacao-item-compra strong {
+  font-size: 1.35rem;
+  font-variant-numeric: tabular-nums;
+}
+.item-compra.chance-alta .colocacao-item-compra strong,
+.item-compra.chance-ganhou .colocacao-item-compra strong {
+  color: var(--verde);
+}
+.mensagens-compra summary {
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.item-compras {
+  display: grid;
+  gap: 12px;
+}
+.cabeca-item-compras {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 16px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--borda);
+}
+.cabeca-item-compras > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+.navegar-itens {
+  display: flex;
+  gap: 4px;
+}
+.abas-compras {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--borda);
+}
+.abas-compras button {
+  padding: 10px 16px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: none;
+  color: var(--texto-suave);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+.abas-compras button.ativo {
+  color: var(--texto);
+  border-bottom-color: var(--acento);
+}
+.painel-compras {
+  display: grid;
+  gap: 10px;
+}
+.resumo-minha-proposta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--superficie-2);
+}
+.resumo-minha-proposta > div {
+  display: grid;
+  gap: 3px;
+  align-content: start;
+}
+.resumo-minha-proposta span:first-child {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--texto-suave);
+}
+.resumo-minha-proposta .chip {
+  width: fit-content;
+}
+.explicacao-chance {
+  margin: 0;
+}
+.secao-compras {
+  border: 1px solid var(--borda);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.titulo-secao-compras {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 0;
+  background: var(--superficie-2);
+  color: var(--acento-texto);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.titulo-secao-compras svg {
+  transition: transform 0.15s ease;
+  transform: rotate(-90deg);
+}
+.secao-compras.aberta .titulo-secao-compras svg {
+  transform: none;
+}
+.corpo-secao-compras {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+}
+.dados-proposta-compras {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.dados-proposta-compras > div {
+  display: grid;
+  gap: 2px;
+}
+.dados-proposta-compras > div > span:first-child {
+  font-size: 0.74rem;
+  color: var(--texto-suave);
+}
+.dados-proposta-compras strong {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.dados-proposta-compras .largura-toda {
+  grid-column: 1 / -1;
+}
+.chat-compras {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--superficie-2);
+}
+.linha-chat {
+  display: flex;
+  flex-direction: column;
+}
+.dia-chat {
+  align-self: center;
+  font-size: 0.74rem;
+  color: var(--texto-fraco);
+  margin: 4px 0;
+}
+.msg-compras {
+  display: grid;
+  gap: 2px;
+  max-width: 80%;
+  padding: 8px 11px;
+  border-radius: 10px;
+  font-size: 0.84rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  align-self: flex-end;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+}
+.msg-compras.pregoeiro {
+  align-self: flex-start;
+  background: var(--azul-fundo);
+  border-color: color-mix(in oklab, var(--azul) 30%, transparent);
+}
+.msg-compras.voce {
+  background: var(--acento-suave);
+  border-color: transparent;
+}
+.msg-compras.sistema {
+  color: var(--texto-suave);
+}
+.hora-chat {
+  justify-self: end;
+  font-size: 0.66rem;
+  color: var(--texto-fraco);
+}
+.enviar-compras {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+.enviar-compras textarea {
+  resize: vertical;
+  min-height: 42px;
+}
+.termo-anexos {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--superficie-2);
+  font-size: 0.82rem;
+}
+.termo-anexos p {
+  margin: 0;
+}
+.ciente-anexos {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ciente-anexos input {
+  width: auto;
+}
+.secao-compras .anexos-compras li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 4px;
+  border-radius: 0;
+  background: none;
+  border-bottom: 1px solid var(--borda);
+}
+.todas-propostas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.todas-propostas > li {
+  border-radius: 12px;
+  background: var(--superficie-2);
+  border: 1px solid transparent;
+}
+.todas-propostas > li.minha {
+  border-color: color-mix(in oklab, var(--azul) 45%, transparent);
+}
+.todas-propostas > li.fora {
+  opacity: 0.7;
+}
+.linha-todas {
+  display: grid;
+  grid-template-columns: 40px 160px minmax(0, 1fr) 240px auto 24px;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  background: none;
+  color: var(--texto);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cnpj-todas,
+.nome-todas,
+.valores-todas {
+  display: grid;
+  gap: 2px;
+  font-size: 0.82rem;
+  min-width: 0;
+}
+.cnpj-todas small,
+.nome-todas small {
+  color: var(--acento-texto);
+  font-size: 0.72rem;
+}
+.nome-todas > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.valores-todas {
+  font-variant-numeric: tabular-nums;
+}
+.valores-todas small {
+  color: var(--texto-fraco);
+  margin-right: 6px;
+}
+.chips-todas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: flex-end;
+}
+.seta-todas {
+  color: var(--acento-texto);
+  transition: transform 0.15s ease;
+}
+.todas-propostas > li.aberta .seta-todas {
+  transform: rotate(180deg);
+}
+.detalhe-empresa {
+  display: grid;
+  gap: 8px;
+  padding: 0 12px 12px;
+}
+@media (max-width: 860px) {
+  .linha-compra {
+    grid-template-columns: 1fr;
+  }
+  .etiquetas-compra,
+  .etiquetas-item {
+    justify-content: flex-start;
+  }
+  .item-compra {
+    grid-template-columns: minmax(0, 1fr) 64px;
+  }
+  .item-compra dl,
+  .etiquetas-item,
+  .item-compra > .botao {
+    grid-column: 1 / -1;
+  }
+  .item-compra > .botao {
+    justify-self: start;
+  }
+  .cabeca-item-compras {
+    grid-template-columns: 1fr auto;
+  }
+  .cabeca-item-compras dl {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .resumo-minha-proposta,
+  .dados-proposta-compras {
+    grid-template-columns: 1fr 1fr;
+  }
+  .linha-todas {
+    grid-template-columns: 34px minmax(0, 1fr) 20px;
+  }
+  .cnpj-todas,
+  .valores-todas,
+  .chips-todas {
+    grid-column: 2;
+  }
+  .chips-todas {
+    justify-content: flex-start;
+  }
+  .seta-todas {
+    grid-column: 3;
+    grid-row: 1;
+  }
+  .enviar-compras {
+    grid-template-columns: 1fr;
+  }
+  .passos-compra {
+    min-width: 0;
+    width: 100%;
+  }
+}

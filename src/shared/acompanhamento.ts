@@ -115,6 +115,8 @@ export interface Participacao {
   orgao: string;
   objeto: string;
   fase: string;
+  /** Fase da compra no Compras.gov.br (1 propostas, 2 análise, 3 disputa, 4 seleção de fornecedores...). */
+  faseCodigo: string;
   situacao: string;
   abertura: string | null;
   linkPncp: string | null;
@@ -137,6 +139,7 @@ export function lerParticipacao(bruto: unknown): Participacao | null {
     orgao: texto(primeiro(c.nomeUasg, c.nomeUnidade, c.unidadeOrgao && obj(c.unidadeOrgao).nome, c.orgao, c.nomeOrgao)),
     objeto: texto(primeiro(c.objeto, c.descricaoObjeto)),
     fase: sit && sitCod !== "PD" ? sit : (FASES_COMPRA[faseCod] ?? (c.homologada ? "Homologada" : "")),
+    faseCodigo: faseCod,
     situacao: sit,
     abertura: texto(primeiro(c.dataHoraAbertura, c.dataHoraPrevisaoAbertura, c.dataHoraInicioDisputa)) || null,
     linkPncp: texto(c.linkPncp) || null,
@@ -148,7 +151,7 @@ export type Chance = "ganhou" | "alta" | "media" | "baixa" | "fora" | "aguardand
 
 export const ROTULO_CHANCE: Record<Chance, string> = {
   ganhou: "Ganhou",
-  alta: "Chance alta",
+  alta: "Chance boa",
   media: "Chance média",
   baixa: "Chance baixa",
   fora: "Fora",
@@ -182,6 +185,9 @@ export interface ItemAcomp {
   /** Sessão de julgamento/habilitação (usada na fase recursal). */
   sessao: number;
   prazoIntencao: string;
+  /** Situação do item como o Compras.gov.br escreve ("Aguardando julgamento"...). */
+  etapa: string;
+  valorEstimado: number | null;
 }
 
 const PENDENCIAS: [string, Pendencia["tipo"], string][] = [
@@ -232,6 +238,8 @@ export function lerItemAcomp(bruto: unknown): ItemAcomp | null {
     explicacao: "",
     sessao: numero(primeiro(x.numeroSessaoJulgHab, x.sessaoJulgamentoHabilitacao)) ?? 1,
     prazoIntencao: texto(primeiro(obj(x.prazosFaseRecursal).dataHoraLimiteIRJulgamento, obj(x.prazosFaseRecursal).dataHoraLimiteIRHabilitacao)),
+    etapa: texto(primeiro(x.descricaoSituacao, x.situacaoDescricao, x.detalheSituacao, x.descricaoFase, x.situacaoSelecao)) || fase,
+    valorEstimado: valorDe(primeiro(x.valorEstimado, x.valorUnitarioEstimado, x.valorEstimadoUnitario)),
   };
   const { chance, explicacao } = calcularChance(item, situacaoItem, desclassificado);
   item.chance = chance;
@@ -256,9 +264,10 @@ export function calcularChance(it: Pick<ItemAcomp, "colocacao" | "codigoSituacao
   const c = it.colocacao;
   if (c == null) return { chance: "aguardando", explicacao: "A colocação aparece depois da disputa." };
   const de = it.participantes ? ` de ${it.participantes}` : "";
+  // Boa até o 4º lugar, média do 5º ao 8º, baixa do 9º em diante (é comum o pregoeiro recusar várias à frente).
   if (c === 1) return { chance: "alta", explicacao: `Você está em 1º${de}: é o primeiro a ser analisado.` };
-  if (c === 2) return { chance: "media", explicacao: `Você está em 2º${de}: é chamado se o 1º for recusado ou inabilitado.` };
-  if (c === 3) return { chance: "baixa", explicacao: `Você está em 3º${de}: precisa que os 2 primeiros sejam recusados.` };
+  if (c <= 4) return { chance: "alta", explicacao: `Você está em ${c}º${de}: é chamado se ${c - 1 === 1 ? "o 1º for recusado" : `as ${c - 1} empresas à frente forem recusadas`}.` };
+  if (c <= 8) return { chance: "media", explicacao: `Você está em ${c}º${de}: precisa que ${c - 1} empresas à frente sejam recusadas.` };
   return { chance: "baixa", explicacao: `Você está em ${c}º${de}: precisa que ${c - 1} empresas à frente sejam recusadas.` };
 }
 
@@ -268,6 +277,8 @@ export interface MensagemAcomp {
   texto: string;
   dataHora: string;
   item: number | null;
+  remetente: string;
+  destinatario: string;
 }
 
 export function lerMensagem(bruto: unknown): MensagemAcomp | null {
@@ -283,6 +294,8 @@ export function lerMensagem(bruto: unknown): MensagemAcomp | null {
     texto: t,
     dataHora,
     item: numero(primeiro(x.identificadorItem, x.numeroItem, x.item)),
+    remetente: texto(x.identificadorRemetente),
+    destinatario: texto(x.identificadorDestinatario),
   };
 }
 
@@ -429,6 +442,11 @@ export interface PropostaEmpresa {
   desclassificada: boolean;
   convocada: boolean;
   meEpp: boolean;
+  uf: string;
+  /** Valores unitários como na tela "Proposta" do Compras.gov.br. */
+  valorProposta: number | null;
+  valorOfertado: number | null;
+  valorNegociado: number | null;
 }
 
 export function lerProposta(bruto: unknown): PropostaEmpresa {
@@ -449,7 +467,27 @@ export function lerProposta(bruto: unknown): PropostaEmpresa {
     motivo: texto(primeiro(p.motivoDesclassificacao, p.justificativaDesclassificacao)),
     desclassificada: DESCLASSIFICADA.has(sit) || sit === "5" || p.desclassificado === true,
     convocada: PENDENCIAS.some(([campo]) => texto(p[campo]) === "S") || p.canalChatAberto === true,
-    meEpp: part.porte === "ME" || part.porte === "EPP" || p.declaracaoMeEpp === true,
+    meEpp: part.porte === "ME" || part.porte === "EPP" || p.declaracaoMeEpp === true || part.declaracaoMeEpp === true,
+    uf: texto(primeiro(obj(part.endereco).uf, part.uf, p.uf, p.ufFornecedor)),
+    valorProposta: valorDe(valores.valorPropostaInicial),
+    valorOfertado: valorDe(primeiro(valores.valorPropostaInicialOuLances, valores.valorPropostaInicial)),
+    valorNegociado: valorDe(valores.valorNegociado),
+  };
+}
+
+/** Resposta de "item com as propostas": a sua proposta (propostaItem) e as de todas (propostasItem). */
+export function lerItemComPropostas(dados: unknown, meuCnpj: string) {
+  const d = obj(dados);
+  const todas = propostasDoItem(dados).map((p, i) => ({ ...p, colocacao: p.colocacao ?? i + 1 }));
+  const minhaBruta = d.propostaItem ? lerProposta(d.propostaItem) : null;
+  const minha = (meuCnpj && todas.find((p) => p.cnpj === meuCnpj)) || minhaBruta;
+  return {
+    todas,
+    minha: minha ? { ...minhaBruta, ...minha, colocacao: minha.colocacao ?? minhaBruta?.colocacao ?? null } : null,
+    participantes: numero(primeiro(d.qtdeParticipantes, d.quantidadeParticipantes)) ?? (todas.length || null),
+    descricao: texto(primeiro(d.descricao, d.descricaoDetalhada)),
+    situacaoItem: texto(primeiro(d.descricaoSituacao, d.situacaoDescricao, d.detalheSituacao)),
+    sessao: numero(primeiro(d.numeroSessaoJulgHab)) ?? 1,
   };
 }
 

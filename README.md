@@ -104,24 +104,25 @@ Não existe cadastro público: só um administrador adiciona pessoas.
   - Filtros que o PNCP não faz (data da sessão, plataforma, UASG, CNPJ, nº, vários municípios) são aplicados aqui depois de
     baixar até 3.000 resultados por consulta; a tela avisa quando é preciso afinar a busca.
   - A pesquisa sai do navegador; só o download dos arquivos passa pelo servidor (`/api/pncp/arquivo`).
-- **Acompanhamento** (Licitações → Acompanhamento, pelo aplicativo do Windows): aba separada do quadro com as
-  participações no Compras.gov.br **em andamento** e **finalizadas**. Para cada item: **colocação** ("2º de 6"), seu
-  valor e o melhor valor, situação da proposta (aceita, habilitado, adjudicada, desclassificada com o motivo) e a
-  **chance de ser chamado** (alta: 1º, aceita, habilitado ou convocado; média: 2º; baixa: 3º em diante; fora:
-  desclassificado/inabilitado). Mostra as **convocações** do pregoeiro (anexos, negociação, diligência, cota), as
-  **mensagens** da compra e permite **mandar mensagem ao pregoeiro** (o Compras.gov.br só aceita quando ele abre a
-  conversa para o fornecedor). Os avisos vão para o **sino** da equipe (sem repetir). O aplicativo lê as listas da
-  Área do Fornecedor com a sessão aberta pela pessoa no gov.br, com o captcha invisível da própria página, a cada
-  8 minutos (no máximo 6 compras detalhadas por vez; durante uma disputa com robô ligado, só quando a pessoa pede).
-  Código: `desktop/acompanhamento.go`, `src/shared/acompanhamento.ts`, `src/react-app/pages/licitacoes/Acompanhamento.tsx`.
-  - **Item completo** (botão "Propostas, anexos e recursos" em cada item): as telas do fornecedor no Compras.gov.br dentro
-    da plataforma — **propostas de todas as empresas** (colocação, CNPJ, marca, modelo, valor ofertado/negociado, situação
-    e motivo), **anexos de cada empresa** para baixar, botão **"Conferir anexos das empresas à sua frente"** (quem não
-    enviou tende a ser recusado), **lances**, **chat do item** (pregoeiro com cada empresa), **meus anexos** (enviar e
-    excluir), **diligências** e **fase recursal** (prazos, intenções com motivação, recursos, contrarrazões e decisão, com
-    os arquivos). Ações com confirmação: enviar anexo, intenção de recurso (julgamento/habilitação), enviar e concluir
-    recurso, enviar e concluir contrarrazão. O aplicativo só aceita endereços de fornecedor de uma **lista fechada**
-    (`desktop/compras_acesso.go`, com teste) e no máximo 40 consultas por minuto; cada aba consulta só quando é aberta.
+- **Acompanhamento** (Licitações → Acompanhamento, pelo aplicativo do Windows), no mesmo desenho do Compras.gov.br e
+  separado do quadro:
+  - **Lista de participações** (filtro Em andamento / Propostas / Disputa / Seleção de fornecedores / Finalizadas), cada
+    uma com modalidade e número, UASG - órgão, objeto, etapa e etiquetas: **Chance boa** (até o 4º lugar), **média**
+    (5º a 8º), **baixa** (9º em diante), **Convocado**, **Pregoeiro falou com você**.
+  - **Janela da compra** (pop-up): etapas (Propostas → Disputa → Seleção de fornecedores → Remanescentes) e os itens com
+    situação, colocação ("3º de 21"), chance e convocações; botão **Ver item**; mensagens da compra.
+  - **Ver item**: **Minha proposta** (classificação, declarações ME/EPP, UF, chat com envio de mensagem, proposta com
+    valor proposta/ofertado/negociado unitário e total, quantidade, marca e modelo, anexos, diligências, recursos e
+    lances) e **Todas as propostas** (empresas em ordem; a seta abre o chat dela com o pregoeiro, a proposta, os anexos
+    para baixar e as diligências; botão "Conferir anexos das empresas à sua frente").
+  - **Anexos só com convocação** e depois de marcar **"Ciente"** (como na tela oficial); diligência e recursos só quando
+    o prazo está aberto. Toda ação pede confirmação.
+  - Avisos (convocações, situação da proposta, mensagens do pregoeiro) também vão para o **sino** da equipe.
+  - O aplicativo relê a lista a cada 3 minutos (10 por página, como a tela oficial, que responde 206) e lê na hora a
+    compra que você abre. Só aceita endereços de fornecedor de uma **lista fechada** (`desktop/compras_acesso.go`, com
+    teste), no máximo 40 consultas por minuto.
+  Código: `desktop/acompanhamento.go`, `desktop/compras_acesso.go`, `src/shared/acompanhamento.ts`,
+  `src/react-app/pages/licitacoes/Acompanhamento.tsx`, `src/react-app/pages/licitacoes/ItemCompras.tsx`.
 - **Disputas / robô de lances** (Licitações → Disputas): o robô roda **dentro do aplicativo do Windows**
   (`desktop/motor.go`), não na página — continua dando lances mesmo com a página fechada.
   - **Login como no Siga Pregão:** "Entrar com gov.br" abre uma janela direto no login de fornecedor do gov.br

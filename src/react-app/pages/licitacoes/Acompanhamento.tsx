@@ -1,26 +1,17 @@
-import { BellRing, ChevronDown, ClipboardCopy, Eye, Download, ExternalLink, LogIn, MessageSquare, RefreshCw, Send, TriangleAlert } from "lucide-react";
+import { BellRing, ClipboardCopy, Eye, Download, ExternalLink, LogIn, MessageSquare, RefreshCw, Send, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { type AvisoAcomp, avisosDe, type Chance, type CompraAcomp, dataDe, type ItemAcomp, montarCompras, type PainelAcompanhamento, ROTULO_CHANCE } from "../../../shared/acompanhamento";
+import { type AvisoAcomp, avisosDe, type CompraAcomp, dataDe, montarCompras, type PainelAcompanhamento, ROTULO_CHANCE } from "../../../shared/acompanhamento";
 import { mensagemDeErro } from "../../api";
-import { avisar } from "../../components/Ui";
+import { avisar, Modal } from "../../components/Ui";
 import { formatarMoeda } from "../../formato";
 import { link } from "../../rota";
-import { DetalheItemCompras } from "./DetalheItemCompras";
+import { COR_CHANCE, ItemCompras } from "./ItemCompras";
 import { noAplicativo, ponte, temPonte } from "../../robo/ponte";
 
 // Aba Acompanhamento: as participações no Compras.gov.br (em andamento e finalizadas), com a colocação de
 // cada item, a chance de ser chamado, os avisos do pregoeiro e a conversa com ele. Quem lê é o aplicativo do
 // Windows, com a sessão que você abriu no gov.br; nada disso entra no quadro de licitações.
 
-const COR_CHANCE: Record<Chance, string> = {
-  ganhou: "verde",
-  alta: "verde",
-  media: "amarelo",
-  baixa: "vermelho",
-  fora: "cinza",
-  aguardando: "azul",
-  encerrado: "cinza",
-};
 
 function ha(ms: number | null, agora: number) {
   if (!ms) return "";
@@ -43,7 +34,7 @@ export function Acompanhamento() {
   const [ligada, setLigada] = useState(temPonte());
   const [antigo, setAntigo] = useState(false);
   const [painel, setPainel] = useState<PainelAcompanhamento | null>(null);
-  const [aba, setAba] = useState<"andamento" | "finalizadas">("andamento");
+  const [aba, setAba] = useState<Filtro>("andamento");
   const [aberta, setAberta] = useState<string | null>(() => new URLSearchParams(window.location.search).get("compra"));
   const [agora, setAgora] = useState(Date.now());
   const pedida = useRef<string | null>(aberta); // compra que veio pelo link: ler já
@@ -89,8 +80,8 @@ export function Acompanhamento() {
     if (aberta && finalizadas.some((c) => c.chave === aberta) && !andamento.some((c) => c.chave === aberta)) setAba("finalizadas");
   }, [aberta, andamento, finalizadas]);
 
-  function abrir(chave: string) {
-    const nova = aberta === chave ? null : chave;
+  function abrir(chave: string | null) {
+    const nova = chave;
     setAberta(nova);
     if (nova) {
       pedida.current = nova;
@@ -118,7 +109,8 @@ export function Acompanhamento() {
   }
 
   const fase = painel?.fase ?? "";
-  const lista = aba === "andamento" ? andamento : finalizadas;
+  const lista = aba === "finalizadas" ? finalizadas : aba === "andamento" ? andamento : andamento.filter((c) => FILTROS[aba].fases.includes(c.faseCodigo));
+  const compraAberta = [...andamento, ...finalizadas].find((c) => c.chave === aberta) ?? null;
   const emPrimeiro = andamento.reduce((s, c) => s + c.itens.filter((i) => i.colocacao === 1 && i.chance !== "fora").length, 0);
   const convocacoes = andamento.reduce((s, c) => s + c.itens.filter((i) => i.pendencias.length).length, 0);
 
@@ -235,31 +227,36 @@ export function Acompanhamento() {
             </div>
           </div>
 
-          {avisos.length > 0 && <Avisos avisos={avisos} compras={andamento} aoAbrir={(k) => (setAba("andamento"), aberta !== k && abrir(k))} />}
+          {avisos.length > 0 && <Avisos avisos={avisos} compras={andamento} aoAbrir={(k) => abrir(k)} />}
 
-          <div className="disputas-topo">
-            <div className="segmentado pequeno">
-              <button className={aba === "andamento" ? "ativo" : ""} onClick={() => setAba("andamento")}>
-                Em andamento ({andamento.length})
-              </button>
-              <button className={aba === "finalizadas" ? "ativo" : ""} onClick={() => setAba("finalizadas")}>
-                Finalizadas ({finalizadas.length})
-              </button>
-            </div>
+          <div className="lista-compras-topo">
+            <span className="texto-fraco pequeno">
+              Exibindo {lista.length} registro(s) · {painel.buscando ? "lendo o Compras.gov.br…" : `atualizado ${ha(painel.em, agora)}`}
+            </span>
+            <select value={aba} onChange={(e) => setAba(e.target.value as Filtro)} aria-label="Filtrar participações">
+              {(Object.keys(FILTROS) as Filtro[]).map((f) => (
+                <option key={f} value={f}>
+                  {FILTROS[f].rotulo} ({f === "finalizadas" ? finalizadas.length : f === "andamento" ? andamento.length : andamento.filter((c) => FILTROS[f].fases.includes(c.faseCodigo)).length})
+                </option>
+              ))}
+            </select>
           </div>
 
           {lista.length === 0 ? (
-            <p className="texto-fraco vazio-acomp">{aba === "andamento" ? "Nenhuma participação em andamento no Compras.gov.br." : "Nenhuma participação finalizada recente."} Se no Compras.gov.br
-              aparecem participações, clique em Atualizar; se continuar vazio, use o Copiar diagnóstico abaixo.</p>
+            <p className="texto-fraco vazio-acomp">
+              {aba === "finalizadas" ? "Nenhuma participação finalizada recente." : "Nenhuma participação aqui."} Se no Compras.gov.br aparecem participações, clique em
+              Atualizar; se continuar vazio, use o Copiar diagnóstico abaixo.
+            </p>
           ) : (
-            <div className="lista-acomp">
+            <div className="lista-compras">
               {lista.map((c) => (
-                <CartaoCompra key={c.chave} compra={c} aberta={aberta === c.chave} aoAbrir={() => abrir(c.chave)} agora={agora} cnpj={painel.cnpj ?? ""} />
+                <LinhaCompra key={c.chave} compra={c} cnpj={painel.cnpj ?? ""} aoAbrir={() => abrir(c.chave)} />
               ))}
             </div>
           )}
+          {compraAberta && <JanelaCompra compra={compraAberta} cnpj={painel.cnpj ?? ""} agora={agora} aoFechar={() => abrir(null)} />}
           <p className="texto-fraco pequeno nota-acomp">
-            O aplicativo lê de novo a cada 8 minutos enquanto estiver aberto. A chance é uma estimativa pela colocação: o pregoeiro analisa a 1ª colocada e,
+            O aplicativo relê a lista a cada 3 minutos e a compra que você abre na hora. A chance é uma estimativa pela colocação: o pregoeiro analisa a 1ª colocada e,
             se ela for recusada ou inabilitada, chama a próxima. Algo diferente do Compras.gov.br?{" "}
             <button className="botao-link sem-margem" onClick={copiarDiagnostico}>
               Copiar diagnóstico
@@ -302,115 +299,173 @@ function Avisos({ avisos, compras, aoAbrir }: { avisos: AvisoAcomp[]; compras: C
   );
 }
 
-function CartaoCompra({ compra: c, aberta, aoAbrir, agora, cnpj }: { compra: CompraAcomp; aberta: boolean; aoAbrir: () => void; agora: number; cnpj: string }) {
-  const emPrimeiro = c.itens.filter((i) => i.colocacao === 1 && i.chance !== "fora").length;
-  const chamados = c.itens.filter((i) => i.pendencias.length).length;
-  const ganhos = c.itens.filter((i) => i.chance === "ganhou").length;
+type Filtro = "andamento" | "propostas" | "disputa" | "selecao" | "finalizadas";
+const FILTROS: Record<Filtro, { rotulo: string; fases: string[] }> = {
+  andamento: { rotulo: "Em andamento", fases: [] },
+  propostas: { rotulo: "Propostas", fases: ["1", "2", "6"] },
+  disputa: { rotulo: "Disputa", fases: ["3", "99"] },
+  selecao: { rotulo: "Seleção de fornecedores", fases: ["4"] },
+  finalizadas: { rotulo: "Finalizadas", fases: [] },
+};
+
+const NOME_MODALIDADE: Record<string, string> = { Pregão: "Pregão eletrônico", Dispensa: "Dispensa eletrônica", Concorrência: "Concorrência eletrônica", Cotação: "Cotação eletrônica" };
+const nomeCompra = (c: CompraAcomp) => `${NOME_MODALIDADE[c.modalidade] ?? c.modalidade} Nº ${c.numero}`;
+
+/** Etiquetas da compra: melhor chance entre os itens, convocação e se o pregoeiro falou com você. */
+function etiquetas(c: CompraAcomp, cnpj: string) {
+  const ordem = ["ganhou", "alta", "media", "baixa", "aguardando", "fora", "encerrado"];
+  const melhor = [...c.itens].sort((a, b) => ordem.indexOf(a.chance) - ordem.indexOf(b.chance) || (a.colocacao ?? 99) - (b.colocacao ?? 99))[0];
+  const convocado = c.itens.some((i) => i.pendencias.length || i.chatAberto);
+  const falou = c.mensagens.some((m) => m.quem === "pregoeiro" && (m.destinatario === cnpj || (!!cnpj && m.texto.replace(/\D/g, "").includes(cnpj))));
   const doPregoeiro = c.mensagens.filter((m) => m.quem === "pregoeiro").length;
-  const ref = useRef<HTMLElement>(null);
-  useEffect(() => {
-    if (aberta) ref.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [aberta]);
+  return { melhor, convocado, falou, doPregoeiro };
+}
+
+function LinhaCompra({ compra: c, cnpj, aoAbrir }: { compra: CompraAcomp; cnpj: string; aoAbrir: () => void }) {
+  const { melhor, convocado, falou, doPregoeiro } = etiquetas(c, cnpj);
   return (
-    <article ref={ref} className={`cartao compra-acomp ${aberta ? "aberta" : ""} ${chamados ? "com-chamado" : ""}`}>
-      <button className="cabeca-acomp" onClick={aoAbrir} aria-expanded={aberta}>
-        <div className="titulo-acomp">
-          <span className="nome-acomp">
-            {c.modalidade} {c.numero}
-            <span className="texto-fraco"> · UASG {c.uasg}</span>
+    <button className={`linha-compra ${convocado ? "com-chamado" : ""}`} onClick={aoAbrir}>
+      <span className="titulo-linha-compra">
+        <strong>{nomeCompra(c).toUpperCase()}</strong>
+        <span>
+          {c.uasg} - {c.orgao || "Órgão"}
+        </span>
+        {c.objeto && <span className="objeto-acomp texto-fraco">{c.objeto}</span>}
+      </span>
+      <span className="etapa-linha-compra">
+        <small>Etapa</small> {c.fase || "—"}
+      </span>
+      <span className="etiquetas-compra">
+        {convocado && <span className="chip vermelho">Convocado</span>}
+        {falou && <span className="chip azul">Pregoeiro falou com você</span>}
+        {melhor && melhor.colocacao != null && (
+          <span className={`chip ${COR_CHANCE[melhor.chance]}`} title={melhor.explicacao}>
+            {ROTULO_CHANCE[melhor.chance]} · {melhor.colocacao}º
           </span>
-          {c.orgao && <span className="orgao-acomp">{c.orgao}</span>}
-          {c.objeto && <span className="objeto-acomp texto-suave">{c.objeto}</span>}
-        </div>
-        <div className="chips-acomp">
-          {c.fase && <span className="chip">{c.fase}</span>}
-          {chamados > 0 && <span className="chip vermelho">{chamados === 1 ? "1 convocação" : `${chamados} convocações`}</span>}
-          {ganhos > 0 && <span className="chip verde">{ganhos === 1 ? "1 item ganho" : `${ganhos} itens ganhos`}</span>}
-          {emPrimeiro > 0 && <span className="chip verde">{emPrimeiro === 1 ? "1 item em 1º" : `${emPrimeiro} itens em 1º`}</span>}
-          {doPregoeiro > 0 && (
-            <span className="chip azul">
-              <MessageSquare size={12} /> {doPregoeiro}
-            </span>
-          )}
-          <ChevronDown className="seta-acomp" size={18} />
-        </div>
-      </button>
-      {aberta && <DetalheCompra compra={c} agora={agora} cnpj={cnpj} />}
-    </article>
+        )}
+        {melhor && melhor.colocacao == null && melhor.chance !== "aguardando" && <span className={`chip ${COR_CHANCE[melhor.chance]}`}>{ROTULO_CHANCE[melhor.chance]}</span>}
+        {!c.lidaEm && <span className="chip cinza">Lendo itens…</span>}
+        {doPregoeiro > 0 && !falou && (
+          <span className="chip cinza">
+            <MessageSquare size={12} /> {doPregoeiro}
+          </span>
+        )}
+      </span>
+    </button>
   );
 }
 
-function DetalheCompra({ compra: c, agora, cnpj }: { compra: CompraAcomp; agora: number; cnpj: string }) {
-  const [itemAberto, setItemAberto] = useState<ItemAcomp | null>(null);
+const PASSOS = ["Propostas", "Disputa", "Seleção de fornecedores", "Remanescentes"];
+const passoDa = (c: CompraAcomp) => (["1", "2", "6"].includes(c.faseCodigo) ? 0 : ["3", "99"].includes(c.faseCodigo) ? 1 : c.faseCodigo === "4" ? 2 : c.encerrada ? 3 : -1);
+
+/** Janela da compra (como "Acompanhamento seleção de fornecedores"): itens com colocação e o "Ver item". */
+function JanelaCompra({ compra: c, cnpj, agora, aoFechar }: { compra: CompraAcomp; cnpj: string; agora: number; aoFechar: () => void }) {
+  const [itemAberto, setItemAberto] = useState<number | null>(null);
+  const passo = passoDa(c);
+  const indice = c.itens.findIndex((i) => i.numero === itemAberto);
+  const item = indice >= 0 ? c.itens[indice] : null;
   return (
-    <div className="corpo-acomp">
-      <div className="info-acomp texto-fraco pequeno">
-        {c.abertura && <span>Abertura: {dataHora(c.abertura)}</span>}
-        <span>{c.lidaEm ? `Itens lidos ${ha(c.lidaEm, agora)}` : "Lendo os itens…"}</span>
-        {c.linkPncp && (
-          <a href={c.linkPncp} target="_blank" rel="noreferrer">
-            Edital no PNCP <ExternalLink size={12} />
-          </a>
+    <Modal titulo={item ? `${nomeCompra(c)} · Item ${item.numero}` : nomeCompra(c)} aoFechar={aoFechar} largo>
+      <style>{".modal.largo:has(.janela-compra){max-width:1100px}"}</style>
+      <div className="janela-compra">
+        <div className="cabeca-janela-compra">
+          <div>
+            <strong>{nomeCompra(c)}</strong>
+            <span>
+              UASG {c.uasg} - {c.orgao}
+            </span>
+            {c.abertura && <span className="texto-fraco pequeno">Abertura: {dataHora(c.abertura)}</span>}
+          </div>
+          <ol className="passos-compra">
+            {PASSOS.map((p, i) => (
+              <li key={p} className={i === passo ? "atual" : i < passo ? "feito" : ""}>
+                <span>{p}</span>
+                <i />
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        {item ? (
+          <>
+            <button className="botao-link sem-margem voltar-itens" onClick={() => setItemAberto(null)}>
+              ← Todos os itens
+            </button>
+            <ItemCompras
+              key={item.numero}
+              compra={c}
+              item={item}
+              cnpj={cnpj}
+              anterior={indice > 0 ? () => setItemAberto(c.itens[indice - 1].numero) : undefined}
+              proximo={indice < c.itens.length - 1 ? () => setItemAberto(c.itens[indice + 1].numero) : undefined}
+            />
+          </>
+        ) : (
+          <>
+            <div className="lista-compras-topo">
+              <span className="texto-fraco pequeno">{c.lidaEm ? `Exibindo ${c.itens.length} item(ns) · lidos ${ha(c.lidaEm, agora)}` : "Lendo os itens no Compras.gov.br…"}</span>
+              {c.linkPncp && (
+                <a className="botao-link sem-margem" href={c.linkPncp} target="_blank" rel="noreferrer">
+                  Edital no PNCP <ExternalLink size={12} />
+                </a>
+              )}
+            </div>
+            {!c.lidaEm ? (
+              <p className="texto-suave carregando-marcas">
+                <RefreshCw className="girando" size={16} /> Lendo os itens e as mensagens desta compra…
+              </p>
+            ) : c.itens.length === 0 ? (
+              <p className="texto-fraco">Nenhum item com proposta sua nesta compra.</p>
+            ) : (
+              <ul className="itens-compra">
+                {c.itens.map((it) => (
+                  <li key={it.numero} className={`item-compra chance-${it.chance}`}>
+                    <div className="desc-item-compra">
+                      <strong>
+                        {it.numero} &nbsp;{it.descricao.toUpperCase()}
+                      </strong>
+                      <span className="etapa-item-compras">{it.etapa || it.situacao || "—"}</span>
+                    </div>
+                    <dl>
+                      <dt>Qtde solicitada</dt>
+                      <dd>{it.quantidade ?? "—"}</dd>
+                      <dt>Sua proposta</dt>
+                      <dd>{formatarMoeda(it.meuValor)}</dd>
+                    </dl>
+                    <div className="colocacao-item-compra">
+                      <strong>{ordinal(it.colocacao)}</strong>
+                      <span className="texto-fraco pequeno">{it.participantes ? `de ${it.participantes}` : "colocação"}</span>
+                    </div>
+                    <div className="etiquetas-item">
+                      <span className={`chip ${COR_CHANCE[it.chance]}`} title={it.explicacao}>
+                        {ROTULO_CHANCE[it.chance]}
+                      </span>
+                      {it.pendencias.map((p) => (
+                        <span key={p.tipo} className="chip vermelho">
+                          {p.rotulo}
+                        </span>
+                      ))}
+                      {it.situacao && it.chance !== "fora" && <span className="chip verde">{it.situacao}</span>}
+                    </div>
+                    <button className="botao acento pequeno" onClick={() => setItemAberto(it.numero)}>
+                      <Eye /> Ver item
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {c.lidaEm && (
+              <details className="mensagens-compra">
+                <summary>
+                  <MessageSquare size={14} /> Mensagens da compra ({c.mensagens.length})
+                </summary>
+                <Conversa compra={c} />
+              </details>
+            )}
+          </>
         )}
       </div>
-      {c.erros.length > 0 && !c.itens.length && <p className="alerta erro">O Compras.gov.br não devolveu tudo desta compra agora: {c.erros.join(" · ")}</p>}
-      {!c.lidaEm ? (
-        <p className="texto-suave carregando-marcas">
-          <RefreshCw className="girando" size={16} /> Lendo os itens e as mensagens desta compra…
-        </p>
-      ) : c.itens.length === 0 ? (
-        <p className="texto-fraco">Nenhum item com proposta sua nesta compra.</p>
-      ) : (
-        <ul className="itens-acomp">
-          {c.itens.map((it) => (
-            <LinhaItem key={it.numero} item={it} aoAbrir={() => setItemAberto(it)} />
-          ))}
-        </ul>
-      )}
-      {c.lidaEm && <Conversa compra={c} />}
-      {itemAberto && <DetalheItemCompras compra={c} item={itemAberto} cnpj={cnpj} aoFechar={() => setItemAberto(null)} />}
-    </div>
-  );
-}
-
-function LinhaItem({ item: it, aoAbrir }: { item: ItemAcomp; aoAbrir: () => void }) {
-  const diferenca = it.meuValor != null && it.melhorValor != null && it.melhorValor > 0 && it.meuValor > it.melhorValor ? (it.meuValor / it.melhorValor - 1) * 100 : null;
-  return (
-    <li className={`item-acomp chance-${it.chance}`}>
-      <span className="numero-acomp">{it.numero}</span>
-      <div className="desc-acomp">
-        <span className="texto-desc-acomp">{it.descricao}</span>
-        <span className="texto-fraco pequeno">
-          {[it.marca && `Marca ${it.marca}`, it.modelo, it.fase, it.situacao].filter(Boolean).join(" · ")}
-        </span>
-        {it.pendencias.map((p) => (
-          <span key={p.tipo} className="pendencia-acomp">
-            <BellRing size={12} /> {p.rotulo}: responda no Compras.gov.br
-          </span>
-        ))}
-        {it.motivo && <span className="motivo-acomp">Motivo: {it.motivo}</span>}
-      </div>
-      <div className="colocacao-acomp">
-        <strong>{ordinal(it.colocacao)}</strong>
-        <span className="texto-fraco pequeno">{it.participantes ? `de ${it.participantes}` : "colocação"}</span>
-      </div>
-      <div className="valores-acomp">
-        <span>{formatarMoeda(it.meuValor)}</span>
-        <span className="texto-fraco pequeno">
-          {it.melhorValor != null ? `melhor ${formatarMoeda(it.melhorValor)}` : ""}
-          {diferenca != null ? ` (+${diferenca.toFixed(1).replace(".", ",")}%)` : ""}
-        </span>
-      </div>
-      <div className="chance-acomp">
-        <span className={`chip ${COR_CHANCE[it.chance]}`} title={it.explicacao}>
-          {ROTULO_CHANCE[it.chance]}
-        </span>
-        <span className="texto-fraco pequeno">{it.explicacao}</span>
-      </div>
-      <button className="botao secundario pequeno abrir-item-acomp" onClick={aoAbrir} aria-label={`Abrir o item ${it.numero}: propostas, anexos, lances, chat e recursos`}>
-        <Eye /> Propostas, anexos e recursos
-      </button>
-    </li>
+    </Modal>
   );
 }
 

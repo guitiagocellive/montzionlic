@@ -1,10 +1,10 @@
 {
-  "versao": "3.1.0",
+  "versao": "3.1.1",
   "data": "2026-11-12",
   "novidades": [
-    "Acompanhamento: corrigido \"nenhuma participação\" — o Compras.gov.br responde as listas com o código 206 e o aplicativo descartava a resposta. Agora as suas participações aparecem.",
-    "Cada item abre as telas do Compras.gov.br na plataforma: propostas de todas as empresas (colocação, marca, modelo, valor, situação), anexos de cada empresa para baixar, lances, chat do item, diligências e fase recursal.",
-    "Botão \"Conferir anexos das empresas à sua frente\": mostra quem não enviou anexos.",
-    "Ações sem sair da plataforma, sempre com confirmação: enviar e excluir anexos, intenção de recurso, recurso e contrarrazão."
+    "Acompanhamento no desenho do Compras.gov.br: lista de participações com etapa e etiquetas (Chance boa até o 4º lugar, Convocado, Pregoeiro falou com você), janela da compra com os itens e o botão \"Ver item\".",
+    "Ver item: Minha proposta (classificação, declarações, UF, chat, proposta, anexos, diligências, recursos e lances) e Todas as propostas (a seta de cada empresa mostra o chat dela com o pregoeiro, a proposta, os anexos e as diligências).",
+    "Anexos só podem ser enviados quando o pregoeiro convoca, e depois de marcar \"Ciente\", como no Compras.gov.br.",
+    "Mais rápido: a lista é relida a cada 3 minutos e a compra que você abre é lida na hora."
   ]
 }

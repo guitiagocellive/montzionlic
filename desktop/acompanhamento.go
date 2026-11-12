@@ -20,7 +20,7 @@ import (
 // espaçadas (a lista a cada 8 minutos e no máximo 6 compras detalhadas por vez).
 
 const (
-	intervaloAcompanhamento = 8 * time.Minute
+	intervaloAcompanhamento = 3 * time.Minute
 	intervaloFinalizadas    = 30 * time.Minute
 	detalhesPorVez          = 6
 )
@@ -166,8 +166,8 @@ const scriptAcompanhamento = `(async (entrada) => {
     }
     return todas;
   };
-  saida.andamento = await participacoes(2, 8);
-  if (entrada.finalizadas) saida.finalizadas = await participacoes(6, 3);
+  if (entrada.lista) saida.andamento = await participacoes(2, 8);
+  if (entrada.lista && entrada.finalizadas) saida.finalizadas = await participacoes(6, 3);
   for (const c of entrada.detalhar) {
     const d = { erros: [] };
     const e = encodeURIComponent(c.chave);
@@ -235,6 +235,9 @@ func (m *motor) coletarAcompanhamento() {
 	}
 	a.buscando = true
 	forcar := a.forcar
+	// Só a compra que a pessoa abriu: não precisa reler a lista inteira (fica bem mais rápido).
+	soPedidos := !forcar && len(a.pedidos) > 0 && a.andamento != nil && time.Since(a.em) < intervaloAcompanhamento
+	quantosPedidos := len(a.pedidos)
 	finalizadas := forcar || a.finalizadas == nil || time.Since(a.finalizadasEm) > intervaloFinalizadas
 	// Escolhe as compras a detalhar: as pedidas pela página e, depois, as lidas há mais tempo.
 	escolhidas := []compraAcomp{}
@@ -281,11 +284,16 @@ func (m *motor) coletarAcompanhamento() {
 	a.forcar = false
 	a.mu.Unlock()
 
-	erro := m.lerAcompanhamento(finalizadas, escolhidas)
+	if soPedidos && len(escolhidas) > quantosPedidos {
+		escolhidas = escolhidas[:quantosPedidos]
+	}
+	erro := m.lerAcompanhamento(!soPedidos, finalizadas, escolhidas)
 
 	a.mu.Lock()
 	a.buscando = false
-	a.em = time.Now()
+	if !soPedidos {
+		a.em = time.Now() // hora da última leitura da lista
+	}
 	a.erro = ""
 	if erro != nil {
 		a.erro = erro.Error()
@@ -294,7 +302,7 @@ func (m *motor) coletarAcompanhamento() {
 	a.mu.Unlock()
 }
 
-func (m *motor) lerAcompanhamento(finalizadas bool, escolhidas []compraAcomp) error {
+func (m *motor) lerAcompanhamento(lista, finalizadas bool, escolhidas []compraAcomp) error {
 	s := m.p.sessaoLogada(false)
 	if s == nil {
 		return fmt.Errorf("entre no Compras.gov.br para acompanhar as participações")
@@ -302,7 +310,7 @@ func (m *motor) lerAcompanhamento(finalizadas bool, escolhidas []compraAcomp) er
 	if err := m.p.garantirSala(s); err != nil {
 		return err
 	}
-	entrada, _ := json.Marshal(mapa{"finalizadas": finalizadas, "detalhar": escolhidas})
+	entrada, _ := json.Marshal(mapa{"lista": lista, "finalizadas": finalizadas, "detalhar": escolhidas})
 	saida, err := m.p.avaliar(s.sessao, scriptAcompanhamento+"("+string(entrada)+")", 3*time.Minute)
 	if err != nil {
 		return fmt.Errorf("não foi possível ler as participações: %v", err)
