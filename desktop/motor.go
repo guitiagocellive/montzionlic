@@ -121,6 +121,7 @@ func (m *motor) Rodar() {
 	go m.cicloRobo()
 	go m.cicloAcompanhamento()
 	go m.cicloCacheAcomp()
+	go m.cicloColetorPropostas()
 }
 
 func chaveItem(compra string, numero int) string { return compra + ":" + strconv.Itoa(numero) }

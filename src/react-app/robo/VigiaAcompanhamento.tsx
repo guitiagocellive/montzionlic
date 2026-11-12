@@ -47,12 +47,32 @@ export function VigiaAcompanhamento() {
         if (e instanceof Error && /desconhecido/i.test(e.message)) parado = true;
       }
     };
-    const primeiro = setTimeout(vigiar, 15_000);
+    // Propostas coletadas pelo aplicativo (Análise de empresas): manda para a base da plataforma.
+    const enviarPropostas = async () => {
+      if (!vivo || parado || !temPonte()) return;
+      try {
+        for (let vez = 0; vez < 4; vez++) {
+          const r = await ponte.propostasColetadas();
+          if (!r.propostas.length) return;
+          await api("/analise-empresas/propostas", { corpo: { propostas: r.propostas } });
+          await ponte.propostasEnviadas(r.propostas.map((p) => p.id));
+          if (!r.restantes) return;
+        }
+      } catch {
+        /* tenta de novo na próxima volta */
+      }
+    };
+    const t2 = setInterval(enviarPropostas, 60_000);
+    const primeiro = setTimeout(() => {
+      vigiar();
+      enviarPropostas();
+    }, 15_000);
     const t = setInterval(vigiar, 90_000);
     return () => {
       vivo = false;
       clearTimeout(primeiro);
       clearInterval(t);
+      clearInterval(t2);
     };
   }, []);
   return null;

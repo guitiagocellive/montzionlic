@@ -1,10 +1,11 @@
-import { BarChart3, Building2, ExternalLink, FileSearch, Info, Landmark, ListChecks, Loader2, MapPin, Package, Search, ShieldCheck, TrendingUp, X } from "lucide-react";
+import { BarChart3, Building2, ExternalLink, Gavel, FileSearch, Info, Landmark, ListChecks, Loader2, MapPin, Package, Search, ShieldCheck, TrendingUp, X } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { cnpjValido, type ItemPncp, type ResultadoItem, resumirEmpresa } from "../../../shared/empresa";
 import { dataBr, SeletorIntervalo } from "../../components/Calendario";
 import { baixarCsv } from "../../components/Periodo";
 import { Vazio } from "../../components/Ui";
 import { formatarData, formatarMoeda, formatarNumero } from "../../formato";
+import { Participacoes, Penalidades } from "./EmpresaParticipacoes";
 import { MapaMarcas } from "./MapaMarcas";
 import { cnpjFormatado, emLotes, GraficoMeses, NOMES_UF, type Periodo, PERIODOS, periodoDe, Ranking } from "./Mercado";
 
@@ -24,7 +25,7 @@ type Fornecedor = {
   ativo?: boolean | null;
 };
 type Pagina<T> = { resultado?: T[]; totalPaginas?: number; totalRegistros?: number };
-type Aba = "geral" | "vitorias" | "graficos" | "itens";
+type Aba = "geral" | "vitorias" | "participacoes" | "graficos" | "itens";
 const CHAVE_RECENTES = "montzion:empresas-recentes";
 
 async function pedir<T>(caminho: string): Promise<T> {
@@ -256,6 +257,7 @@ export function Empresas() {
   const ABAS: { chave: Aba; nome: string; icone: ReactNode }[] = [
     { chave: "geral", nome: "Visão geral", icone: <Building2 size={15} /> },
     { chave: "vitorias", nome: "Vitórias em licitações", icone: <BarChart3 size={15} /> },
+    { chave: "participacoes", nome: "Participações e desclassificações", icone: <Gavel size={15} /> },
     { chave: "graficos", nome: "Gráficos e mapa", icone: <TrendingUp size={15} /> },
     { chave: "itens", nome: "Itens vencidos", icone: <ListChecks size={15} /> },
   ];
@@ -378,8 +380,11 @@ export function Empresas() {
             ))}
           </div>
 
+          {aba === "participacoes" && <Participacoes cnpj={cnpj} Pizza={Pizza} />}
+
           {aba === "geral" && (
             <div className="grade-empresa">
+              <Penalidades cnpj={cnpj} />
               <section className="cartao ficha-empresa">
                 <h3>
                   <Building2 size={16} /> Cadastro

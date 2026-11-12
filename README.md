@@ -71,6 +71,13 @@ Não existe cadastro público: só um administrador adiciona pessoas.
   (com nome), estados e a lista dos itens vencidos com link para o PNCP. Fonte: resultados oficiais do PNCP (todas as
   plataformas que publicam lá) e cadastro de fornecedores do Compras.gov.br; a base aberta só traz as vitórias
   (disputas perdidas, desclassificações e inabilitações não são publicadas).
+- **Análise de empresas — penalidades e participações:** a Visão geral mostra as **penalidades** do CNPJ (inidôneos do
+  TCU, CNIA/CNJ, CEIS e CNEP) pela Consulta Consolidada de Pessoa Jurídica do TCU (pública, sem chave). A aba
+  **Participações e desclassificações** mostra participações, vitórias × derrotas, valor disputado × vencido,
+  desclassificações, inabilitações e os **motivos**, nas licitações em que a sua empresa também participou: os dados
+  abertos do governo só têm as vitórias, então o aplicativo monta uma **base própria** (`propostas_compras`) lendo
+  devagar (1 leitura a cada 4 s, nunca durante disputa com robô) a tela pública "Todas as propostas" dessas licitações
+  (`desktop/coletor_propostas.go`, rotas em `src/worker/rotas/analiseEmpresas.ts`).
 - **Inteligência de mercado:** Licitações → Inteligência de mercado (no estilo da Análise de Mercado do Siga Pregão).
   Ao digitar, aparecem **sugestões** do catálogo oficial do governo; o período já vem nos **últimos 12 meses** (atalhos
   3/6/24 meses ou datas no calendário). Mostra o **mapa do Brasil** (marca que mais vence em cada estado, ou volume de

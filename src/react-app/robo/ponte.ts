@@ -114,6 +114,9 @@ export const ponte = {
   atualizar: () => chamar<{ ok: boolean }>("atualizar", {}, 5_000),
   /** Últimas linhas do registro do aplicativo, sem chaves nem documentos (para mandar ao suporte). */
   diagnostico: () => chamar<{ texto: string }>("diagnostico", {}, 10_000),
+  /** Propostas de todas as empresas coletadas para a Análise de empresas (ainda não enviadas à plataforma). */
+  propostasColetadas: () => chamar<{ propostas: (Record<string, unknown> & { id: string })[]; restantes: number }>("propostasColetadas", {}, 8_000),
+  propostasEnviadas: (chaves: string[]) => chamar<{ ok: boolean }>("propostasEnviadas", { chaves }, 8_000),
   /** Classificação do item (melhor lance de cada participante), lida na hora. */
   classificacao: (compra: string, item: number) => chamar<{ posicoes: { valor: number; nosso: boolean }[]; em: number }>("classificacao", { compra, item }, 60_000),
   /** Participações lidas pelo aplicativo (aba Acompanhamento). compra: ler essa já; atualizar: ler tudo já. */

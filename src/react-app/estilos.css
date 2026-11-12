@@ -12055,3 +12055,91 @@ label.botao.desativado {
 .lista-classificacao .pos {
   font-weight: 700;
 }
+
+/* ---------- Análise de empresas: penalidades e participações ---------- */
+.lista-penalidades {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.lista-penalidades li {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--superficie-2);
+  font-size: 0.82rem;
+}
+.lista-penalidades li.nada svg {
+  color: var(--verde);
+}
+.lista-penalidades li.consta {
+  background: var(--vermelho-fundo);
+  color: var(--vermelho);
+}
+.lista-penalidades li.indisponivel svg {
+  color: var(--texto-fraco);
+}
+.situacao-penalidade {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.situacao-penalidade a {
+  color: inherit;
+}
+.barra-resultados {
+  display: flex;
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--superficie-2);
+  margin: 12px 0 6px;
+}
+.barra-resultados span {
+  height: 100%;
+}
+.motivos-empresa,
+.participacoes-recentes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.motivos-empresa li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--borda);
+  font-size: 0.84rem;
+}
+.participacoes-recentes li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--borda);
+  font-size: 0.84rem;
+}
+.desc-participacao {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.titulo-secao {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.95rem;
+  margin: 0 0 10px;
+}

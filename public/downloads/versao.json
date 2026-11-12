@@ -1,11 +1,11 @@
 {
-  "versao": "3.1.7",
+  "versao": "3.1.8",
   "data": "2026-11-12",
   "novidades": [
+    "Análise de empresas: penalidades de qualquer CNPJ (inidôneos do TCU, CNIA/CNJ, CEIS e CNEP), pela consulta pública do TCU.",
+    "Nova aba \"Participações e desclassificações\": participações, vitórias × derrotas, valor disputado × vencido, desclassificações, inabilitações e os motivos — nas licitações em que a sua empresa também participou.",
+    "O aplicativo monta essa base sozinho, devagar e em segundo plano, com a tela pública \"Todas as propostas\" das suas licitações.",
     "Robô busca a MELHOR COLOCAÇÃO POSSÍVEL: se não dá para ser 1º acima do seu mínimo, ele cobre o concorrente mais barato que ainda está acima do mínimo, em vez de descer direto ao mínimo.",
-    "Espera os últimos 10 segundos por padrão; a opção agora é \"Não esperar os últimos 10 segundos para cobrir\".",
-    "Cronômetro com o tempo que falta e a hora de término (também nas dispensas, que só informam a hora de término).",
-    "Botão Classificação em cada item (melhor lance de cada participante) e selo com a sua colocação.",
-    "Confirmação em cada item: o último lance enviado e se o Compras.gov.br aceitou ou recusou."
+    "Espera os últimos 10 segundos por padrão; a opção agora é \"Não esperar os últimos 10 segundos para cobrir\"."
   ]
 }
