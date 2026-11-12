@@ -1,9 +1,10 @@
 {
-  "versao": "3.0.8",
+  "versao": "3.0.9",
   "data": "2026-11-12",
   "novidades": [
-    "Nova aba Acompanhamento: suas participações no Compras.gov.br (em andamento e finalizadas), com a colocação em cada item e a chance de ser chamado.",
-    "Avisos no sino quando o pregoeiro convocar (anexos, negociação, diligência), mudar a situação da proposta ou mandar mensagem.",
-    "Mensagens ao pregoeiro direto da plataforma, quando ele abrir a conversa para você."
+    "Acompanhamento: corrigido \"nenhuma participação\" — agora lê todas as páginas de \"Minhas participações\", como a tela oficial.",
+    "Cada item abre as telas do Compras.gov.br na plataforma: propostas de todas as empresas (colocação, marca, modelo, valor, situação), anexos de cada empresa para baixar, lances, chat do item, diligências e fase recursal.",
+    "Botão \"Conferir anexos das empresas à sua frente\": mostra quem não enviou anexos.",
+    "Ações sem sair da plataforma, sempre com confirmação: enviar e excluir anexos, intenção de recurso, recurso e contrarrazão."
   ]
 }

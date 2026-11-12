@@ -1,10 +1,11 @@
-import { BellRing, ChevronDown, ClipboardCopy, Download, ExternalLink, LogIn, MessageSquare, RefreshCw, Send, TriangleAlert } from "lucide-react";
+import { BellRing, ChevronDown, ClipboardCopy, Eye, Download, ExternalLink, LogIn, MessageSquare, RefreshCw, Send, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type AvisoAcomp, avisosDe, type Chance, type CompraAcomp, dataDe, type ItemAcomp, montarCompras, type PainelAcompanhamento, ROTULO_CHANCE } from "../../../shared/acompanhamento";
 import { mensagemDeErro } from "../../api";
 import { avisar } from "../../components/Ui";
 import { formatarMoeda } from "../../formato";
 import { link } from "../../rota";
+import { DetalheItemCompras } from "./DetalheItemCompras";
 import { noAplicativo, ponte, temPonte } from "../../robo/ponte";
 
 // Aba Acompanhamento: as participações no Compras.gov.br (em andamento e finalizadas), com a colocação de
@@ -45,7 +46,7 @@ export function Acompanhamento() {
   const [aba, setAba] = useState<"andamento" | "finalizadas">("andamento");
   const [aberta, setAberta] = useState<string | null>(() => new URLSearchParams(window.location.search).get("compra"));
   const [agora, setAgora] = useState(Date.now());
-  const pedida = useRef<string | null>(null);
+  const pedida = useRef<string | null>(aberta); // compra que veio pelo link: ler já
 
   useEffect(() => {
     if (ligada) return;
@@ -205,6 +206,15 @@ export function Acompanhamento() {
       ) : (
         <>
           {painel.problema && <p className="alerta erro">{painel.problema}</p>}
+          {(painel.andamento?.length ?? 0) > andamento.length && (
+            <p className="alerta aviso">
+              O Compras.gov.br devolveu {painel.andamento?.length} participações, mas {painel.andamento!.length - andamento.length} vieram num formato que eu ainda não reconheço.{" "}
+              <button className="botao-link sem-margem" onClick={copiarDiagnostico}>
+                Copiar diagnóstico
+              </button>{" "}
+              e mande para o suporte.
+            </p>
+          )}
 
           <div className="resumo-acomp entrar">
             <div>
@@ -239,11 +249,12 @@ export function Acompanhamento() {
           </div>
 
           {lista.length === 0 ? (
-            <p className="texto-fraco vazio-acomp">{aba === "andamento" ? "Nenhuma participação em andamento no Compras.gov.br." : "Nenhuma participação finalizada recente."}</p>
+            <p className="texto-fraco vazio-acomp">{aba === "andamento" ? "Nenhuma participação em andamento no Compras.gov.br." : "Nenhuma participação finalizada recente."} Se no Compras.gov.br
+              aparecem participações, clique em Atualizar; se continuar vazio, use o Copiar diagnóstico abaixo.</p>
           ) : (
             <div className="lista-acomp">
               {lista.map((c) => (
-                <CartaoCompra key={c.chave} compra={c} aberta={aberta === c.chave} aoAbrir={() => abrir(c.chave)} agora={agora} />
+                <CartaoCompra key={c.chave} compra={c} aberta={aberta === c.chave} aoAbrir={() => abrir(c.chave)} agora={agora} cnpj={painel.cnpj ?? ""} />
               ))}
             </div>
           )}
@@ -291,7 +302,7 @@ function Avisos({ avisos, compras, aoAbrir }: { avisos: AvisoAcomp[]; compras: C
   );
 }
 
-function CartaoCompra({ compra: c, aberta, aoAbrir, agora }: { compra: CompraAcomp; aberta: boolean; aoAbrir: () => void; agora: number }) {
+function CartaoCompra({ compra: c, aberta, aoAbrir, agora, cnpj }: { compra: CompraAcomp; aberta: boolean; aoAbrir: () => void; agora: number; cnpj: string }) {
   const emPrimeiro = c.itens.filter((i) => i.colocacao === 1 && i.chance !== "fora").length;
   const chamados = c.itens.filter((i) => i.pendencias.length).length;
   const ganhos = c.itens.filter((i) => i.chance === "ganhou").length;
@@ -324,12 +335,13 @@ function CartaoCompra({ compra: c, aberta, aoAbrir, agora }: { compra: CompraAco
           <ChevronDown className="seta-acomp" size={18} />
         </div>
       </button>
-      {aberta && <DetalheCompra compra={c} agora={agora} />}
+      {aberta && <DetalheCompra compra={c} agora={agora} cnpj={cnpj} />}
     </article>
   );
 }
 
-function DetalheCompra({ compra: c, agora }: { compra: CompraAcomp; agora: number }) {
+function DetalheCompra({ compra: c, agora, cnpj }: { compra: CompraAcomp; agora: number; cnpj: string }) {
+  const [itemAberto, setItemAberto] = useState<ItemAcomp | null>(null);
   return (
     <div className="corpo-acomp">
       <div className="info-acomp texto-fraco pequeno">
@@ -351,16 +363,17 @@ function DetalheCompra({ compra: c, agora }: { compra: CompraAcomp; agora: numbe
       ) : (
         <ul className="itens-acomp">
           {c.itens.map((it) => (
-            <LinhaItem key={it.numero} item={it} />
+            <LinhaItem key={it.numero} item={it} aoAbrir={() => setItemAberto(it)} />
           ))}
         </ul>
       )}
       {c.lidaEm && <Conversa compra={c} />}
+      {itemAberto && <DetalheItemCompras compra={c} item={itemAberto} cnpj={cnpj} aoFechar={() => setItemAberto(null)} />}
     </div>
   );
 }
 
-function LinhaItem({ item: it }: { item: ItemAcomp }) {
+function LinhaItem({ item: it, aoAbrir }: { item: ItemAcomp; aoAbrir: () => void }) {
   const diferenca = it.meuValor != null && it.melhorValor != null && it.melhorValor > 0 && it.meuValor > it.melhorValor ? (it.meuValor / it.melhorValor - 1) * 100 : null;
   return (
     <li className={`item-acomp chance-${it.chance}`}>
@@ -394,6 +407,9 @@ function LinhaItem({ item: it }: { item: ItemAcomp }) {
         </span>
         <span className="texto-fraco pequeno">{it.explicacao}</span>
       </div>
+      <button className="botao secundario pequeno abrir-item-acomp" onClick={aoAbrir} aria-label={`Abrir o item ${it.numero}: propostas, anexos, lances, chat e recursos`}>
+        <Eye /> Propostas, anexos e recursos
+      </button>
     </li>
   );
 }

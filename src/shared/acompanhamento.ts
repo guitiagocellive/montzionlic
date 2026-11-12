@@ -90,11 +90,17 @@ export function numeroPelaChave(chave: string) {
 }
 
 function chaveDe(x: Bruto): string {
-  const c = obj(x.compra);
-  const direta = texto(primeiro(x.chaveCompra, c.chaveCompra, x.chave));
+  const c = { ...obj(x.compraFaseExterna), ...obj(x.dadosCompra), ...obj(x.compra) };
+  const direta = texto(primeiro(x.chaveCompra, c.chaveCompra));
   if (direta) return direta;
-  const uasg = texto(primeiro(x.numeroUasg, c.numeroUasg, c.uasg)).replace(/\D/g, "");
-  const mod = texto(primeiro(x.modalidade, c.modalidade)).replace(/\D/g, "");
+  for (const fonte of [x, c]) {
+    for (const k of ["idCompra", "identificadorCompra", "chave", "id", "codigoCompra"]) {
+      const v = texto(fonte[k]);
+      if (/^\d{17}$/.test(v)) return v;
+    }
+  }
+  const uasg = texto(primeiro(x.numeroUasg, c.numeroUasg, c.uasg, x.uasg, c.codigoUasg, x.codigoUasg, c.codigoUnidade)).replace(/\D/g, "");
+  const mod = texto(primeiro(x.modalidade, c.modalidade, c.codigoModalidade)).replace(/\D/g, "");
   const num = texto(primeiro(x.numeroCompra, c.numeroCompra, c.numero)).replace(/\D/g, "");
   const ano = texto(primeiro(x.anoCompra, c.anoCompra, c.ano)).replace(/\D/g, "");
   if (!uasg || !mod || !num || ano.length !== 4) return "";
@@ -117,7 +123,7 @@ export interface Participacao {
 
 export function lerParticipacao(bruto: unknown): Participacao | null {
   const x = obj(bruto);
-  const c = { ...x, ...obj(x.compra) };
+  const c = { ...x, ...obj(x.compraFaseExterna), ...obj(x.dadosCompra), ...obj(x.compra) };
   const chave = chaveDe(x);
   if (!chave) return null;
   const faseCod = texto(numero(c.faseCompraFaseExterna) ?? c.faseCompraFaseExterna);
@@ -173,6 +179,9 @@ export interface ItemAcomp {
   chatAberto: boolean;
   chance: Chance;
   explicacao: string;
+  /** Sessão de julgamento/habilitação (usada na fase recursal). */
+  sessao: number;
+  prazoIntencao: string;
 }
 
 const PENDENCIAS: [string, Pendencia["tipo"], string][] = [
@@ -221,6 +230,8 @@ export function lerItemAcomp(bruto: unknown): ItemAcomp | null {
     chatAberto: p.canalChatAberto === true,
     chance: "aguardando",
     explicacao: "",
+    sessao: numero(primeiro(x.numeroSessaoJulgHab, x.sessaoJulgamentoHabilitacao)) ?? 1,
+    prazoIntencao: texto(primeiro(obj(x.prazosFaseRecursal).dataHoraLimiteIRJulgamento, obj(x.prazosFaseRecursal).dataHoraLimiteIRHabilitacao)),
   };
   const { chance, explicacao } = calcularChance(item, situacaoItem, desclassificado);
   item.chance = chance;
@@ -294,6 +305,7 @@ export interface PainelAcompanhamento {
   conectado: boolean;
   fase: string;
   agora: number;
+  cnpj?: string;
 }
 
 export interface CompraAcomp extends Participacao {
@@ -399,4 +411,187 @@ export function avisosDe(compras: CompraAcomp[], agora = Date.now()): AvisoAcomp
     }
   }
   return avisos.sort((a, b) => Number(b.urgente) - Number(a.urgente) || b.dataHora - a.dataHora);
+}
+
+// ---------- Detalhe do item (telas do fornecedor no Compras.gov.br) ----------
+
+export interface PropostaEmpresa {
+  cnpj: string;
+  empresa: string;
+  colocacao: number | null;
+  valor: number | null;
+  valorInicial: number | null;
+  marca: string;
+  modelo: string;
+  quantidade: number | null;
+  situacao: string;
+  motivo: string;
+  desclassificada: boolean;
+  convocada: boolean;
+  meEpp: boolean;
+}
+
+export function lerProposta(bruto: unknown): PropostaEmpresa {
+  const p = obj(bruto);
+  const part = obj(p.participante);
+  const valores = obj(p.valores);
+  const sit = texto(p.situacao);
+  return {
+    cnpj: texto(primeiro(part.identificacao, p.identificacaoParticipante, p.identificacao)),
+    empresa: texto(primeiro(part.nome, p.nomeParticipante, p.razaoSocial)) || "Empresa",
+    colocacao: numero(primeiro(p.classificacao, p.posicao)),
+    valor: valorDe(primeiro(valores.valorNegociado, valores.valorPropostaInicialOuLances, valores.valorPropostaInicial, p.valor)),
+    valorInicial: valorDe(valores.valorPropostaInicial),
+    marca: texto(p.marcaFabricante),
+    modelo: texto(p.modeloVersao),
+    quantidade: numero(p.quantidadeOfertada),
+    situacao: SITUACOES_PROPOSTA[sit] ?? "",
+    motivo: texto(primeiro(p.motivoDesclassificacao, p.justificativaDesclassificacao)),
+    desclassificada: DESCLASSIFICADA.has(sit) || sit === "5" || p.desclassificado === true,
+    convocada: PENDENCIAS.some(([campo]) => texto(p[campo]) === "S") || p.canalChatAberto === true,
+    meEpp: part.porte === "ME" || part.porte === "EPP" || p.declaracaoMeEpp === true,
+  };
+}
+
+/** Item com as propostas de todas as empresas ("propostasItem"), na ordem de classificação. */
+export function propostasDoItem(dados: unknown): PropostaEmpresa[] {
+  const d = obj(dados);
+  const lista = Array.isArray(dados) ? dados : Array.isArray(d.propostasItem) ? d.propostasItem : Array.isArray(d.propostas) ? d.propostas : Array.isArray(d.propostasIniciais) ? d.propostasIniciais : [];
+  return (lista as unknown[]).map(lerProposta).sort((a, b) => (a.colocacao ?? 999) - (b.colocacao ?? 999) || (a.valor ?? 0) - (b.valor ?? 0));
+}
+
+export interface AnexoCompras {
+  id: string;
+  nome: string;
+  dataHora: string;
+  tipo: string;
+  tamanho: number | null;
+  url: string;
+}
+
+export function lerAnexos(dados: unknown): AnexoCompras[] {
+  const d = obj(dados);
+  const lista = Array.isArray(dados) ? dados : (primeiro(d.anexos, d.arquivos, d.content, d.lista) as unknown[]) ?? [];
+  return (Array.isArray(lista) ? lista : [])
+    .map((b) => {
+      const a = obj(b);
+      return {
+        id: texto(primeiro(a.id, a.identificador, a.sequencial, a.numero, a.codigo)),
+        nome: texto(primeiro(a.nomeOriginal, a.nome, a.nomeArquivo, a.descricao)) || "Arquivo",
+        dataHora: texto(primeiro(a.dataHora, a.dataHoraInclusao, a.dataInclusao)),
+        tipo: texto(primeiro(a.tipoAnexoDescricao, a.tipoAnexo, a.tipo, a.fase)),
+        tamanho: numero(primeiro(a.tamanho, a.tamanhoArquivo)),
+        url: texto(a.url),
+      };
+    })
+    .filter((a) => a.id || a.url);
+}
+
+export interface LanceCompras {
+  valor: number | null;
+  dataHora: string;
+  empresa: string;
+  cnpj: string;
+  meu: boolean;
+}
+
+export function lerLances(dados: unknown, meuCnpj = ""): LanceCompras[] {
+  const d = obj(dados);
+  const lista = Array.isArray(dados) ? dados : (primeiro(d.lances, d.content, d.lista) as unknown[]) ?? [];
+  return (Array.isArray(lista) ? lista : [])
+    .map((b) => {
+      const l = obj(b);
+      const part = obj(l.participante);
+      const cnpj = texto(primeiro(part.identificacao, l.identificacaoParticipante, l.identificacaoFornecedor));
+      return {
+        valor: valorDe(primeiro(l.valor, l.valorInformado, l.valorCalculado, l.valorLance)),
+        dataHora: texto(primeiro(l.dataHora, l.dataHoraLance, l.dataHoraEnvio)),
+        empresa: texto(primeiro(part.nome, l.nomeParticipante)) || (cnpj ? "" : "Fornecedor"),
+        cnpj,
+        meu: l.meuLance === true || l.proprio === true || (!!meuCnpj && cnpj === meuCnpj),
+      };
+    })
+    .sort((a, b) => dataDe(b.dataHora) - dataDe(a.dataHora));
+}
+
+export interface RecursoEmpresa {
+  cnpj: string;
+  empresa: string;
+  intencao: string;
+  etapa: string;
+  dataIntencao: string;
+  situacaoRecurso: string;
+  dataRecurso: string;
+  temRecurso: boolean;
+  contrarrazoes: { cnpj: string; empresa: string; situacao: string; dataHora: string }[];
+}
+
+export interface FaseRecursal {
+  prazos: { rotulo: string; dataHora: string }[];
+  empresas: RecursoEmpresa[];
+  decisao: { situacao: string; fundamentacao: string; responsavel: string; dataHora: string } | null;
+  revisao: { situacao: string; fundamentacao: string; responsavel: string; dataHora: string } | null;
+}
+
+const SITUACAO_RECURSO: Record<string, string> = { R: "Rascunho", C: "Cadastrado", D: "Desistiu" };
+const SITUACAO_DECISAO: Record<string, string> = { P: "Procede", N: "Não procede", M: "Mantida (não procede)", R: "Revertida" };
+const ETAPAS: Record<string, string> = { JP: "Julgamento da proposta", HF: "Habilitação" };
+
+export function lerFaseRecursal(dados: unknown): FaseRecursal | null {
+  const d = obj(dados);
+  if (!Object.keys(d).length) return null;
+  const pz = obj(primeiro(d.prazos, d.prazosFaseRecursal));
+  const rotulos: [string, string][] = [
+    ["dataHoraLimiteIRJulgamento", "Intenção de recurso (julgamento)"],
+    ["dataHoraLimiteIRHabilitacao", "Intenção de recurso (habilitação)"],
+    ["dataHoraLimiteRecurso", "Envio do recurso"],
+    ["dataHoraLimiteContrarrazao", "Contrarrazões"],
+    ["dataHoraLimiteDecisao", "Decisão"],
+  ];
+  const decisao = (v: unknown) => {
+    const x = obj(v);
+    if (!Object.keys(x).length) return null;
+    return {
+      situacao: SITUACAO_DECISAO[texto(x.situacao)] ?? texto(x.situacao),
+      fundamentacao: texto(primeiro(x.fundamentacao, x.justificativa)),
+      responsavel: texto(primeiro(x.responsavel, obj(x.responsavel).nome)),
+      dataHora: texto(x.dataHora),
+    };
+  };
+  const participacoes = Array.isArray(d.participacoes) ? d.participacoes : [];
+  return {
+    prazos: rotulos.filter(([k]) => texto(pz[k])).map(([k, rotulo]) => ({ rotulo, dataHora: texto(pz[k]) })),
+    empresas: participacoes.map((b) => {
+      const p = obj(b);
+      const intencao = obj(primeiro(p.intencaoRecurso, p.intencao, Array.isArray(p.intencoesRecurso) ? p.intencoesRecurso[0] : null));
+      const recurso = obj(p.recurso);
+      const contras = Array.isArray(primeiro(p.contrarrazoes, recurso.contrarrazoes)) ? (primeiro(p.contrarrazoes, recurso.contrarrazoes) as unknown[]) : [];
+      return {
+        cnpj: texto(primeiro(p.identificacaoParticipante, obj(p.participante).identificacao)),
+        empresa: texto(primeiro(p.nomeParticipante, p.razaoSocial, obj(p.participante).nome)),
+        intencao: texto(primeiro(intencao.motivacao, intencao.texto, p.motivacao)),
+        etapa: ETAPAS[texto(primeiro(intencao.etapaSelecaoFornecedores, p.etapaSelecaoFornecedores))] ?? "",
+        dataIntencao: texto(primeiro(intencao.dataHora, p.dataHoraIntencao)),
+        situacaoRecurso: SITUACAO_RECURSO[texto(recurso.situacao)] ?? texto(recurso.situacao),
+        dataRecurso: texto(primeiro(recurso.dataHora, recurso.dataHoraCadastro)),
+        temRecurso: Object.keys(recurso).length > 0,
+        contrarrazoes: contras.map((c) => {
+          const x = obj(c);
+          return {
+            cnpj: texto(primeiro(x.identificacaoParticipante, obj(x.participante).identificacao)),
+            empresa: texto(primeiro(x.nomeParticipante, obj(x.participante).nome)),
+            situacao: SITUACAO_RECURSO[texto(x.situacao)] ?? texto(x.situacao),
+            dataHora: texto(x.dataHora),
+          };
+        }),
+      };
+    }),
+    decisao: decisao(d.decisao),
+    revisao: decisao(d.revisaoDecisao),
+  };
+}
+
+export function cnpjFormatadoAcomp(c: string) {
+  const d = c.replace(/\D/g, "");
+  return d.length === 14 ? `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}` : c;
 }

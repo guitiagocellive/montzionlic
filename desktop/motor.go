@@ -423,8 +423,8 @@ func chaveDaCompraInfo(b map[string]any) string {
 	if c := textoDe(b["chaveCompra"]); c != "" {
 		return c
 	}
-	uasg := soDigitos(textoDe(numeroInteiro(b["numeroUasg"])))
-	mod := soDigitos(textoDe(numeroInteiro(b["modalidade"])))
+	uasg := soDigitos(textoDe(numeroInteiro(firstNonNil(b["numeroUasg"], b["uasg"], b["codigoUasg"], b["codigoUnidade"]))))
+	mod := soDigitos(textoDe(numeroInteiro(firstNonNil(b["modalidade"], b["codigoModalidade"]))))
 	numero := soDigitos(textoDe(numeroInteiro(firstNonNil(b["numeroCompra"], b["numero"]))))
 	ano := soDigitos(textoDe(numeroInteiro(firstNonNil(b["anoCompra"], b["ano"]))))
 	if uasg == "" || mod == "" || numero == "" || len(ano) != 4 {

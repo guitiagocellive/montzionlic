@@ -50,6 +50,28 @@ export function chamar<T>(tipo: string, dados: Record<string, unknown> = {}, tem
   });
 }
 
+export interface PedidoFornecedor {
+  metodo?: "GET" | "POST" | "PUT" | "DELETE";
+  caminho?: string;
+  query?: string;
+  captcha?: boolean;
+  corpo?: unknown;
+  arquivo?: { nome: string; tipo: string; base64: string };
+  baixar?: boolean;
+  url?: string;
+}
+
+export interface RespostaFornecedor {
+  status: number;
+  dados?: unknown;
+  texto?: string;
+  mensagem?: string;
+  cabecalhos?: Record<string, string>;
+  nome?: string;
+  tipo?: string;
+  base64?: string;
+}
+
 export interface EstadoPonte {
   conectado: boolean; // logado no Compras.gov.br
   janela: boolean; // a janela do Compras.gov.br está aberta
@@ -92,6 +114,8 @@ export const ponte = {
   diagnostico: () => chamar<{ texto: string }>("diagnostico", {}, 10_000),
   /** Participações lidas pelo aplicativo (aba Acompanhamento). compra: ler essa já; atualizar: ler tudo já. */
   acompanhamento: (compra = "", atualizar = false) => chamar<PainelAcompanhamento>("acompanhamento", { compra, atualizar }, 8_000),
+  /** Consulta ou ação do fornecedor no Compras.gov.br (só endereços de uma lista fechada no aplicativo). */
+  fornecedor: (pedido: PedidoFornecedor, tempoMs = 130_000) => chamar<RespostaFornecedor>("fornecedor", { pedido }, tempoMs),
   /** Mensagem ao pregoeiro (só vai quando o pregoeiro abriu a conversa para você). */
   mensagem: (compra: string, item: number, texto: string) => chamar<{ ok: boolean }>("mensagem", { compra, item, texto }, 20_000),
   /** Lista de compras em disputa do fornecedor (a página oficial carrega e o aplicativo lê). */

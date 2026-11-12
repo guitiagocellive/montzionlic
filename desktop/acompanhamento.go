@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -53,12 +54,31 @@ type compraAcomp struct {
 	Legado bool   `json:"legado"`
 }
 
+var chave17 = regexp.MustCompile(`^\d{17}$`)
+
 func chaveDaParticipacao(x map[string]any) string {
 	if c := chaveDaCompraInfo(x); c != "" {
 		return c
 	}
-	if compra, ok := x["compra"].(map[string]any); ok {
-		return chaveDaCompraInfo(compra)
+	for _, k := range []string{"compra", "compraFaseExterna", "dadosCompra"} {
+		if compra, ok := x[k].(map[string]any); ok {
+			if c := chaveDaCompraInfo(compra); c != "" {
+				return c
+			}
+			if c := chave17Em(compra); c != "" {
+				return c
+			}
+		}
+	}
+	return chave17Em(x)
+}
+
+// Qualquer campo com a chave da compra (UASG + modalidade + número + ano = 17 dígitos).
+func chave17Em(x map[string]any) string {
+	for _, k := range []string{"chaveCompra", "idCompra", "identificadorCompra", "chave", "id", "codigoCompra"} {
+		if v := textoDe(numeroInteiro(x[k])); chave17.MatchString(v) {
+			return v
+		}
 	}
 	return ""
 }
@@ -111,18 +131,42 @@ const scriptAcompanhamento = `(async (entrada) => {
       const t = await r.text();
       let d = null;
       try { d = t ? JSON.parse(t) : null; } catch (e) {}
-      return { status: r.status, dados: d, texto: r.ok ? "" : t.slice(0, 160) };
+      return { status: r.status, dados: d, texto: r.ok ? "" : t.slice(0, 160), paginas: r.headers.get("pages-count"), total: r.headers.get("register-count") };
     } catch (e) { return { status: 0, dados: null, texto: String(e).slice(0, 160) }; }
   };
-  const lista = (d) => Array.isArray(d) ? d : (d && (d.content || d.itens || d.compras || d.participacoes || d.mensagens || d.data || d.lista)) || [];
-  const saida = { erros: [], detalhes: {} };
-  const participacoes = async (filtro, tamanho) => {
-    const r = await pegar("/comprasnet-fase-externa/v1/compras/participacoes?filtro=" + filtro + "&pagina=0&tamanhoPagina=" + tamanho, true);
-    if (r.status !== 200) { saida.erros.push("participações (" + filtro + "): " + r.status + " " + r.texto); return null; }
-    return lista(r.dados);
+  // A resposta pode ser a lista ou um objeto com a lista dentro (o nome do campo varia entre as telas).
+  const lista = (d) => {
+    if (Array.isArray(d)) return d;
+    if (!d || typeof d !== "object") return [];
+    for (const k of ["content", "itens", "compras", "participacoes", "mensagens", "resultado", "registros", "data", "lista", "elementos"]) {
+      if (Array.isArray(d[k])) return d[k];
+      if (d[k] && typeof d[k] === "object") { const dentro = lista(d[k]); if (dentro.length) return dentro; }
+    }
+    const qualquer = Object.values(d).find((v) => Array.isArray(v) && v.length && typeof v[0] === "object");
+    return qualquer || [];
   };
-  saida.andamento = await participacoes(2, 50);
-  if (entrada.finalizadas) saida.finalizadas = await participacoes(6, 30);
+  const formato = (d) => Array.isArray(d) ? "lista(" + d.length + ")" : d && typeof d === "object" ? "objeto{" + Object.keys(d).slice(0, 15).join(",") + "}" : typeof d;
+  const saida = { erros: [], detalhes: {} };
+  // Como a página "Minhas participações": 10 por página, uma página de cada vez (até 8 páginas).
+  saida.formatos = [];
+  const participacoes = async (filtro, maxPaginas) => {
+    const todas = [];
+    for (let pagina = 0; pagina < maxPaginas; pagina++) {
+      const r = await pegar("/comprasnet-fase-externa/v1/compras/participacoes?filtro=" + filtro + "&pagina=" + pagina + "&tamanhoPagina=10", true);
+      if (r.status !== 200) {
+        saida.erros.push("participações (" + filtro + ", página " + (pagina + 1) + "): " + r.status + " " + r.texto);
+        return pagina === 0 ? null : todas;
+      }
+      const l = lista(r.dados);
+      if (pagina === 0) saida.formatos.push("filtro " + filtro + ": " + formato(r.dados) + " páginas=" + (r.paginas || "?") + " total=" + (r.total || "?"));
+      todas.push(...l);
+      const paginas = Number(r.paginas || 0);
+      if (!l.length || l.length < 10 || (paginas && pagina + 1 >= paginas)) break;
+    }
+    return todas;
+  };
+  saida.andamento = await participacoes(2, 8);
+  if (entrada.finalizadas) saida.finalizadas = await participacoes(6, 3);
   for (const c of entrada.detalhar) {
     const d = { erros: [] };
     const e = encodeURIComponent(c.chave);
@@ -169,7 +213,7 @@ func (m *motor) cicloAcompanhamento() {
 			}
 		}
 		desde := time.Since(a.em)
-		precisa := a.forcar || len(a.pedidos) > 0 || desde > intervaloAcompanhamento || (faltam && desde > 45*time.Second)
+		precisa := a.forcar || len(a.pedidos) > 0 || desde > intervaloAcompanhamento || (faltam && desde > 20*time.Second)
 		// Durante a disputa com o robô ligado, só lê quando a pessoa pede (o captcha fica para a sala).
 		if robo && !a.forcar && len(a.pedidos) == 0 {
 			precisa = false
@@ -268,6 +312,7 @@ func (m *motor) lerAcompanhamento(finalizadas bool, escolhidas []compraAcomp) er
 		Andamento   json.RawMessage           `json:"andamento"`
 		Finalizadas json.RawMessage           `json:"finalizadas"`
 		Detalhes    map[string]*detalheCompra `json:"detalhes"`
+		Formatos    []string                  `json:"formatos"`
 	}
 	if json.Unmarshal([]byte(saida), &v) != nil {
 		return fmt.Errorf("resposta estranha do Compras.gov.br")
@@ -328,11 +373,20 @@ func (m *motor) lerAcompanhamento(finalizadas bool, escolhidas []compraAcomp) er
 	if len(v.Erros) > 0 {
 		registrarLog("acompanhamento: %s", strings.Join(v.Erros, " | "))
 	}
+	if len(v.Formatos) > 0 {
+		registrarLog("acompanhamento: formato da resposta: %s", strings.Join(v.Formatos, " | "))
+	}
 	// Só os nomes dos campos (sem valores), para ajustar a tela se o Compras.gov.br mudar algo.
 	if !a.viuCampos {
 		if l := listaDe(a.andamento); len(l) > 0 {
 			a.viuCampos = true
 			registrarLog("acompanhamento: campos da participação: %s", nomesDosCampos(l[0]))
+			if c, ok := l[0]["compra"].(map[string]any); ok {
+				registrarLog("acompanhamento: campos da compra na participação: %s", nomesDosCampos(c))
+			}
+			if chaveDaParticipacao(l[0]) == "" {
+				registrarLog("acompanhamento: não achei a chave da compra na participação")
+			}
 			for _, d := range v.Detalhes {
 				if it := listaDe(d.Itens); len(it) > 0 {
 					registrarLog("acompanhamento: campos do item (%s): %s", d.OrigemItens, nomesDosCampos(it[0]))
@@ -378,6 +432,7 @@ func (m *motor) Acompanhamento(compra string, atualizar bool) any {
 	m.mu.Lock()
 	resposta["conectado"] = m.token != ""
 	resposta["fase"] = m.fase
+	resposta["cnpj"] = m.cnpj // a própria empresa (para achar as suas propostas e anexos)
 	m.mu.Unlock()
 	return resposta
 }

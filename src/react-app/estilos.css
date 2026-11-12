@@ -11043,3 +11043,237 @@ code {
   flex-shrink: 0;
   margin-top: 2px;
 }
+
+/* ---------- Item do Compras.gov.br (propostas, anexos, lances, chat, recursos) ---------- */
+.abrir-item-acomp {
+  grid-column: 2 / -1;
+  justify-self: start;
+}
+.detalhe-item-compras {
+  display: grid;
+  gap: 12px;
+}
+.descricao-item-compras {
+  margin: 0;
+  font-size: 0.88rem;
+}
+.abas-item-compras {
+  flex-wrap: wrap;
+  width: fit-content;
+  max-width: 100%;
+}
+.abas-item-compras button svg {
+  vertical-align: -2px;
+}
+.propostas-compras,
+.anexos-compras,
+.recursos-compras,
+.diligencias-compras {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.propostas-compras > li {
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--superficie-2);
+  border: 1px solid transparent;
+}
+.propostas-compras > li.minha {
+  border-color: color-mix(in oklab, var(--azul) 45%, transparent);
+}
+.propostas-compras > li.fora {
+  opacity: 0.65;
+}
+.linha-proposta {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 150px auto;
+  gap: 12px;
+  align-items: center;
+}
+.posicao-proposta {
+  font-size: 1.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.propostas-compras > li:first-child:not(.fora) .posicao-proposta {
+  color: var(--verde);
+}
+.empresa-proposta {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.empresa-proposta strong {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.valor-proposta {
+  display: grid;
+  gap: 2px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.texto-vermelho {
+  color: var(--vermelho);
+}
+.texto-verde {
+  color: var(--verde);
+}
+.anexos-empresa {
+  margin: 10px 0 0 56px;
+}
+.anexos-compras li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--superficie);
+}
+.nome-anexo-compras {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.86rem;
+}
+.tabela-lances-compras {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.86rem;
+  font-variant-numeric: tabular-nums;
+}
+.tabela-lances-compras th,
+.tabela-lances-compras td {
+  text-align: left;
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--borda);
+}
+.tabela-lances-compras td:last-child,
+.tabela-lances-compras th:last-child {
+  text-align: right;
+}
+.tabela-lances-compras tr.meu td {
+  color: var(--azul);
+  font-weight: 600;
+}
+.chat-item-compras {
+  max-height: 420px;
+}
+.msg-acomp.outra {
+  align-self: flex-end;
+  background: var(--superficie-3);
+}
+.painel-item-compras {
+  display: grid;
+  gap: 12px;
+}
+.prazos-recurso {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.prazos-recurso span {
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--superficie-2);
+  font-size: 0.8rem;
+  color: var(--texto-suave);
+}
+.prazos-recurso span.aberto {
+  background: var(--amarelo-fundo);
+  color: var(--amarelo);
+}
+.recursos-compras > li,
+.diligencias-compras > li {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--superficie-2);
+  font-size: 0.86rem;
+}
+.recursos-compras q {
+  display: block;
+  margin-top: 4px;
+  color: var(--texto-suave);
+  white-space: pre-wrap;
+}
+.contrarrazao-compras {
+  padding-left: 12px;
+  border-left: 2px solid var(--borda-forte);
+}
+.decisao-recurso {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--borda);
+}
+.decisao-recurso > div {
+  display: grid;
+  gap: 2px;
+}
+.decisao-recurso p {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  font-size: 0.86rem;
+}
+.dados-brutos summary {
+  cursor: pointer;
+  font-size: 0.78rem;
+  color: var(--texto-fraco);
+}
+.dados-brutos pre {
+  max-height: 260px;
+  overflow: auto;
+  font-size: 0.72rem;
+  background: var(--superficie-2);
+  padding: 10px;
+  border-radius: 10px;
+}
+.linha-erro-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+label.botao.desativado {
+  opacity: 0.6;
+  pointer-events: none;
+}
+@media (max-width: 860px) {
+  .linha-proposta {
+    grid-template-columns: 36px minmax(0, 1fr);
+  }
+  .valor-proposta {
+    grid-column: 2;
+    text-align: left;
+  }
+  .linha-proposta > .botao {
+    grid-column: 2;
+    justify-self: start;
+  }
+  .anexos-empresa {
+    margin-left: 0;
+  }
+}
+.alerta.aviso {
+  background: var(--amarelo-fundo);
+  color: var(--amarelo);
+  border-color: color-mix(in oklab, var(--amarelo) 35%, transparent);
+}
+.conferir-anexos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.86rem;
+}

@@ -518,6 +518,7 @@ func (p *ponte) atender(sessao, payload string) {
 		Config    map[string]configItem `json:"config"`
 		IDs       []int64               `json:"ids"`
 		Texto     string                `json:"texto"`
+		Pedido    pedidoCompras         `json:"pedido"`
 	}
 	if json.Unmarshal([]byte(payload), &pedido) != nil {
 		return
@@ -539,6 +540,8 @@ func (p *ponte) atender(sessao, payload string) {
 		resposta = mapa{"texto": diagnostico()}
 	case "acompanhamento":
 		resposta = p.motor.Acompanhamento(pedido.Compra, pedido.Atualizar)
+	case "fornecedor":
+		resposta = p.motor.PedidoCompras(pedido.Pedido)
 	case "mensagem":
 		resposta = p.motor.EnviarMensagem(pedido.Compra, pedido.Item, pedido.Texto)
 	default:

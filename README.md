@@ -114,6 +114,14 @@ Não existe cadastro público: só um administrador adiciona pessoas.
   Área do Fornecedor com a sessão aberta pela pessoa no gov.br, com o captcha invisível da própria página, a cada
   8 minutos (no máximo 6 compras detalhadas por vez; durante uma disputa com robô ligado, só quando a pessoa pede).
   Código: `desktop/acompanhamento.go`, `src/shared/acompanhamento.ts`, `src/react-app/pages/licitacoes/Acompanhamento.tsx`.
+  - **Item completo** (botão "Propostas, anexos e recursos" em cada item): as telas do fornecedor no Compras.gov.br dentro
+    da plataforma — **propostas de todas as empresas** (colocação, CNPJ, marca, modelo, valor ofertado/negociado, situação
+    e motivo), **anexos de cada empresa** para baixar, botão **"Conferir anexos das empresas à sua frente"** (quem não
+    enviou tende a ser recusado), **lances**, **chat do item** (pregoeiro com cada empresa), **meus anexos** (enviar e
+    excluir), **diligências** e **fase recursal** (prazos, intenções com motivação, recursos, contrarrazões e decisão, com
+    os arquivos). Ações com confirmação: enviar anexo, intenção de recurso (julgamento/habilitação), enviar e concluir
+    recurso, enviar e concluir contrarrazão. O aplicativo só aceita endereços de fornecedor de uma **lista fechada**
+    (`desktop/compras_acesso.go`, com teste) e no máximo 40 consultas por minuto; cada aba consulta só quando é aberta.
 - **Disputas / robô de lances** (Licitações → Disputas): o robô roda **dentro do aplicativo do Windows**
   (`desktop/motor.go`), não na página — continua dando lances mesmo com a página fechada.
   - **Login como no Siga Pregão:** "Entrar com gov.br" abre uma janela direto no login de fornecedor do gov.br
