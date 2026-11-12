@@ -591,7 +591,7 @@ func (m *motor) lerAcompanhamentoDireto(lista, finalizadas bool, escolhidas []co
 		if len(escolhidas) == 0 {
 			m.acomp.mu.Lock()
 			for _, x := range listaDe(m.acomp.andamento) {
-				if k := chaveDaParticipacao(x); k != "" && m.acomp.detalhes[k] == nil && len(escolhidas) < 12 {
+				if k := chaveDaParticipacao(x); k != "" && semDetalhe(m.acomp.detalhes[k]) && len(escolhidas) < 12 {
 					escolhidas = append(escolhidas, compraAcomp{k, legadoDaParticipacao(x)})
 				}
 			}
@@ -618,31 +618,88 @@ func (m *motor) lerAcompanhamentoDireto(lista, finalizadas bool, escolhidas []co
 	return nil
 }
 
+// lerAcomp: direto do aplicativo; se o pedido direto falhar antes de chegar ao Compras.gov.br (rede, página de
+// bloqueio, captcha), faz o mesmo pedido de dentro da janela oficial, que tem os cookies e o navegador de verdade.
+func (m *motor) lerAcomp(caminho, query string, captcha bool) (respostaDireta, error) {
+	r, err := m.consultarDireto("GET", caminho, query, captcha, nil, "")
+	if err == nil {
+		return r, nil
+	}
+	q := query
+	if captcha {
+		if codigo, errC := m.captcha(); errC == nil {
+			if q != "" {
+				q += "&"
+			}
+			q += "captcha=" + url.QueryEscape(codigo)
+		}
+	}
+	endereco := caminho
+	if q != "" {
+		endereco += "?" + q
+	}
+	status, corpo, err2 := m.p.api("GET", endereco, nil)
+	if err2 != nil {
+		return respostaDireta{}, fmt.Errorf("%v; pela janela: %v", err, err2)
+	}
+	return respostaDireta{Status: status, Corpo: corpo}, nil
+}
+
+// falhou: o pedido não chegou ou o Compras.gov.br recusou (vazio com "ok" não é falha; 204 = sem conteúdo).
+func falhou(r respostaDireta, err error) bool { return err != nil || !okHTTP(r.Status) }
+
+func motivoLeitura(r respostaDireta, err error) string {
+	if err != nil {
+		t := mascararNumeros(err.Error())
+		if len(t) > 140 {
+			t = t[:140]
+		}
+		return "falhou (" + t + ")"
+	}
+	if okHTTP(r.Status) {
+		return fmt.Sprintf("%d vazio", r.Status)
+	}
+	return fmt.Sprintf("%d %s", r.Status, mascararNumeros(mensagemErro(r.Corpo)))
+}
+
+// semDetalhe: ainda não lida, ou lida com erro e sem itens (tenta de novo na próxima volta).
+func semDetalhe(d *detalheCompra) bool {
+	return d == nil || (len(d.Erros) > 0 && len(listaQualquer(d.Itens)) == 0)
+}
+
 func (m *motor) detalharDireto(c compraAcomp) *detalheCompra {
 	d := &detalheCompra{}
 	k := url.PathEscape(c.Chave)
-	if r, err := m.consultarDireto("GET", fe+"/v1/compras/"+k+"/participacao", "", false, nil, ""); err == nil && okHTTP(r.Status) {
+	if r, err := m.lerAcomp(fe+"/v1/compras/"+k+"/participacao", "", false); err == nil && okHTTP(r.Status) {
 		d.Participacao = r.Corpo
-	} else if err == nil {
-		d.Erros = append(d.Erros, fmt.Sprintf("participação: %d", r.Status))
+	} else {
+		d.Erros = append(d.Erros, "participação: "+motivoLeitura(r, err))
 	}
-	r, err := m.consultarDireto("GET", fe+"/v1/compras/"+k+"/itens/em-selecao-fornecedores", "filtro=2&pagina=0&tamanhoPagina=100", true, nil, "")
+	r, err := m.lerAcomp(fe+"/v1/compras/"+k+"/itens/em-selecao-fornecedores", "filtro=2&pagina=0&tamanhoPagina=100", true)
 	if err == nil && okHTTP(r.Status) && len(listaQualquer(r.Corpo)) > 0 {
 		d.Itens, d.OrigemItens = juntarLista(listaQualquer(r.Corpo)), "selecao"
 	} else {
-		r2, err2 := m.consultarDireto("GET", fe+"/v1/compras/"+k+"/itens", "situacoes=1,2,3,4,5,6,7,8,9,13,14&pagina=0&tamanhoPagina=100", true, nil, "")
-		if err2 == nil && okHTTP(r2.Status) {
+		r2, err2 := m.lerAcomp(fe+"/v1/compras/"+k+"/itens", "situacoes=1,2,3,4,5,6,7,8,9,13,14&pagina=0&tamanhoPagina=100", true)
+		if err2 == nil && okHTTP(r2.Status) && len(listaQualquer(r2.Corpo)) > 0 {
 			d.Itens, d.OrigemItens = juntarLista(listaQualquer(r2.Corpo)), "itens"
 		} else {
-			d.Erros = append(d.Erros, fmt.Sprintf("itens: %v/%v", r.Status, r2.Status))
+			// Compra em disputa: os itens da sala de disputa (os mesmos que o robô usa).
+			status, dados, err3 := m.pedir("GET", "/comprasnet-disputa/v1/compras/"+k+"/itens/em-disputa", nil)
+			if err3 == nil && okHTTP(status) && len(listaQualquer(dados)) > 0 {
+				d.Itens, d.OrigemItens = juntarLista(listaQualquer(dados)), "disputa"
+			} else if falhou(r, err) || falhou(r2, err2) || falhou(respostaDireta{Status: status}, err3) {
+				d.Erros = append(d.Erros, "itens: seleção "+motivoLeitura(r, err)+" / todos "+motivoLeitura(r2, err2)+" / disputa "+motivoLeitura(respostaDireta{Status: status, Corpo: dados}, err3))
+			} else {
+				d.Itens, d.OrigemItens = juntarLista(nil), "itens" // a compra respondeu, só que sem itens
+			}
 		}
 	}
-	if r, err := m.consultarDireto("GET", "/comprasnet-mensagem/v2/chat/"+k, fmt.Sprintf("legadoAsp=%v&size=50&page=0", c.Legado), true, nil, ""); err == nil && okHTTP(r.Status) {
+	if r, err := m.lerAcomp("/comprasnet-mensagem/v2/chat/"+k, fmt.Sprintf("legadoAsp=%v&size=50&page=0", c.Legado), true); err == nil && okHTTP(r.Status) {
 		d.Mensagens = juntarLista(listaQualquer(r.Corpo))
 	} else if err == nil && r.Status == 404 {
 		d.Mensagens = juntarLista(nil) // compra sem mensagens
-	} else if err == nil {
-		d.Erros = append(d.Erros, fmt.Sprintf("mensagens: %d", r.Status))
+	} else {
+		d.Erros = append(d.Erros, "mensagens: "+motivoLeitura(r, err))
 	}
 	return d
 }

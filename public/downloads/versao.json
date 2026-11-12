@@ -1,10 +1,10 @@
 {
-  "versao": "3.1.9",
+  "versao": "3.1.10",
   "data": "2026-11-12",
   "novidades": [
-    "Robô corrigido: o lance mínimo é só o LIMITE. Ele não vai mais direto ao mínimo; busca a melhor colocação possível até o mínimo.",
-    "Exemplo: 1º com R$ 500, 2º com R$ 800, você com R$ 1.000 e mínimo R$ 700 → o robô dá R$ 799,99 e fica em 2º.",
-    "A classificação do item é lida antes dos 10 segundos finais e mantida em dia, para o lance sair na hora e no valor certo.",
-    "Lances excluídos pelo pregoeiro não contam na classificação."
+    "Acompanhamento: os itens e o chat de cada compra voltam a aparecer. Quando o pedido direto do aplicativo falha, ele faz o mesmo pedido pela janela do Compras.gov.br.",
+    "Compra na etapa Disputa mostra os itens da sala de disputa (os mesmos que o robô usa).",
+    "Se ainda assim não der para ler, a janela da compra mostra o motivo, e o \"Copiar diagnóstico\" registra o erro exato.",
+    "Robô: o lance mínimo é só o LIMITE. Ele busca a melhor colocação possível até o mínimo (ex.: 1º R$ 500, 2º R$ 800, você R$ 1.000, mínimo R$ 700 → R$ 799,99, 2º lugar)."
   ]
 }

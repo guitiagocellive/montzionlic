@@ -467,7 +467,14 @@ function JanelaCompra({ compra: c, cnpj, agora, aoFechar, aoCadastrar }: { compr
                 <RefreshCw className="girando" size={16} /> Lendo os itens e as mensagens desta compra…
               </p>
             ) : c.itens.length === 0 ? (
-              <p className="texto-fraco">Nenhum item com proposta sua nesta compra.</p>
+              c.erros.length ? (
+                <p className="texto-fraco">
+                  Não consegui ler os itens desta compra agora ({c.erros.join(" · ")}). O aplicativo tenta de novo
+                  sozinho; se continuar, use “Copiar diagnóstico” no fim da lista.
+                </p>
+              ) : (
+                <p className="texto-fraco">Nenhum item com proposta sua nesta compra.</p>
+              )
             ) : (
               <ul className="itens-compra">
                 {c.itens.map((it) => (
