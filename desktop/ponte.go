@@ -517,6 +517,7 @@ func (p *ponte) atender(sessao, payload string) {
 		Atualizar bool                  `json:"atualizar"`
 		Config    map[string]configItem `json:"config"`
 		IDs       []int64               `json:"ids"`
+		Texto     string                `json:"texto"`
 	}
 	if json.Unmarshal([]byte(payload), &pedido) != nil {
 		return
@@ -536,6 +537,10 @@ func (p *ponte) atender(sessao, payload string) {
 		resposta = mapa{"ok": true}
 	case "diagnostico":
 		resposta = mapa{"texto": diagnostico()}
+	case "acompanhamento":
+		resposta = p.motor.Acompanhamento(pedido.Compra, pedido.Atualizar)
+	case "mensagem":
+		resposta = p.motor.EnviarMensagem(pedido.Compra, pedido.Item, pedido.Texto)
 	default:
 		resposta = p.executar(pedido.Tipo, pedido.Compra, pedido.Item, pedido.Valor, pedido.Fase, pedido.Atualizar)
 	}
@@ -962,11 +967,11 @@ const scriptLista = `(async () => {
   return JSON.stringify({ compras: todas, erros, captcha: !!(window.hcaptcha || window.grecaptcha) });
 })()`
 
-func (p *ponte) buscarLista(a *sessaoAlvo) (json.RawMessage, error) {
-	// O captcha só existe nas páginas da sala de disputa: se a aba logada estiver em outra, abre a sala.
+// garantirSala deixa a aba logada numa página da sala de disputa (é onde existe o captcha invisível).
+func (p *ponte) garantirSala(a *sessaoAlvo) error {
 	if s, _ := p.avaliar(a.sessao, `String(!!(window.hcaptcha || window.grecaptcha) && location.pathname.includes("/seguro/fornecedor"))`, 3*time.Second); s != "true" {
 		if _, err := p.cdp.Chamar(a.sessao, "Page.navigate", mapa{"url": p.cfg.paginaDisputas()}, 15*time.Second); err != nil {
-			return nil, fmt.Errorf("não foi possível abrir a sala de disputa: %v", err)
+			return fmt.Errorf("não foi possível abrir a sala de disputa: %v", err)
 		}
 		limite := time.Now().Add(20 * time.Second)
 		for time.Now().Before(limite) {
@@ -976,6 +981,13 @@ func (p *ponte) buscarLista(a *sessaoAlvo) (json.RawMessage, error) {
 			}
 		}
 		time.Sleep(time.Second) // o widget invisível termina de montar
+	}
+	return nil
+}
+
+func (p *ponte) buscarLista(a *sessaoAlvo) (json.RawMessage, error) {
+	if err := p.garantirSala(a); err != nil {
+		return nil, err
 	}
 	var ultimoErro string
 	for tentativa := 0; tentativa < 2; tentativa++ {

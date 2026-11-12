@@ -1,9 +1,9 @@
 {
-  "versao": "3.0.7",
-  "data": "2026-11-11",
+  "versao": "3.0.8",
+  "data": "2026-11-12",
   "novidades": [
-    "Robô: reconhece o item \"Licitação e Dispensa (novo)\" do menu do portal (o caminho real até a sala de disputa) e entra sozinho.",
-    "Robô: ignora o aviso do Sicaf que o portal abre depois do login.",
-    "Página Disputas: botão \"Copiar diagnóstico\" para mandar ao suporte."
+    "Nova aba Acompanhamento: suas participações no Compras.gov.br (em andamento e finalizadas), com a colocação em cada item e a chance de ser chamado.",
+    "Avisos no sino quando o pregoeiro convocar (anexos, negociação, diligência), mudar a situação da proposta ou mandar mensagem.",
+    "Mensagens ao pregoeiro direto da plataforma, quando ele abrir a conversa para você."
   ]
 }

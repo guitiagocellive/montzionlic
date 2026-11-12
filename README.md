@@ -104,6 +104,16 @@ Não existe cadastro público: só um administrador adiciona pessoas.
   - Filtros que o PNCP não faz (data da sessão, plataforma, UASG, CNPJ, nº, vários municípios) são aplicados aqui depois de
     baixar até 3.000 resultados por consulta; a tela avisa quando é preciso afinar a busca.
   - A pesquisa sai do navegador; só o download dos arquivos passa pelo servidor (`/api/pncp/arquivo`).
+- **Acompanhamento** (Licitações → Acompanhamento, pelo aplicativo do Windows): aba separada do quadro com as
+  participações no Compras.gov.br **em andamento** e **finalizadas**. Para cada item: **colocação** ("2º de 6"), seu
+  valor e o melhor valor, situação da proposta (aceita, habilitado, adjudicada, desclassificada com o motivo) e a
+  **chance de ser chamado** (alta: 1º, aceita, habilitado ou convocado; média: 2º; baixa: 3º em diante; fora:
+  desclassificado/inabilitado). Mostra as **convocações** do pregoeiro (anexos, negociação, diligência, cota), as
+  **mensagens** da compra e permite **mandar mensagem ao pregoeiro** (o Compras.gov.br só aceita quando ele abre a
+  conversa para o fornecedor). Os avisos vão para o **sino** da equipe (sem repetir). O aplicativo lê as listas da
+  Área do Fornecedor com a sessão aberta pela pessoa no gov.br, com o captcha invisível da própria página, a cada
+  8 minutos (no máximo 6 compras detalhadas por vez; durante uma disputa com robô ligado, só quando a pessoa pede).
+  Código: `desktop/acompanhamento.go`, `src/shared/acompanhamento.ts`, `src/react-app/pages/licitacoes/Acompanhamento.tsx`.
 - **Disputas / robô de lances** (Licitações → Disputas): o robô roda **dentro do aplicativo do Windows**
   (`desktop/motor.go`), não na página — continua dando lances mesmo com a página fechada.
   - **Login como no Siga Pregão:** "Entrar com gov.br" abre uma janela direto no login de fornecedor do gov.br

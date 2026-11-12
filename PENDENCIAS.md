@@ -51,6 +51,11 @@ Lista do que foi combinado e ainda falta fazer (ou melhorar). Atualizar sempre q
       verdade. Conferir: abre com nome/ícone do Montzion, links externos vão para o navegador, "Entrar no
       Compras.gov.br" abre a janela própria e o robô lista as disputas. Se der erro, mandar o
       `%LOCALAPPDATA%\Montzion\montzion.log`.
+- [ ] **Acompanhamento no Compras.gov.br de verdade (3.0.8)**: os endereços e campos foram tirados do código da Área
+      do Fornecedor e testados com um Compras.gov.br simulado. Conferir com uma conta real: aparecem as participações,
+      a colocação dos itens e as mensagens. Se algo vier vazio, mandar o "Copiar diagnóstico" (a página Disputas tem o
+      botão): o registro traz só os nomes dos campos que o Compras.gov.br devolveu, sem valores.
+- [ ] **Etapa 2: cadastrar proposta com um clique** (combinado; ficou para depois da validação do Acompanhamento).
 - [ ] **6. Links diretos para emitir certidões** na Documentação (Receita/PGFN, FGTS, TST, Estado,
       Município), com o aviso de vencimento levando ao site certo.
 - [ ] **7. Busca geral (Ctrl+K)** — achar licitação, empenho ou fornecedor pelo número, órgão ou produto.

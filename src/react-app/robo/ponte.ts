@@ -3,6 +3,8 @@
 // Ele coloca a função window.montzionRobo nesta página: por ela pedimos a lista de disputas, os itens e os lances,
 // e ele responde chamando window.__montzionRoboResposta. Nada disso passa pelo servidor da plataforma.
 
+import type { PainelAcompanhamento } from "../../shared/acompanhamento";
+
 declare global {
   interface Window {
     montzionRobo?: (mensagem: string) => void;
@@ -88,6 +90,10 @@ export const ponte = {
   atualizar: () => chamar<{ ok: boolean }>("atualizar", {}, 5_000),
   /** Últimas linhas do registro do aplicativo, sem chaves nem documentos (para mandar ao suporte). */
   diagnostico: () => chamar<{ texto: string }>("diagnostico", {}, 10_000),
+  /** Participações lidas pelo aplicativo (aba Acompanhamento). compra: ler essa já; atualizar: ler tudo já. */
+  acompanhamento: (compra = "", atualizar = false) => chamar<PainelAcompanhamento>("acompanhamento", { compra, atualizar }, 8_000),
+  /** Mensagem ao pregoeiro (só vai quando o pregoeiro abriu a conversa para você). */
+  mensagem: (compra: string, item: number, texto: string) => chamar<{ ok: boolean }>("mensagem", { compra, item, texto }, 20_000),
   /** Lista de compras em disputa do fornecedor (a página oficial carrega e o aplicativo lê). */
   compras: (atualizar: boolean) => chamar<{ compras: unknown; capturadaEm: number | null }>("compras", { atualizar }, 150_000),
   itens: (compra: string) => chamar<unknown>("itens", { compra }, 15_000),

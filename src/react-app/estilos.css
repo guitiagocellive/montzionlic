@@ -10698,3 +10698,348 @@ code {
 .resultado-pncp .linha-sessao strong {
   font-size: 0.92rem;
 }
+
+/* ---------- Acompanhamento (participações no Compras.gov.br) ---------- */
+.cabecalho-acoes .texto-fraco {
+  align-self: center;
+}
+.resumo-acomp {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+.resumo-acomp > div {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+}
+.resumo-acomp span {
+  display: block;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--texto-fraco);
+}
+.resumo-acomp strong {
+  font-size: 1.4rem;
+  font-variant-numeric: tabular-nums;
+}
+.resumo-acomp .destaque-acomp {
+  border-color: color-mix(in oklab, var(--vermelho) 45%, var(--borda));
+  background: var(--vermelho-fundo);
+}
+.resumo-acomp .destaque-acomp strong {
+  color: var(--vermelho);
+}
+.avisos-acomp {
+  margin-bottom: 14px;
+}
+.avisos-acomp h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.95rem;
+  margin: 0 0 8px;
+}
+.avisos-acomp ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.avisos-acomp li button {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 0;
+  border-left: 3px solid var(--azul);
+  background: var(--superficie-2);
+  color: var(--texto);
+  font: inherit;
+  cursor: pointer;
+}
+.avisos-acomp li.urgente button {
+  border-left-color: var(--vermelho);
+}
+.avisos-acomp li button:hover {
+  background: var(--hover);
+}
+.lista-acomp {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+.compra-acomp {
+  padding: 0;
+  overflow: hidden;
+}
+.compra-acomp.com-chamado {
+  border-color: color-mix(in oklab, var(--vermelho) 40%, var(--borda));
+}
+.cabeca-acomp {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 16px;
+  background: none;
+  border: 0;
+  color: var(--texto);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cabeca-acomp:hover {
+  background: var(--superficie-2);
+}
+.titulo-acomp {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.nome-acomp {
+  font-weight: 600;
+}
+.orgao-acomp {
+  font-size: 0.85rem;
+}
+.objeto-acomp {
+  font-size: 0.82rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.chips-acomp {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  max-width: 50%;
+}
+.chips-acomp .chip svg {
+  vertical-align: -2px;
+}
+.seta-acomp {
+  color: var(--texto-fraco);
+  transition: transform 0.2s ease;
+}
+.compra-acomp.aberta .seta-acomp {
+  transform: rotate(180deg);
+}
+.corpo-acomp {
+  border-top: 1px solid var(--borda);
+  padding: 12px 16px 16px;
+  animation: entrar-acomp 0.2s ease;
+}
+@keyframes entrar-acomp {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+.info-acomp {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+.info-acomp a {
+  color: var(--acento-texto);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.itens-acomp {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.item-acomp {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 76px 150px 200px;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--superficie-2);
+}
+.item-acomp.chance-fora,
+.item-acomp.chance-encerrado {
+  opacity: 0.7;
+}
+.numero-acomp {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--superficie-3);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.desc-acomp {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.texto-desc-acomp {
+  font-size: 0.88rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.pendencia-acomp {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 5px;
+  width: fit-content;
+  padding: 3px 9px;
+  border-radius: 8px;
+  background: var(--vermelho-fundo);
+  color: var(--vermelho);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+.motivo-acomp {
+  font-size: 0.78rem;
+  color: var(--vermelho);
+}
+.colocacao-acomp,
+.valores-acomp,
+.chance-acomp {
+  display: grid;
+  gap: 2px;
+}
+.colocacao-acomp {
+  text-align: center;
+}
+.colocacao-acomp strong {
+  font-size: 1.3rem;
+  font-variant-numeric: tabular-nums;
+}
+.chance-acomp .chip {
+  width: fit-content;
+}
+.chip.cinza {
+  background: var(--superficie-3);
+  color: var(--texto-suave);
+}
+.valores-acomp span:first-child {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+.item-acomp.chance-alta .colocacao-acomp strong,
+.item-acomp.chance-ganhou .colocacao-acomp strong {
+  color: var(--verde);
+}
+.conversa-acomp {
+  margin-top: 16px;
+}
+.conversa-acomp h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+  margin: 0 0 8px;
+}
+.mensagens-acomp {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 10px;
+  border-radius: 14px;
+  background: var(--superficie-2);
+}
+.msg-acomp {
+  display: grid;
+  gap: 2px;
+  max-width: 78%;
+  padding: 8px 11px;
+  border-radius: 12px;
+  font-size: 0.86rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.msg-acomp.pregoeiro {
+  align-self: flex-start;
+  background: var(--azul-fundo);
+  border: 1px solid color-mix(in oklab, var(--azul) 30%, transparent);
+}
+.msg-acomp.voce {
+  align-self: flex-end;
+  background: var(--acento-suave);
+}
+.msg-acomp.sistema {
+  align-self: center;
+  max-width: 92%;
+  background: transparent;
+  color: var(--texto-suave);
+  font-size: 0.8rem;
+  text-align: center;
+}
+.quem-acomp {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--texto-suave);
+}
+.enviar-acomp {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: stretch;
+  margin: 10px 0 6px;
+}
+.enviar-acomp textarea {
+  resize: vertical;
+  min-height: 42px;
+}
+.vazio-acomp {
+  padding: 24px 0;
+  text-align: center;
+}
+.nota-acomp {
+  margin-top: 14px;
+}
+@media (max-width: 860px) {
+  .resumo-acomp {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .cabeca-acomp {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .chips-acomp {
+    max-width: none;
+    justify-content: flex-start;
+  }
+  .item-acomp {
+    grid-template-columns: 32px minmax(0, 1fr) 64px;
+  }
+  .valores-acomp,
+  .chance-acomp {
+    grid-column: 2 / -1;
+  }
+  .enviar-acomp {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pendencia-acomp svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}

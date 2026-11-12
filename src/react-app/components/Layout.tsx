@@ -8,6 +8,9 @@ import { aplicarTema, modoVisivel, preferenciaAtual } from "../tema";
 import { Avatar } from "./Avatar";
 import { Notificacoes } from "./Notificacoes";
 import { useFecharAoClicarFora } from "./useFecharAoClicarFora";
+import { podeVer } from "../../shared/permissoes";
+import { VigiaAcompanhamento } from "../robo/VigiaAcompanhamento";
+import { noAplicativo } from "../robo/ponte";
 
 interface Props {
   usuario: Usuario;
@@ -108,6 +111,7 @@ export function Layout({ usuario, caminho, aoSair, aoMudarUsuario, children }: P
               {modoVisivel() === "escuro" ? <Sun /> : <Moon />}
             </button>
             <Notificacoes />
+            {noAplicativo() && podeVer(usuario.permissoes, "licitacoes") && <VigiaAcompanhamento />}
             <a className="botao-topo esconder-celular" {...link("/configuracoes")} aria-label="Configurações">
               <Settings />
             </a>

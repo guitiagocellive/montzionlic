@@ -93,6 +93,8 @@ type motor struct {
 	inscricoes   map[string]string // destino -> compra
 	tempoReal    bool
 	ultimoPedido time.Time
+
+	acomp acompanhamento // aba Acompanhamento (participações, itens, mensagens)
 }
 
 func novoMotor(p *ponte) *motor {
@@ -111,6 +113,7 @@ func (m *motor) Rodar() {
 	go m.cicloTempoReal()
 	go m.cicloLeitura()
 	go m.cicloRobo()
+	go m.cicloAcompanhamento()
 }
 
 func chaveItem(compra string, numero int) string { return compra + ":" + strconv.Itoa(numero) }

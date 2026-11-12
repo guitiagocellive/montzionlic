@@ -16,6 +16,7 @@ import { Financeiro } from "./pages/Financeiro";
 import { PainelLicitacoes, PainelPosGanho } from "./pages/PaineisArea";
 import { BuscarLicitacoes } from "./pages/licitacoes/BuscarLicitacoes";
 import { Empresas } from "./pages/licitacoes/Empresas";
+import { Acompanhamento } from "./pages/licitacoes/Acompanhamento";
 import { Mercado } from "./pages/licitacoes/Mercado";
 import { DetalheLicitacao } from "./pages/licitacoes/Detalhe";
 import { Fornecedores } from "./pages/licitacoes/Fornecedores";
@@ -62,6 +63,7 @@ function Pagina({ caminho, usuario, aoMudarUsuario }: { caminho: string; usuario
   let m: Record<string, string> | null;
   const limpo = caminho.replace(/\/+$/, "");
   if (limpo === "/licitacoes/buscar") return podeVer(p, "licitacoes") ? <BuscarLicitacoes usuario={usuario} /> : <SemAcesso />;
+  if (limpo === "/licitacoes/acompanhamento") return podeVer(p, "licitacoes") ? <Acompanhamento /> : <SemAcesso />;
   if (limpo === "/licitacoes/empresas") return podeVer(p, "licitacoes") ? <Empresas /> : <SemAcesso />;
   if (limpo === "/licitacoes/mercado") return podeVer(p, "licitacoes") ? <Mercado /> : <SemAcesso />;
   if (limpo === "/licitacoes/painel") return podeVer(p, "licitacoes") ? <PainelLicitacoes /> : <SemAcesso />;

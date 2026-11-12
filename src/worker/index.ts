@@ -26,6 +26,7 @@ import { rotasPainel } from "./rotas/painel";
 import { rotasMercado } from "./rotas/mercado";
 import { rotasPncp } from "./rotas/pncp";
 import { rotasRobo } from "./rotas/robo";
+import { rotasAcompanhamento } from "./rotas/acompanhamento";
 import { rotasUsuarios } from "./rotas/usuarios";
 
 const app = new Hono<Ambiente>().basePath("/api");
@@ -61,6 +62,7 @@ app.route("/pncp", rotasPncp);
 app.route("/mercado", rotasMercado);
 app.route("/assinaturas", rotasAssinaturas);
 app.route("/robo", rotasRobo);
+app.route("/acompanhamento", rotasAcompanhamento);
 app.route("/", rotasPainel);
 app.route("/", rotasNotificacoes);
 
