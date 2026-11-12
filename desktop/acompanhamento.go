@@ -451,6 +451,7 @@ func (m *motor) Acompanhamento(compra string, atualizar bool, desde int, mais bo
 		a.andamento, a.finalizadas, a.detalhes, a.doCache = nil, nil, map[string]*detalheCompra{}, false
 		a.versao++
 	}
+	cnpjGuardado := a.cnpjCache
 	if atualizar {
 		a.forcar = true
 	}
@@ -477,6 +478,9 @@ func (m *motor) Acompanhamento(compra string, atualizar bool, desde int, mais bo
 		resposta["fase"] = m.fase
 		resposta["cnpj"] = m.cnpj
 		m.mu.Unlock()
+		if resposta["cnpj"] == "" {
+			resposta["cnpj"] = cnpjGuardado
+		}
 		return resposta
 	}
 	resposta := mapa{
@@ -502,6 +506,9 @@ func (m *motor) Acompanhamento(compra string, atualizar bool, desde int, mais bo
 	resposta["fase"] = m.fase
 	resposta["cnpj"] = m.cnpj // a própria empresa (para achar as suas propostas e anexos)
 	m.mu.Unlock()
+	if resposta["cnpj"] == "" {
+		resposta["cnpj"] = cnpjGuardado // antes do login terminar: o da última leitura guardada
+	}
 	return resposta
 }
 
@@ -716,7 +723,7 @@ func (m *motor) detalharDireto(c compraAcomp) *detalheCompra {
 			}
 		}
 	}
-	if r, err := m.lerAcomp("/comprasnet-mensagem/v2/chat/"+k, fmt.Sprintf("legadoAsp=%v&size=50&page=0", c.Legado), true); err == nil && okHTTP(r.Status) {
+	if r, err := m.lerAcomp("/comprasnet-mensagem/v2/chat/"+k, fmt.Sprintf("legadoAsp=%v&size=200&page=0", c.Legado), true); err == nil && okHTTP(r.Status) {
 		d.Mensagens = juntarLista(listaQualquer(r.Corpo))
 	} else if err == nil && r.Status == 404 {
 		d.Mensagens = juntarLista(nil) // compra sem mensagens

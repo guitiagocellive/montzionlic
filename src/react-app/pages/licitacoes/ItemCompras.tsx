@@ -1,5 +1,5 @@
 import { ErroCompras } from "../../robo/ErroCompras";
-import { ChevronDown, ChevronLeft, ChevronRight, Download, FileUp, Loader2, Paperclip, Send, Trash2 } from "lucide-react";
+import { BellRing, ChevronDown, Download, FileText, FileUp, Gavel, Loader2, MessageSquare, Paperclip, Send, ShieldQuestion, Trash2, UserRound, Users } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type AnexoCompras,
@@ -86,18 +86,48 @@ const hora = (s: string) => {
 };
 const moeda4 = (v: number | null) => (v == null ? "—" : v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 4 }));
 
-/** Carrega sob demanda (quando a parte abre), com "tentar de novo". */
+// Respostas já lidas nesta sessão: abrir e fechar um item (ou trocar de aba) mostra na hora o que já veio,
+// e relê por trás se tiver mais de 1 minuto.
+const memoria = new Map<string, { em: number; dados: unknown; pedido?: Promise<unknown> }>();
+const VALIDADE = 60_000;
+
+/** Lê (ou reaproveita) uma consulta ao Compras.gov.br; pedidos iguais ao mesmo tempo viram um só. */
+export function lerComMemoria<T>(chave: string, carregar: () => Promise<T>, forcar = false): Promise<T> {
+  const m = memoria.get(chave);
+  if (m?.pedido) return m.pedido as Promise<T>;
+  if (!forcar && m && Date.now() - m.em < VALIDADE) return Promise.resolve(m.dados as T);
+  const pedido = carregar().then(
+    (dados) => {
+      memoria.set(chave, { em: Date.now(), dados });
+      return dados;
+    },
+    (e) => {
+      if (m && m.em > 0) memoria.set(chave, { em: m.em, dados: m.dados });
+      else memoria.delete(chave);
+      throw e;
+    },
+  );
+  memoria.set(chave, { em: m?.em ?? 0, dados: m?.dados, pedido });
+  return pedido;
+}
+
+export function jaLido<T>(chave: string): T | null {
+  const m = memoria.get(chave);
+  return m && m.em > 0 ? (m.dados as T) : null;
+}
+
+/** Carrega quando a parte aparece, com "tentar de novo"; mostra na hora o que já foi lido. */
 function useCarga<T>(ativo: boolean, carregar: () => Promise<T>, chave: string) {
-  const [estado, setEstado] = useState<{ carregando: boolean; erro: string; dados: T | null }>({ carregando: false, erro: "", dados: null });
+  const [estado, setEstado] = useState<{ carregando: boolean; erro: string; dados: T | null }>(() => ({ carregando: false, erro: "", dados: jaLido<T>(chave) }));
   const [vez, setVez] = useState(0);
   const ref = useRef(carregar);
   ref.current = carregar;
   useEffect(() => {
     if (!ativo) return;
     let vivo = true;
-    setEstado((e) => ({ ...e, carregando: true, erro: "" }));
-    ref
-      .current()
+    const antes = jaLido<T>(chave);
+    setEstado({ carregando: antes == null, erro: "", dados: antes });
+    lerComMemoria(chave, () => ref.current(), vez > 0)
       .then((dados) => vivo && setEstado({ carregando: false, erro: "", dados }))
       .catch((e) => vivo && setEstado((x) => ({ ...x, carregando: false, erro: mensagemDeErro(e) })));
     return () => {
@@ -134,170 +164,248 @@ function Secao({ titulo, aberta: inicial = false, extra, children }: { titulo: s
   );
 }
 
-export function ItemCompras({
-  compra,
-  item,
-  cnpj,
-  anterior,
-  proximo,
-}: {
-  compra: CompraAcomp;
-  item: ItemAcomp;
-  cnpj: string;
-  anterior?: () => void;
-  proximo?: () => void;
-}) {
-  const [aba, setAba] = useState<"minha" | "todas">("minha");
-  const base = `/v1/compras/${compra.chave}/itens/${item.numero}`;
-  const dados = useCarga(
-    true,
-    async () => {
-      // 1) tela da fase de seleção ("Todas as propostas" oficial); 2) item com as propostas; 3) propostas iniciais.
-      const naoExiste = (e: unknown) => /40[034]|não encontr|not found|sem dados/i.test(mensagemDeErro(e));
+/** Propostas do item (a sua e as de todas as empresas), como a tela do item no Compras.gov.br. */
+export async function carregarPropostas(compra: CompraAcomp, numeroItem: number, cnpj: string) {
+  const base = `/v1/compras/${compra.chave}/itens/${numeroItem}`;
+  // 1) tela da fase de seleção ("Todas as propostas" oficial); 2) item com as propostas; 3) propostas iniciais.
+  const naoExiste = (e: unknown) => /40[034]|não encontr|not found|sem dados/i.test(mensagemDeErro(e));
+  try {
+    const d = await consultar(`/v1/compras/${compra.chave}/em-selecao-fornecedores/itens/${numeroItem}/propostas`, { query: "ordenacao-propostas=P", captcha: false });
+    const lido = lerItemComPropostas(d, cnpj);
+    if (lido.todas.length) return { ...lido, iniciais: false };
+  } catch (e) {
+    if (!naoExiste(e)) throw e;
+  }
+  try {
+    return { ...lerItemComPropostas(await consultar(`${base}/propostas`), cnpj), iniciais: false };
+  } catch (e) {
+    if (!naoExiste(e)) throw e;
+    const d = await consultar(`${base}/propostas-iniciais`).catch(() => {
+      throw e;
+    });
+    return { ...lerItemComPropostas({ propostasItem: propostasDoItem(d, numeroItem) }, cnpj), iniciais: true };
+  }
+}
+export type PropostasDoItem = Awaited<ReturnType<typeof carregarPropostas>>;
+export const chavePropostas = (compra: CompraAcomp, numeroItem: number) => `propostas:${compra.chave}:${numeroItem}`;
+
+/** Lê as propostas de vários itens por trás (2 de cada vez), para os cartões já mostrarem a análise. */
+export async function preCarregarPropostas(compra: CompraAcomp, itens: number[], cnpj: string, aoLer: () => void, parar: () => boolean) {
+  const fila = itens.filter((n) => !jaLido(chavePropostas(compra, n)));
+  const trabalhar = async () => {
+    for (let n = fila.shift(); n != null && !parar(); n = fila.shift()) {
       try {
-        const d = await consultar(`/v1/compras/${compra.chave}/em-selecao-fornecedores/itens/${item.numero}/propostas`, { query: "ordenacao-propostas=P", captcha: false });
-        const lido = lerItemComPropostas(d, cnpj);
-        if (lido.todas.length) return { ...lido, iniciais: false };
-      } catch (e) {
-        if (!naoExiste(e)) throw e;
+        await lerComMemoria(chavePropostas(compra, n), () => carregarPropostas(compra, n, cnpj));
+        aoLer();
+      } catch {
+        /* o item mostra o erro quando for aberto */
       }
-      try {
-        return { ...lerItemComPropostas(await consultar(`${base}/propostas`), cnpj), iniciais: false };
-      } catch (e) {
-        if (!naoExiste(e)) throw e;
-        const d = await consultar(`${base}/propostas-iniciais`).catch(() => {
-          throw e;
-        });
-        return { ...lerItemComPropostas({ propostasItem: propostasDoItem(d, item.numero) }, cnpj), iniciais: true };
-      }
-    },
-    `${compra.chave}:${item.numero}`,
-  );
+    }
+  };
+  await Promise.all([trabalhar(), trabalhar()]);
+}
+
+/** Análise rápida do item a partir das propostas: quem está à frente, desclassificadas e a distância para a 1ª válida. */
+export function analisarPropostas(dados: PropostasDoItem | null, cnpj: string) {
+  if (!dados?.todas.length) return null;
+  const todas = dados.todas;
+  const minhaPos = todas.findIndex((p) => p.cnpj === cnpj);
+  const aFrente = minhaPos > 0 ? todas.slice(0, minhaPos) : [];
+  const validas = todas.filter((p) => !p.desclassificada);
+  const primeiraValida = validas[0] ?? null;
+  const minha = minhaPos >= 0 ? todas[minhaPos] : null;
+  const meu = minha ? (minha.valorNegociado ?? minha.valorOfertado ?? minha.valor) : null;
+  const dela = primeiraValida ? (primeiraValida.valorNegociado ?? primeiraValida.valorOfertado ?? primeiraValida.valor) : null;
+  const posicaoValida = minha && !minha.desclassificada ? validas.findIndex((p) => p.cnpj === cnpj) + 1 : null;
+  return {
+    minhaColocacao: minha ? (minha.colocacao ?? minhaPos + 1) : null,
+    total: todas.length,
+    desclassificadas: todas.filter((p) => p.desclassificada).length,
+    aFrente: aFrente.length,
+    aFrenteValidas: aFrente.filter((p) => !p.desclassificada).length,
+    aFrenteSemAnexos: aFrente.filter((p) => !p.desclassificada && p.quantidadeAnexos === 0).length,
+    posicaoValida,
+    souPrimeira: !!minha && primeiraValida?.cnpj === cnpj,
+    diferenca: meu != null && dela != null && primeiraValida?.cnpj !== cnpj ? meu - dela : null,
+    diferencaPct: meu != null && dela ? ((meu - dela) / dela) * 100 : null,
+    primeiraValida,
+  };
+}
+
+/** Mensagens da compra sobre este item: se o pregoeiro falou com você e qual foi a última. */
+export function conversaDoItem(mensagens: MensagemAcomp[], numeroItem: number, cnpj: string) {
+  const doItem = mensagens.filter((m) => m.item === numeroItem);
+  const paraVoce = doItem.filter((m) => m.quem === "pregoeiro" && !!cnpj && (m.destinatario === cnpj || m.texto.replace(/\D/g, "").includes(cnpj)));
+  const ultima = [...paraVoce].sort((a, b) => dataDe(b.dataHora) - dataDe(a.dataHora))[0] ?? null;
+  return { total: doItem.length, paraVoce: paraVoce.length, ultima };
+}
+
+type Aba = "minha" | "todos" | "lances";
+
+export function ItemCompras({ compra, item, cnpj, abaInicial = "minha" }: { compra: CompraAcomp; item: ItemAcomp; cnpj: string; abaInicial?: Aba }) {
+  const [aba, setAba] = useState<Aba>(abaInicial);
+  const dados = useCarga(true, () => carregarPropostas(compra, item.numero, cnpj), chavePropostas(compra, item.numero));
   const nomes = useMemo(() => new Map((dados.dados?.todas ?? []).map((p) => [p.cnpj, p.empresa])), [dados.dados]);
   // Reserva: a sua proposta como veio na lista de itens (aparece na hora, antes da tela do item responder).
   const minha = dados.dados?.minha ?? (item.propostaBruta ? lerProposta(item.propostaBruta) : null);
   const participantes = dados.dados?.participantes ?? item.participantes;
   const colocacao = minha?.colocacao ?? item.colocacao;
+  const analise = analisarPropostas(dados.dados, cnpj);
+  const conversa = conversaDoItem(compra.mensagens, item.numero, cnpj);
+  const pendencias = item.pendencias.length ? item.pendencias : (minha?.pendencias ?? []);
+  const convocadoAnexos = pendencias.some((p) => p.tipo === "anexos");
+  const emDiligencia = pendencias.some((p) => p.tipo === "diligencia");
 
   return (
     <div className="item-compras">
-      <div className="cabeca-item-compras">
-        <div>
-          <strong>
-            {item.numero} &nbsp;{item.descricao.toUpperCase()}
-          </strong>
-          {item.etapa && <span className="etapa-item-compras">{item.etapa}</span>}
-        </div>
-        <dl>
-          <dt>Qtde solicitada</dt>
-          <dd>{item.quantidade ?? "—"}</dd>
-          <dt>Valor estimado (unitário)</dt>
-          <dd>{item.valorEstimado != null ? moeda4(item.valorEstimado) : "Não informado"}</dd>
-        </dl>
-        <div className="navegar-itens">
-          <button className="botao-icone" onClick={anterior} disabled={!anterior} aria-label="Item anterior">
-            <ChevronLeft size={16} />
-          </button>
-          <button className="botao-icone" onClick={proximo} disabled={!proximo} aria-label="Próximo item">
-            <ChevronRight size={16} />
-          </button>
-        </div>
-      </div>
-
       <div className="abas-compras" role="tablist">
         <button role="tab" aria-selected={aba === "minha"} className={aba === "minha" ? "ativo" : ""} onClick={() => setAba("minha")}>
-          Minha proposta
+          <UserRound size={15} /> Minha participação
         </button>
-        <button role="tab" aria-selected={aba === "todas"} className={aba === "todas" ? "ativo" : ""} onClick={() => setAba("todas")}>
-          Todas as propostas
+        <button role="tab" aria-selected={aba === "todos"} className={aba === "todos" ? "ativo" : ""} onClick={() => setAba("todos")}>
+          <Users size={15} /> Todos os participantes{participantes ? ` (${participantes})` : ""}
+        </button>
+        <button role="tab" aria-selected={aba === "lances"} className={aba === "lances" ? "ativo" : ""} onClick={() => setAba("lances")}>
+          <Gavel size={15} /> Lances
         </button>
       </div>
 
-      {aba === "minha" ? (
+      {aba === "minha" && (
         <div className="painel-compras">
+          {pendencias.length > 0 && (
+            <div className="faixa-pendencias">
+              <BellRing size={16} />
+              <span>
+                <strong>Convocação aberta:</strong> {pendencias.map((p) => p.rotulo).join(" · ")}
+                {minha?.dataLimite && <> — prazo {dataHora(minha.dataLimite)}</>}
+              </span>
+            </div>
+          )}
           <div className="resumo-minha-proposta">
-            <div>
+            <div className="destaque">
               <span>Classificação</span>
-              <strong>{colocacao != null ? `${colocacao}º${participantes ? ` de ${participantes} propostas` : ""}` : "—"}</strong>
+              <strong>{colocacao != null ? `${colocacao}º` : "—"}</strong>
+              <small>{participantes ? `de ${participantes} propostas` : ""}</small>
+            </div>
+            <div>
+              <span>Chance</span>
               <span className={`chip ${COR_CHANCE[item.chance]}`}>{ROTULO_CHANCE[item.chance]}</span>
+              <small>{item.explicacao}</small>
+            </div>
+            <div>
+              <span>Situação</span>
+              <strong className={minha?.desclassificada ? "texto-vermelho" : ""}>{minha?.situacao || item.situacao || item.etapa || "—"}</strong>
+              {minha?.motivo && <small className="texto-vermelho">Motivo: {minha.motivo}</small>}
             </div>
             <div>
               <span>Declarações</span>
               <strong>ME/EPP: {minha?.meEpp || compra.meEpp ? "Sim" : compra.meEpp === false || minha ? "Não" : "—"}</strong>
-            </div>
-            <div>
-              <span>UF do fornecedor</span>
-              <strong>{minha?.uf || compra.uf || "—"}</strong>
+              <small>UF {minha?.uf || compra.uf || "—"}</small>
             </div>
           </div>
-          <p className="texto-fraco pequeno explicacao-chance">{item.explicacao}</p>
-          {item.pendencias.map((p) => (
-            <p key={p.tipo} className="alerta aviso">
-              Convocação aberta: {p.rotulo}.
-            </p>
-          ))}
 
-          <Secao titulo="Chat" aberta>
-            {() => <Chat compra={compra} item={item} cnpj={cnpj} nomes={nomes} participante={cnpj} podeEscrever />}
-          </Secao>
-          <Secao titulo="Proposta" aberta>
-            {() => (
-              <Estado carregando={dados.carregando} erro={dados.erro} recarregar={dados.recarregar}>
-                {minha ? <DadosProposta p={minha} /> : <p className="texto-fraco">O Compras.gov.br ainda não mostra a sua proposta deste item.</p>}
-              </Estado>
+          <ul className="analise-item">
+            {analise?.souPrimeira && <li className="bom">Você é a 1ª proposta válida: é a próxima (ou a atual) a ser analisada pelo pregoeiro.</li>}
+            {analise && !analise.souPrimeira && analise.aFrenteValidas > 0 && (
+              <li>
+                {analise.aFrenteValidas === 1 ? "1 empresa válida à sua frente" : `${analise.aFrenteValidas} empresas válidas à sua frente`}
+                {analise.aFrente > analise.aFrenteValidas ? ` (e ${analise.aFrente - analise.aFrenteValidas} já desclassificada${analise.aFrente - analise.aFrenteValidas > 1 ? "s" : ""})` : ""}.
+                {analise.aFrenteSemAnexos > 0 && <strong> {analise.aFrenteSemAnexos} sem anexos — se o edital exige, tende a ser recusada.</strong>}
+              </li>
             )}
-          </Secao>
-          <Secao titulo="Anexos" aberta={item.pendencias.some((p) => p.tipo === "anexos")}>
-            {() => <MeusAnexos compra={compra} item={item} cnpj={cnpj} convocado={item.pendencias.some((p) => p.tipo === "anexos") || !!minha?.convocada} />}
-          </Secao>
-          <Secao titulo="Diligências" aberta={item.pendencias.some((p) => p.tipo === "diligencia")}>
-            {() => <Diligencias compra={compra} item={item} cnpj={cnpj} podeEnviar={item.pendencias.some((p) => p.tipo === "diligencia")} />}
-          </Secao>
-          <Secao titulo="Recursos">{() => <Recursos compra={compra} item={item} cnpj={cnpj} nomes={nomes} />}</Secao>
-          <Secao titulo="Lances">{() => <Lances compra={compra} item={item} cnpj={cnpj} nomes={nomes} />}</Secao>
+            {analise?.diferenca != null && analise.diferenca > 0 && (
+              <li>
+                Seu valor está {formatarMoeda(analise.diferenca)} acima da 1ª válida{analise.diferencaPct != null ? ` (${analise.diferencaPct.toFixed(1).replace(".", ",")}%)` : ""}.
+              </li>
+            )}
+            {conversa.paraVoce > 0 && (
+              <li className="atencao">
+                O pregoeiro falou com você neste item{conversa.paraVoce > 1 ? ` (${conversa.paraVoce} mensagens)` : ""}
+                {conversa.ultima ? `: “${resumir(conversa.ultima.texto, 110)}”` : "."}
+              </li>
+            )}
+            {!analise && dados.carregando && (
+              <li className="texto-fraco">
+                <Loader2 className="girando" size={13} /> Lendo as propostas do item…
+              </li>
+            )}
+          </ul>
+
+          <section className="cartao-secao-compras">
+            <h4>
+              <FileText size={15} /> Minha proposta
+            </h4>
+            <Estado carregando={dados.carregando && !minha} erro={minha ? "" : dados.erro} recarregar={dados.recarregar}>
+              {minha ? <DadosProposta p={minha} quantidadeItem={item.quantidade} /> : <p className="texto-fraco">O Compras.gov.br ainda não mostra a sua proposta deste item.</p>}
+            </Estado>
+          </section>
+
+          <div className="colunas-minha-participacao">
+            <section className="cartao-secao-compras">
+              <h4>
+                <MessageSquare size={15} /> Conversa com o pregoeiro
+              </h4>
+              <Chat compra={compra} item={item} cnpj={cnpj} nomes={nomes} participante={cnpj} podeEscrever />
+            </section>
+            <div className="pilha-secoes">
+              <section className="cartao-secao-compras">
+                <h4>
+                  <Paperclip size={15} /> Anexos que enviei
+                </h4>
+                <MeusAnexos compra={compra} item={item} cnpj={cnpj} convocado={convocadoAnexos || !!minha?.convocada} />
+              </section>
+              <section className="cartao-secao-compras">
+                <h4>
+                  <ShieldQuestion size={15} /> Diligências
+                </h4>
+                <Diligencias compra={compra} item={item} cnpj={cnpj} podeEnviar={emDiligencia} />
+              </section>
+            </div>
+          </div>
+          <Secao titulo="Recursos (intenção, recurso e contrarrazão)">{() => <Recursos compra={compra} item={item} cnpj={cnpj} nomes={nomes} />}</Secao>
         </div>
-      ) : (
+      )}
+
+      {aba === "todos" && (
         <Estado carregando={dados.carregando} erro={dados.erro} recarregar={dados.recarregar}>
-          <TodasPropostas compra={compra} item={item} cnpj={cnpj} lista={dados.dados?.todas ?? []} iniciais={!!dados.dados?.iniciais} nomes={nomes} />
+          <TodasPropostas compra={compra} item={item} cnpj={cnpj} lista={dados.dados?.todas ?? []} iniciais={!!dados.dados?.iniciais} nomes={nomes} analise={analise} />
         </Estado>
       )}
+
+      {aba === "lances" && <Lances compra={compra} item={item} cnpj={cnpj} nomes={nomes} />}
     </div>
   );
 }
 
-function DadosProposta({ p }: { p: PropostaEmpresa }) {
-  const q = p.quantidade;
-  const total = (v: number | null) => (v != null && q != null ? moeda4(v * q) : "");
+const resumir = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+
+function DadosProposta({ p, quantidadeItem }: { p: PropostaEmpresa; quantidadeItem?: number | null }) {
+  const q = p.quantidade ?? quantidadeItem ?? null;
+  const total = (unit: number | null, informado: number | null) => (informado != null ? informado : unit != null && q != null ? unit * q : null);
+  const linha = (rotulo: string, unit: number | null, informado: number | null, destaque = false) => (
+    <div className={destaque ? "destaque" : ""}>
+      <span>{rotulo}</span>
+      <strong>{unit != null ? moeda4(unit) : "—"}</strong>
+      <small>{total(unit, informado) != null ? `Total ${moeda4(total(unit, informado))}` : ""}</small>
+    </div>
+  );
+  const atual = p.valorNegociado != null ? "negociado" : "ofertado";
   return (
     <div className="dados-proposta-compras">
-      <div>
-        <span>Valor proposta (unitário | total)</span>
-        <strong>
-          {moeda4(p.valorProposta)} {total(p.valorProposta) && <span className="texto-fraco">| {total(p.valorProposta)}</span>}
-        </strong>
-      </div>
-      <div>
-        <span>Valor ofertado (unitário | total)</span>
-        <strong>
-          {moeda4(p.valorOfertado)} {total(p.valorOfertado) && <span className="texto-fraco">| {total(p.valorOfertado)}</span>}
-        </strong>
-      </div>
-      <div>
-        <span>Valor negociado (unitário | total)</span>
-        <strong>
-          {p.valorNegociado != null ? moeda4(p.valorNegociado) : "—"} {total(p.valorNegociado) && <span className="texto-fraco">| {total(p.valorNegociado)}</span>}
-        </strong>
-      </div>
+      {linha("Valor inicial (proposta)", p.valorProposta, p.totalProposta)}
+      {linha("Valor ofertado (após lances)", p.valorOfertado, p.totalOfertado, atual === "ofertado")}
+      {linha("Valor negociado", p.valorNegociado, p.totalNegociado, atual === "negociado")}
+      {p.valorSugerido != null && linha("Sugerido pelo pregoeiro", p.valorSugerido, null)}
       <div>
         <span>Quantidade ofertada</span>
         <strong>{q ?? "—"}</strong>
       </div>
       <div>
-        <span>Marca/Fabricante</span>
+        <span>Marca / fabricante</span>
         <strong>{p.marca || "—"}</strong>
       </div>
       <div>
-        <span>Modelo/Versão</span>
+        <span>Modelo / versão</span>
         <strong>{p.modelo || "—"}</strong>
       </div>
       {(p.situacao || p.motivo) && (
@@ -429,9 +537,9 @@ function Chat({
 
 // ---------- Anexos ----------
 
-function ListaAnexos({ anexos, baixar, excluir }: { anexos: AnexoCompras[]; baixar: (a: AnexoCompras) => Promise<void>; excluir?: (a: AnexoCompras) => Promise<void> }) {
+function ListaAnexos({ anexos, baixar, excluir, vazio = "Nenhum anexo enviado." }: { anexos: AnexoCompras[]; baixar: (a: AnexoCompras) => Promise<void>; excluir?: (a: AnexoCompras) => Promise<void>; vazio?: string }) {
   const [ocupado, setOcupado] = useState("");
-  if (!anexos.length) return <p className="texto-fraco pequeno">Nenhum anexo enviado.</p>;
+  if (!anexos.length) return <p className="texto-fraco pequeno">{vazio}</p>;
   const fazer = async (a: AnexoCompras, f: (a: AnexoCompras) => Promise<void>) => {
     setOcupado(a.id || a.url);
     try {
@@ -493,15 +601,29 @@ function EnviarArquivo({ rotulo, desativado, confirmar, enviar }: { rotulo: stri
 const baixarAnexo = async (compra: CompraAcomp, item: ItemAcomp, cnpjEmpresa: string, a: AnexoCompras, minha: boolean) => {
   if (a.url) return salvarArquivo(await pedir({ url: a.url }), a.nome);
   const trecho = minha ? `participacao/${cnpjEmpresa}` : `participacoes/${cnpjEmpresa}`;
-  const r = await pedir({ caminho: `${FE}/v2/compras/${compra.chave}/itens/${item.numero}/${trecho}/anexos/${a.id}`, captcha: !minha, baixar: true }).catch(() =>
-    pedir({ caminho: `${FE}/public/v2/compras/${compra.chave}/itens/${item.numero}/participacoes/${cnpjEmpresa}/anexos/${a.id}`, captcha: true, baixar: true }),
+  const id = encodeURIComponent(a.id);
+  const r = await pedir({ caminho: `${FE}/v2/compras/${compra.chave}/itens/${item.numero}/${trecho}/anexos/${id}`, captcha: !minha, baixar: true }).catch(() =>
+    pedir({ caminho: `${FE}/public/v2/compras/${compra.chave}/itens/${item.numero}/participacoes/${cnpjEmpresa}/anexos/${id}`, captcha: true, baixar: true }),
   );
   salvarArquivo(r, a.nome);
 };
 
 function MeusAnexos({ compra, item, cnpj, convocado }: { compra: CompraAcomp; item: ItemAcomp; cnpj: string; convocado: boolean }) {
   const caminho = `${FE}/v1/compras/${compra.chave}/itens/${item.numero}/participacao/${cnpj}/anexos`;
-  const carga = useCarga(!!cnpj, async () => lerAnexos((await pedir({ caminho, captcha: false })).dados), caminho);
+  const carga = useCarga(
+    !!cnpj,
+    async () => {
+      // Como a tela oficial: em páginas (todos os anexos do item, da fase de propostas e das convocações).
+      const todos: AnexoCompras[] = [];
+      for (let pagina = 0; pagina < 10; pagina++) {
+        const lidos = lerAnexos((await pedir({ caminho, captcha: false, query: `pagina=${pagina}&tamanhoPagina=20` })).dados);
+        todos.push(...lidos);
+        if (lidos.length < 20) break;
+      }
+      return todos;
+    },
+    `meus-anexos:${caminho}`,
+  );
   const [ciente, setCiente] = useState(false);
   if (!cnpj) return <p className="texto-fraco">Entre no Compras.gov.br para ver os seus anexos.</p>;
   return (
@@ -540,7 +662,7 @@ function MeusAnexos({ compra, item, cnpj, convocado }: { compra: CompraAcomp; it
             convocado
               ? async (a) => {
                   if (!window.confirm(`Excluir "${a.nome}" do Compras.gov.br?`)) return;
-                  await pedir({ metodo: "DELETE", caminho: `${caminho}/${a.id}` });
+                  await pedir({ metodo: "DELETE", caminho: `${caminho}/${encodeURIComponent(a.id)}` });
                   carga.recarregar();
                 }
               : undefined
@@ -566,23 +688,58 @@ function AnexosEmpresa({ compra, item, empresa, aoContar }: { compra: CompraAcom
 
 // ---------- Diligências ----------
 
+const SITUACAO_DILIGENCIA: Record<string, string> = { A: "Em andamento", E: "Encerrada", C: "Cancelada", EM_ANDAMENTO: "Em andamento", ENCERRADA: "Encerrada", CANCELADA: "Cancelada" };
+
+interface Diligencia {
+  id: string;
+  situacao: string;
+  motivo: string;
+  criadaEm: string;
+  encerradaEm: string;
+  prazoAnexos: string;
+  pedeAnexos: boolean;
+}
+
+function lerDiligencias(dados: unknown): Diligencia[] {
+  const lista = Array.isArray(dados) ? dados : dados && typeof dados === "object" ? [dados] : [];
+  return (lista as Record<string, unknown>[]).map((d, i) => ({
+    id: String(d.id ?? d.sequencial ?? i + 1),
+    situacao: SITUACAO_DILIGENCIA[String(d.situacao ?? "")] ?? String(d.situacao ?? ""),
+    motivo: String(d.motivo ?? d.descricao ?? d.texto ?? ""),
+    criadaEm: String(d.dataHoraCriacao ?? d.dataHoraInicio ?? ""),
+    encerradaEm: String(d.dataHoraEncerramento ?? ""),
+    prazoAnexos: String(d.dataHoraLimiteEnvioAnexos ?? d.dataHoraLimite ?? ""),
+    pedeAnexos: String(d.situacaoUltimaSolicitacaoAnexos ?? "") === "S",
+  }));
+}
+
 function Diligencias({ compra, item, cnpj, podeEnviar }: { compra: CompraAcomp; item: ItemAcomp; cnpj: string; podeEnviar?: boolean }) {
   const base = `${FE}/v1/compras/${compra.chave}/itens/${item.numero}/participacoes/${cnpj}/diligencias`;
-  const carga = useCarga(!!cnpj, async () => (await pedir({ caminho: base, captcha: true })).dados, base);
-  const lista = Array.isArray(carga.dados) ? (carga.dados as Record<string, unknown>[]) : carga.dados ? [carga.dados as Record<string, unknown>] : [];
+  const carga = useCarga(!!cnpj, async () => lerDiligencias((await pedir({ caminho: base, captcha: true })).dados), base);
+  const [aberta, setAberta] = useState<string | null>(null);
   if (!cnpj) return null;
+  const lista = carga.dados ?? [];
   return (
     <Estado carregando={carga.carregando} erro={carga.erro} recarregar={carga.recarregar}>
       {lista.length === 0 ? (
-        <p className="texto-fraco pequeno">Nenhuma diligência.</p>
+        <p className="texto-fraco pequeno">Nenhuma diligência neste item.</p>
       ) : (
         <ul className="diligencias-compras">
-          {lista.map((d, i) => (
-            <li key={String(d.id ?? d.sequencial ?? i)}>
-              <strong>{String(d.descricao ?? d.texto ?? d.motivo ?? `Diligência ${i + 1}`)}</strong>
-              <span className="texto-fraco pequeno">
-                {[d.dataHoraInicio && `Aberta em ${dataHora(String(d.dataHoraInicio))}`, d.dataHoraLimite && `Prazo ${dataHora(String(d.dataHoraLimite))}`].filter(Boolean).join(" · ")}
-              </span>
+          {lista.map((d) => (
+            <li key={d.id} className={d.situacao === "Em andamento" ? "andamento" : ""}>
+              <button className="linha-diligencia" onClick={() => setAberta(aberta === d.id ? null : d.id)} aria-expanded={aberta === d.id}>
+                <span>
+                  <strong>{d.motivo || `Diligência ${d.id}`}</strong>
+                  <small className="texto-fraco">
+                    {[d.criadaEm && `Aberta em ${dataHora(d.criadaEm)}`, d.prazoAnexos && `Prazo dos anexos ${dataHora(d.prazoAnexos)}`, d.encerradaEm && `Encerrada em ${dataHora(d.encerradaEm)}`]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </small>
+                </span>
+                {d.situacao && <span className={`chip ${d.situacao === "Em andamento" ? "amarelo" : "cinza"}`}>{d.situacao}</span>}
+                <ChevronDown size={16} className="seta-todas" />
+              </button>
+              {aberta === d.id && <DetalheDiligencia base={base} compra={compra} item={item} cnpj={cnpj} id={d.id} />}
             </li>
           ))}
         </ul>
@@ -603,7 +760,38 @@ function Diligencias({ compra, item, cnpj, podeEnviar }: { compra: CompraAcomp; 
   );
 }
 
-// ---------- Todas as propostas ----------
+function DetalheDiligencia({ base, compra, item, cnpj, id }: { base: string; compra: CompraAcomp; item: ItemAcomp; cnpj: string; id: string }) {
+  const carga = useCarga(true, async () => obj((await pedir({ caminho: `${base}/${id}`, captcha: true })).dados), `${base}/${id}`);
+  const d = carga.dados ?? {};
+  const baixar = (origem: "governo" | "participante") => async (a: AnexoCompras) => {
+    const caminho = `${FE}/v2/compras/${compra.chave}/itens/${item.numero}/participacoes/${cnpj}/diligencias/anexos-${origem}/${encodeURIComponent(a.id)}`;
+    salvarArquivo(await pedir({ caminho, captcha: true, baixar: true }), a.nome);
+  };
+  return (
+    <div className="detalhe-diligencia">
+      <Estado carregando={carga.carregando} erro={carga.erro} recarregar={carga.recarregar}>
+        {typeof d.analise === "string" && d.analise && (
+          <p>
+            <b>Análise:</b> {d.analise}
+          </p>
+        )}
+        {typeof d.conclusao === "string" && d.conclusao && (
+          <p>
+            <b>Conclusão:</b> {d.conclusao}
+          </p>
+        )}
+        <span className="texto-suave pequeno">Arquivos do pregoeiro</span>
+        <ListaAnexos anexos={lerAnexos(d.anexosGoverno ?? [])} baixar={baixar("governo")} vazio="Nenhum arquivo do pregoeiro." />
+        <span className="texto-suave pequeno">Arquivos que você enviou</span>
+        <ListaAnexos anexos={lerAnexos(d.anexosParticipante ?? [])} baixar={baixar("participante")} vazio="Nenhum arquivo enviado." />
+      </Estado>
+    </div>
+  );
+}
+
+const obj = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+
+// ---------- Todos os participantes ----------
 
 function TodasPropostas({
   compra,
@@ -612,6 +800,7 @@ function TodasPropostas({
   lista,
   iniciais,
   nomes,
+  analise,
 }: {
   compra: CompraAcomp;
   item: ItemAcomp;
@@ -619,17 +808,20 @@ function TodasPropostas({
   lista: PropostaEmpresa[];
   iniciais: boolean;
   nomes: Map<string, string>;
+  analise: ReturnType<typeof analisarPropostas>;
 }) {
   const [aberta, setAberta] = useState<string | null>(null);
   const [anexos, setAnexos] = useState<Record<string, number | "lendo" | "erro">>({});
   const [conferindo, setConferindo] = useState(false);
   const minhaPos = lista.findIndex((p) => p.cnpj === cnpj);
   const aFrente = (minhaPos > 0 ? lista.slice(0, minhaPos) : []).filter((p) => p.cnpj && !p.desclassificada).slice(0, 10);
+  // O Compras.gov.br já diz quantos anexos cada empresa mandou; só confere um a um se não disser.
+  const qtdAnexos = (p: PropostaEmpresa) => (typeof anexos[p.cnpj] === "number" ? (anexos[p.cnpj] as number) : p.quantidadeAnexos);
+  const semContagem = aFrente.filter((p) => p.quantidadeAnexos == null && typeof anexos[p.cnpj] !== "number");
 
-  // Uma empresa de cada vez, como abrir os anexos de cada uma na tela oficial.
   async function conferirAnexos() {
     setConferindo(true);
-    for (const p of aFrente) {
+    for (const p of semContagem) {
       setAnexos((a) => ({ ...a, [p.cnpj]: "lendo" }));
       try {
         const lidos = lerAnexos(await consultar(`/v1/compras/${compra.chave}/itens/${item.numero}/participacoes/${p.cnpj}/anexos`));
@@ -640,26 +832,43 @@ function TodasPropostas({
     }
     setConferindo(false);
   }
-  const conferidas = aFrente.filter((p) => typeof anexos[p.cnpj] === "number");
-  const semAnexos = conferidas.filter((p) => anexos[p.cnpj] === 0);
+  const conhecidas = aFrente.filter((p) => qtdAnexos(p) != null);
+  const semAnexos = conhecidas.filter((p) => qtdAnexos(p) === 0);
 
   if (!lista.length) return <p className="texto-fraco">O Compras.gov.br ainda não mostra as propostas deste item (elas aparecem depois da disputa).</p>;
   return (
     <div className="painel-compras">
-      {iniciais && <p className="texto-fraco pequeno">Propostas iniciais (antes da disputa).</p>}
+      <div className="resumo-todos">
+        <span>
+          <strong>{lista.length}</strong> propostas
+        </span>
+        <span>
+          <strong>{analise?.desclassificadas ?? 0}</strong> desclassificadas
+        </span>
+        {minhaPos >= 0 && (
+          <span>
+            Você: <strong>{lista[minhaPos].colocacao ?? minhaPos + 1}º</strong>
+            {analise?.posicaoValida ? ` · ${analise.posicaoValida}ª entre as válidas` : ""}
+          </span>
+        )}
+        {iniciais && <span className="texto-fraco">Propostas iniciais (antes da disputa)</span>}
+      </div>
       {aFrente.length > 0 && (
         <div className="conferir-anexos">
-          <button className="botao secundario pequeno" onClick={conferirAnexos} disabled={conferindo}>
-            {conferindo ? <Loader2 className="girando" /> : <Paperclip />}{" "}
-            {aFrente.length === 1 ? "Conferir anexos da empresa à sua frente" : `Conferir anexos das ${aFrente.length} empresas à sua frente`}
-          </button>
-          {conferidas.length === aFrente.length && (
+          {semContagem.length > 0 && (
+            <button className="botao secundario pequeno" onClick={conferirAnexos} disabled={conferindo}>
+              {conferindo ? <Loader2 className="girando" /> : <Paperclip />} Conferir anexos de quem está à sua frente
+            </button>
+          )}
+          {conhecidas.length === aFrente.length && (
             <span className={semAnexos.length ? "texto-verde" : "texto-suave"}>
               {semAnexos.length
                 ? aFrente.length === 1
                   ? "A empresa à sua frente não enviou anexos: se o edital exige, ela tende a ser recusada e você sobe."
                   : `${semAnexos.length} de ${aFrente.length} empresas à sua frente não enviaram anexos: se o edital exige, elas tendem a ser recusadas e você sobe.`
-                : "Todas as empresas à sua frente enviaram anexos."}
+                : aFrente.length === 1
+                  ? "A empresa à sua frente enviou anexos."
+                  : "Todas as empresas à sua frente enviaram anexos."}
             </span>
           )}
         </div>
@@ -667,52 +876,79 @@ function TodasPropostas({
       <ol className="todas-propostas">
         {lista.map((p, i) => {
           const minha = !!cnpj && p.cnpj === cnpj;
-          const aberto = aberta === (p.cnpj || String(i));
-          const n = anexos[p.cnpj];
+          const chave = p.cnpj || String(i);
+          const aberto = aberta === chave;
+          const n = anexos[p.cnpj] === "lendo" ? "lendo" : qtdAnexos(p);
           return (
-            <li key={p.cnpj || i} className={`${minha ? "minha" : ""} ${p.desclassificada ? "fora" : ""} ${aberto ? "aberta" : ""}`}>
-              <button className="linha-todas" onClick={() => setAberta(aberto ? null : p.cnpj || String(i))} aria-expanded={aberto}>
+            <li key={chave} className={`${minha ? "minha" : ""} ${p.desclassificada ? "fora" : ""} ${aberto ? "aberta" : ""}`}>
+              <button className="linha-todas" onClick={() => setAberta(aberto ? null : chave)} aria-expanded={aberto}>
                 <span className="posicao-proposta">{p.colocacao ?? i + 1}º</span>
-                <span className="cnpj-todas">
-                  {cnpjFormatadoAcomp(p.cnpj)}
-                  {p.meEpp && <small>ME/EPP</small>}
-                </span>
                 <span className="nome-todas">
                   <span>
                     {p.empresa} {minha && <span className="chip azul">Você</span>}
                   </span>
-                  <small>{p.uf}</small>
+                  <small>
+                    {cnpjFormatadoAcomp(p.cnpj)}
+                    {p.uf ? ` · ${p.uf}` : ""}
+                    {p.meEpp ? " · ME/EPP" : ""}
+                    {p.marca ? ` · ${p.marca}${p.modelo ? ` ${p.modelo}` : ""}` : ""}
+                  </small>
+                  {p.desclassificada && p.motivo && <small className="texto-vermelho">Motivo: {resumir(p.motivo, 140)}</small>}
                 </span>
                 <span className="valores-todas">
                   <span>
-                    <small>Valor ofertado (unitário)</small> {moeda4(p.valorOfertado ?? p.valor)}
+                    <small>Ofertado</small> {moeda4(p.valorOfertado ?? p.valor)}
                   </span>
-                  <span>
-                    <small>Valor negociado (unitário)</small> {p.valorNegociado != null ? moeda4(p.valorNegociado) : "-"}
-                  </span>
+                  {p.valorNegociado != null && (
+                    <span>
+                      <small>Negociado</small> {moeda4(p.valorNegociado)}
+                    </span>
+                  )}
                 </span>
                 <span className="chips-todas">
-                  {p.desclassificada && <span className="chip vermelho">{p.situacao || "Recusada"}</span>}
+                  {p.desclassificada && <span className="chip vermelho">{p.situacao || "Desclassificada"}</span>}
                   {!p.desclassificada && p.situacao && <span className="chip verde">{p.situacao}</span>}
                   {p.convocada && <span className="chip amarelo">Convocada</span>}
                   {n === "lendo" && <Loader2 className="girando" size={13} />}
                   {n === 0 && <span className="chip vermelho">Sem anexos</span>}
-                  {typeof n === "number" && n > 0 && <span className="chip verde">{n === 1 ? "1 anexo" : `${n} anexos`}</span>}
+                  {typeof n === "number" && n > 0 && <span className="chip cinza">{n === 1 ? "1 anexo" : `${n} anexos`}</span>}
                 </span>
                 <ChevronDown className="seta-todas" size={18} />
               </button>
               {aberto && (
                 <div className="detalhe-empresa">
-                  <Secao titulo="Chat" aberta>
-                    {() => <Chat compra={compra} item={item} cnpj={cnpj} nomes={nomes} empresa={p} />}
-                  </Secao>
-                  <Secao titulo="Proposta" aberta>
-                    {() => <DadosProposta p={p} />}
-                  </Secao>
-                  <Secao titulo="Anexos" aberta>
-                    {() => <AnexosEmpresa compra={compra} item={item} empresa={p} aoContar={(c) => setAnexos((a) => (a[p.cnpj] === c ? a : { ...a, [p.cnpj]: c }))} />}
-                  </Secao>
-                  <Secao titulo="Diligências">{() => <Diligencias compra={compra} item={item} cnpj={p.cnpj} />}</Secao>
+                  <section className="cartao-secao-compras">
+                    <h4>
+                      <FileText size={15} /> Proposta
+                    </h4>
+                    <DadosProposta p={p} quantidadeItem={item.quantidade} />
+                  </section>
+                  <div className="colunas-minha-participacao">
+                    <section className="cartao-secao-compras">
+                      <h4>
+                        <MessageSquare size={15} /> Conversa com o pregoeiro
+                      </h4>
+                      <Chat compra={compra} item={item} cnpj={cnpj} nomes={nomes} empresa={p} participante={p.cnpj} />
+                    </section>
+                    <div className="pilha-secoes">
+                      <section className="cartao-secao-compras">
+                        <h4>
+                          <Paperclip size={15} /> Anexos
+                        </h4>
+                        {minha ? (
+                          <MeusAnexos compra={compra} item={item} cnpj={cnpj} convocado={false} />
+                        ) : (
+                          <AnexosEmpresa compra={compra} item={item} empresa={p} aoContar={(c) => setAnexos((a) => (a[p.cnpj] === c ? a : { ...a, [p.cnpj]: c }))} />
+                        )}
+                      </section>
+                      <section className="cartao-secao-compras">
+                        <h4>
+                          <ShieldQuestion size={15} /> Diligências
+                        </h4>
+                        <Diligencias compra={compra} item={item} cnpj={p.cnpj} />
+                      </section>
+                    </div>
+                  </div>
                 </div>
               )}
             </li>

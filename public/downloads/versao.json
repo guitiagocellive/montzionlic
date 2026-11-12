@@ -1,9 +1,11 @@
 {
-  "versao": "3.1.19",
+  "versao": "3.1.20",
   "data": "2026-11-12",
   "novidades": [
-    "Acompanhamento: novo \"Testar leitura do Compras\" (no rodapé da página). Mede, com a sua sessão, quanto tempo a lista leva com 10, 25, 50 e 100 por página e quanto leva para abrir uma licitação.",
-    "Se o Compras.gov.br aceitar páginas maiores, o aplicativo passa a ler até 50 participações por pedido (ex.: 302 finalizadas em 7 pedidos em vez de 31). Se não aceitar, continua de 10 em 10, como o site.",
-    "\"Copiar resultado\" no teste, para mandar para a gente e decidirmos os próximos passos."
+    "Acompanhamento: a licitação abre com tudo dela — itens em cartões com a sua colocação, chance, convocações e \"Pregoeiro falou com você\", e um resumo com filtros (convocados, chance boa, pregoeiro, desclassificados).",
+    "O \"+\" de cada item abre a sua participação: conversa com o pregoeiro, anexos que você enviou, diligências (com os arquivos do pregoeiro) e a proposta com valor inicial, ofertado, negociado e totais, marca e modelo.",
+    "Abas \"Todos os participantes\" (ordem de classificação, desclassificadas com o motivo, quantos anexos cada empresa mandou, conversa de cada uma) e \"Lances\".",
+    "Análise rápida em cada item: quantas empresas válidas estão à sua frente, quantas sem anexos, a diferença para a 1ª e se o pregoeiro falou com você.",
+    "Corrigido: anexos enviados que não apareciam e valores da proposta que vinham vazios (o Compras manda esses dados num formato que agora é lido certo)."
   ]
 }

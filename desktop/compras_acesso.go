@@ -22,6 +22,7 @@ const (
 	cmp = `/compras/\d{17}`
 	it  = `/itens/-?\d{1,5}` // grupos têm número negativo (ex.: -1)
 	id  = `[\w-][\w.-]{0,39}`
+	arq = `[\w%~()+-][\w%.~()+-]{0,199}` // nome do anexo guardado no Compras.gov.br (pode ser longo e vir codificado)
 )
 
 var leiturasPermitidas = []*regexp.Regexp{
@@ -29,10 +30,10 @@ var leiturasPermitidas = []*regexp.Regexp{
 	regexp.MustCompile(ce + `/v1` + cmp + `/em-selecao-fornecedores/itens/-?\d{1,5}/propostas$`),
 	regexp.MustCompile(ce + `/v1` + cmp + `/em-selecao-fornecedores/participacoes/` + id + `/itens/-?\d{1,5}/propostas$`),
 	regexp.MustCompile(ce + `/v1` + cmp + it + `/participacoes/` + id + `/(?:anexos|diligencias|diligencias/` + id + `)$`),
-	regexp.MustCompile(ce + `/v2` + cmp + it + `/participacoes/` + id + `/anexos/` + id + `$`),
-	regexp.MustCompile(ce + `/v2` + cmp + it + `/participacoes/` + id + `/diligencias/anexos-(?:governo|participante)/` + id + `$`),
+	regexp.MustCompile(ce + `/v2` + cmp + it + `/participacoes/` + id + `/anexos/` + arq + `$`),
+	regexp.MustCompile(ce + `/v2` + cmp + it + `/participacoes/` + id + `/diligencias/anexos-(?:governo|participante)/` + arq + `$`),
 	regexp.MustCompile(ce + `/v1` + cmp + it + `/participacao/` + id + `/anexos$`),
-	regexp.MustCompile(ce + `/v2` + cmp + it + `/participacao/` + id + `/anexos/` + id + `$`),
+	regexp.MustCompile(ce + `/v2` + cmp + it + `/participacao/` + id + `/anexos/` + arq + `$`),
 	regexp.MustCompile(ce + `/v1` + cmp + it + `/fase-recursal(?:-fornecedor)?/\d{1,4}$`),
 	regexp.MustCompile(ce + `/v1` + cmp + it + `/fase-recursal/\d{1,4}/recursos/` + id + `$`),
 	regexp.MustCompile(ce + `/v2` + cmp + it + `/fase-recursal/\d{1,4}(?:/recursos/` + id + `(?:/contrarrazoes/` + id + `)?)?/arquivos$`),
@@ -67,7 +68,7 @@ var acoesPermitidas = map[string][]*regexp.Regexp{
 	},
 	"DELETE": { // excluir um anexo seu / a proposta de um item / desistir da intenção de recurso
 		regexp.MustCompile(`^/comprasnet-fase-externa/v1` + cmp + it + `/participacao$`),
-		regexp.MustCompile(`^/comprasnet-fase-externa/v1` + cmp + it + `/participacao/` + id + `/anexos/` + id + `$`),
+		regexp.MustCompile(`^/comprasnet-fase-externa/v1` + cmp + it + `/participacao/` + id + `/anexos/` + arq + `$`),
 		regexp.MustCompile(`^/comprasnet-fase-externa/v1` + cmp + it + `/intencoes-recurso$`),
 		regexp.MustCompile(`^/comprasnet-fase-externa/v1` + cmp + it + `/recursos/` + id + `/arquivos$`),
 		regexp.MustCompile(`^/comprasnet-fase-externa/v1` + cmp + it + `/recursos/` + id + `/contrarrazoes/` + id + `/arquivos$`),

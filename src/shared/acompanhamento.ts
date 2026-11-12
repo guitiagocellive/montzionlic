@@ -204,12 +204,25 @@ const PENDENCIAS: [string, Pendencia["tipo"], string][] = [
   ["situacaoUltimaSolicitacaoAssumirCota", "cota", "Assumir cota"],
 ];
 
+/**
+ * Valor unitário de um campo de valor do Compras.gov.br. Na tela do item ele vem como
+ * { valorCalculado: { valorUnitario, valorTotal }, valorInformado }; em outras telas, como número.
+ */
 const valorDe = (v: unknown): number | null => {
   if (v == null) return null;
   const n = numero(v);
   if (n != null) return n;
   const o = obj(v);
-  return numero(primeiro(o.valorCalculado, o.valorInformado, o.valor, o.valorUnitario));
+  if (o.valorUnitario != null) return numero(o.valorUnitario);
+  if (o.valorCalculado != null) return valorDe(o.valorCalculado);
+  return numero(primeiro(o.valorInformado, o.valor));
+};
+
+/** Valor total (unitário × quantidade) quando o Compras.gov.br informa. */
+const totalDe = (v: unknown): number | null => {
+  const o = obj(v);
+  if (o.valorTotal != null) return numero(o.valorTotal);
+  return o.valorCalculado != null && typeof o.valorCalculado === "object" ? totalDe(o.valorCalculado) : null;
 };
 
 export function lerItemAcomp(bruto: unknown): ItemAcomp | null {
@@ -470,6 +483,17 @@ export interface PropostaEmpresa {
   valorProposta: number | null;
   valorOfertado: number | null;
   valorNegociado: number | null;
+  /** Totais (unitário × quantidade ofertada), quando o Compras.gov.br informa. */
+  totalProposta: number | null;
+  totalOfertado: number | null;
+  totalNegociado: number | null;
+  /** Valor que o pregoeiro sugeriu na negociação. */
+  valorSugerido: number | null;
+  /** Quantos anexos a empresa mandou no item (vem na lista, sem abrir os anexos). */
+  quantidadeAnexos: number | null;
+  chatAberto: boolean;
+  pendencias: Pendencia[];
+  dataLimite: string;
 }
 
 export function lerProposta(bruto: unknown): PropostaEmpresa {
@@ -495,6 +519,14 @@ export function lerProposta(bruto: unknown): PropostaEmpresa {
     valorProposta: valorDe(valores.valorPropostaInicial),
     valorOfertado: valorDe(primeiro(valores.valorPropostaInicialOuLances, valores.valorPropostaInicial)),
     valorNegociado: valorDe(valores.valorNegociado),
+    totalProposta: totalDe(valores.valorPropostaInicial),
+    totalOfertado: totalDe(primeiro(valores.valorPropostaInicialOuLances, valores.valorPropostaInicial)),
+    totalNegociado: totalDe(valores.valorNegociado),
+    valorSugerido: valorDe(valores.valorSugeridoNegociacao),
+    quantidadeAnexos: numero(p.quantidadeDeAnexos),
+    chatAberto: p.canalChatAberto === true,
+    pendencias: PENDENCIAS.filter(([campo]) => texto(p[campo]) === "S").map(([, tipo, rotulo]) => ({ tipo, rotulo })),
+    dataLimite: texto(primeiro(p.dataHoraLimiteAtendimento, p.dataHoraLimiteEnvioAnexos)),
   };
 }
 
@@ -543,10 +575,12 @@ export function lerAnexos(dados: unknown): AnexoCompras[] {
   return (Array.isArray(lista) ? lista : [])
     .map((b) => {
       const a = obj(b);
+      // No Compras.gov.br o anexo é identificado pelo "nome" (nome guardado no servidor) e mostrado pelo
+      // "nomeOriginal" (o nome do arquivo que a empresa enviou); não tem "id".
       return {
-        id: texto(primeiro(a.id, a.identificador, a.sequencial, a.numero, a.codigo)),
+        id: texto(primeiro(a.id, a.identificador, a.sequencial, a.codigo, a.nome)),
         nome: texto(primeiro(a.nomeOriginal, a.nome, a.nomeArquivo, a.descricao)) || "Arquivo",
-        dataHora: texto(primeiro(a.dataHora, a.dataHoraInclusao, a.dataInclusao)),
+        dataHora: texto(primeiro(a.dataHoraInclusao, a.dataHora, a.dataHoraEnvio, a.dataInclusao)),
         tipo: texto(primeiro(a.tipoAnexoDescricao, a.tipoAnexo, a.tipo, a.fase)),
         tamanho: numero(primeiro(a.tamanho, a.tamanhoArquivo)),
         url: texto(a.url),

@@ -1,4 +1,4 @@
-import { Bell, BellRing, Gauge, ClipboardCopy, FilePlus2, Eye, Download, ExternalLink, LogIn, MessageSquare, Pencil, RefreshCw, Search, Send, Star, TriangleAlert } from "lucide-react";
+import { Bell, BellRing, Gauge, Minus, Plus, ClipboardCopy, FilePlus2, Eye, Download, ExternalLink, LogIn, MessageSquare, Pencil, RefreshCw, Search, Send, Star, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type AvisoAcomp, avisosDe, type CompraAcomp, dataDe, montarCompras, type PainelAcompanhamento, ROTULO_CHANCE } from "../../../shared/acompanhamento";
 import { api, mensagemDeErro } from "../../api";
@@ -6,7 +6,7 @@ import { avisar, Modal } from "../../components/Ui";
 import { formatarMoeda } from "../../formato";
 import { link } from "../../rota";
 import { CadastroProposta, NovaProposta } from "./CadastroProposta";
-import { COR_CHANCE, ItemCompras } from "./ItemCompras";
+import { analisarPropostas, chavePropostas, conversaDoItem, COR_CHANCE, ItemCompras, jaLido, preCarregarPropostas, type PropostasDoItem } from "./ItemCompras";
 import { noAplicativo, ponte, type ResultadoTesteLeitura, temPonte } from "../../robo/ponte";
 import { BotaoRecarregarGovBr } from "../../robo/ErroCompras";
 
@@ -407,7 +407,7 @@ export function Acompanhamento() {
             />
           )}
           {cadastro && <CadastroProposta chave={cadastro} cnpj={painel.cnpj ?? ""} aoFechar={() => setCadastro(null)} />}
-          {compraAberta && !cadastro && <JanelaCompra compra={compraAberta} cnpj={painel.cnpj ?? ""} agora={agora} aoFechar={() => abrir(null)} aoCadastrar={() => setCadastro(compraAberta.chave)} />}
+          {compraAberta && !cadastro && <JanelaCompra compra={compraAberta} cnpj={painel.cnpj ?? ""} conectado={!!painel.conectado} agora={agora} aoFechar={() => abrir(null)} aoCadastrar={() => setCadastro(compraAberta.chave)} />}
           <p className="texto-fraco pequeno nota-acomp">
             O aplicativo relê a lista a cada 3 minutos e a compra que você abre na hora. A chance é uma estimativa pela colocação: o pregoeiro analisa a 1ª colocada e,
             se ela for recusada ou inabilitada, chama a próxima. Algo diferente do Compras.gov.br?{" "}
@@ -693,23 +693,86 @@ function LinhaCompra({
 const PASSOS = ["Propostas", "Disputa", "Seleção de fornecedores", "Remanescentes"];
 const passoDa = (c: CompraAcomp) => (["1", "2", "6"].includes(c.faseCodigo) ? 0 : ["3", "99"].includes(c.faseCodigo) ? 1 : c.faseCodigo === "4" ? 2 : c.encerrada ? 3 : -1);
 
-/** Janela da compra (como "Acompanhamento seleção de fornecedores"): itens com colocação e o "Ver item". */
-function JanelaCompra({ compra: c, cnpj, agora, aoFechar, aoCadastrar }: { compra: CompraAcomp; cnpj: string; agora: number; aoFechar: () => void; aoCadastrar: () => void }) {
-  const [itemAberto, setItemAberto] = useState<number | null>(null);
+type FiltroItens = "todos" | "convocados" | "chance" | "pregoeiro" | "fora";
+
+/** Janela da licitação: cabeçalho, resumo com a análise e os itens em cartões; o "+" abre a participação no item. */
+function JanelaCompra({
+  compra: c,
+  cnpj,
+  conectado,
+  agora,
+  aoFechar,
+  aoCadastrar,
+}: {
+  compra: CompraAcomp;
+  cnpj: string;
+  conectado: boolean;
+  agora: number;
+  aoFechar: () => void;
+  aoCadastrar: () => void;
+}) {
+  const [aberto, setAberto] = useState<number | null>(null);
+  const [filtro, setFiltro] = useState<FiltroItens>("todos");
+  const [, setLidas] = useState(0);
   const passo = passoDa(c);
-  const indice = c.itens.findIndex((i) => i.numero === itemAberto);
-  const item = indice >= 0 ? c.itens[indice] : null;
+  const lidos = !!c.lidaEm;
+
+  // Assim que os itens chegam, lê as propostas de cada item por trás (2 de cada vez): os cartões mostram quem
+  // está à frente e o "+" abre na hora. Só nas fases em que já existem propostas para comparar.
+  const numeros = c.itens.map((i) => i.numero).join(",");
+  useEffect(() => {
+    if (!lidos || !numeros || !conectado || ["1", "2", "6"].includes(c.faseCodigo)) return;
+    let parar = false;
+    preCarregarPropostas(c, numeros.split(",").map(Number).slice(0, 30), cnpj, () => !parar && setLidas((n) => n + 1), () => parar);
+    return () => {
+      parar = true;
+    };
+  }, [c.chave, lidos, c.lidaEm, numeros, cnpj, conectado]);
+  // Compra de um item só: já abre a participação.
+  useEffect(() => {
+    if (c.itens.length === 1 && aberto == null) setAberto(c.itens[0].numero);
+  }, [c.itens, aberto]);
+
+  const info = c.itens.map((it) => {
+    const conversa = conversaDoItem(c.mensagens, it.numero, cnpj);
+    const analise = analisarPropostas(jaLido<PropostasDoItem>(chavePropostas(c, it.numero)), cnpj);
+    return { it, conversa, analise, convocado: it.pendencias.length > 0 || it.chatAberto, boa: ["ganhou", "alta"].includes(it.chance), fora: it.chance === "fora" };
+  });
+  const contagem = {
+    convocados: info.filter((x) => x.convocado).length,
+    chance: info.filter((x) => x.boa).length,
+    pregoeiro: info.filter((x) => x.conversa.paraVoce > 0).length,
+    fora: info.filter((x) => x.fora).length,
+  };
+  const visiveis = info.filter((x) => (filtro === "convocados" ? x.convocado : filtro === "chance" ? x.boa : filtro === "pregoeiro" ? x.conversa.paraVoce > 0 : filtro === "fora" ? x.fora : true));
+  const geral = c.mensagens.filter((m) => !m.item);
+
   return (
-    <Modal titulo={item ? `${nomeCompra(c)} · Item ${item.numero}` : nomeCompra(c)} aoFechar={aoFechar} largo>
-      <style>{".modal.largo:has(.janela-compra){max-width:1100px}"}</style>
+    <Modal titulo="Acompanhar licitação" aoFechar={aoFechar} largo>
+      <style>{".modal.largo:has(.janela-compra){max-width:1180px}"}</style>
       <div className="janela-compra">
-        <div className="cabeca-janela-compra">
-          <div>
+        <header className="cabeca-janela-compra">
+          <div className="titulo-janela-compra">
             <strong>{nomeCompra(c)}</strong>
             <span>
-              UASG {c.uasg} - {c.orgao}
+              UASG {c.uasg} · {c.orgao}
             </span>
-            {c.abertura && <span className="texto-fraco pequeno">Abertura: {dataHora(c.abertura)}</span>}
+            {c.objeto && <span className="texto-suave objeto-janela">{c.objeto}</span>}
+            <span className="texto-fraco pequeno">
+              {[c.abertura && `Abertura ${dataHora(c.abertura)}`, c.lidaEm ? `Lida ${ha(c.lidaEm, agora)}` : "Lendo no Compras.gov.br…"].filter(Boolean).join(" · ")}
+            </span>
+          </div>
+          <div className="acoes-janela-compra">
+            {c.linkPncp && (
+              <a className="botao secundario pequeno" href={c.linkPncp} target="_blank" rel="noreferrer">
+                <ExternalLink size={14} /> Edital no PNCP
+              </a>
+            )}
+            {["1", "2", "6"].includes(c.faseCodigo) && (
+              <button className="botao acento pequeno" onClick={aoCadastrar}>
+                <FilePlus2 size={14} /> Cadastrar / alterar proposta
+              </button>
+            )}
           </div>
           <ol className="passos-compra">
             {PASSOS.map((p, i) => (
@@ -719,99 +782,122 @@ function JanelaCompra({ compra: c, cnpj, agora, aoFechar, aoCadastrar }: { compr
               </li>
             ))}
           </ol>
-        </div>
+        </header>
 
-        {item ? (
-          <>
-            <button className="botao-link sem-margem voltar-itens" onClick={() => setItemAberto(null)}>
-              ← Todos os itens
-            </button>
-            <ItemCompras
-              key={item.numero}
-              compra={c}
-              item={item}
-              cnpj={cnpj}
-              anterior={indice > 0 ? () => setItemAberto(c.itens[indice - 1].numero) : undefined}
-              proximo={indice < c.itens.length - 1 ? () => setItemAberto(c.itens[indice + 1].numero) : undefined}
-            />
-          </>
+        {!lidos ? (
+          <div className="carregando-compra">
+            <RefreshCw className="girando" size={18} />
+            <span>Lendo os itens, a sua participação e as mensagens desta licitação…</span>
+          </div>
+        ) : c.itens.length === 0 ? (
+          c.erros.length ? (
+            <p className="alerta aviso">
+              Não consegui ler os itens desta compra agora ({c.erros.join(" · ")}). O aplicativo tenta de novo sozinho; se continuar, use “Copiar diagnóstico” no fim da
+              lista.
+            </p>
+          ) : (
+            <p className="texto-fraco">Nenhum item com proposta sua nesta compra.</p>
+          )
         ) : (
           <>
-            {["1", "2", "6"].includes(c.faseCodigo) && (
-              <div className="alerta aviso linha-erro-item">
-                <span>Esta compra está na fase de propostas: dá para cadastrar ou alterar a proposta daqui.</span>
-                <button className="botao acento pequeno" onClick={aoCadastrar}>
-                  <FilePlus2 /> Cadastrar / alterar proposta
-                </button>
-              </div>
-            )}
-            <div className="lista-compras-topo">
-              <span className="texto-fraco pequeno">{c.lidaEm ? `Exibindo ${c.itens.length} item(ns) · lidos ${ha(c.lidaEm, agora)}` : "Lendo os itens no Compras.gov.br…"}</span>
-              {c.linkPncp && (
-                <a className="botao-link sem-margem" href={c.linkPncp} target="_blank" rel="noreferrer">
-                  Edital no PNCP <ExternalLink size={12} />
-                </a>
-              )}
+            <div className="resumo-compra">
+              <button className={filtro === "todos" ? "ativo" : ""} onClick={() => setFiltro("todos")}>
+                <strong>{c.itens.length}</strong>
+                <span>{c.itens.length === 1 ? "item" : "itens"} com proposta sua</span>
+              </button>
+              <button className={`vermelho ${filtro === "convocados" ? "ativo" : ""}`} onClick={() => setFiltro("convocados")} disabled={!contagem.convocados}>
+                <strong>{contagem.convocados}</strong>
+                <span>com convocação aberta</span>
+              </button>
+              <button className={`verde ${filtro === "chance" ? "ativo" : ""}`} onClick={() => setFiltro("chance")} disabled={!contagem.chance}>
+                <strong>{contagem.chance}</strong>
+                <span>com chance boa</span>
+              </button>
+              <button className={`azul ${filtro === "pregoeiro" ? "ativo" : ""}`} onClick={() => setFiltro("pregoeiro")} disabled={!contagem.pregoeiro}>
+                <strong>{contagem.pregoeiro}</strong>
+                <span>o pregoeiro falou com você</span>
+              </button>
+              <button className={`cinza ${filtro === "fora" ? "ativo" : ""}`} onClick={() => setFiltro("fora")} disabled={!contagem.fora}>
+                <strong>{contagem.fora}</strong>
+                <span>fora (desclassificados)</span>
+              </button>
             </div>
-            {!c.lidaEm ? (
-              <p className="texto-suave carregando-marcas">
-                <RefreshCw className="girando" size={16} /> Lendo os itens e as mensagens desta compra…
-              </p>
-            ) : c.itens.length === 0 ? (
-              c.erros.length ? (
-                <p className="texto-fraco">
-                  Não consegui ler os itens desta compra agora ({c.erros.join(" · ")}). O aplicativo tenta de novo
-                  sozinho; se continuar, use “Copiar diagnóstico” no fim da lista.
-                </p>
-              ) : (
-                <p className="texto-fraco">Nenhum item com proposta sua nesta compra.</p>
-              )
-            ) : (
-              <ul className="itens-compra">
-                {c.itens.map((it) => (
-                  <li key={it.numero} className={`item-compra chance-${it.chance}`}>
-                    <div className="desc-item-compra">
-                      <strong>
-                        {it.numero} &nbsp;{it.descricao.toUpperCase()}
-                      </strong>
-                      <span className="etapa-item-compras">{it.etapa || it.situacao || "—"}</span>
-                    </div>
-                    <dl>
-                      <dt>Qtde solicitada</dt>
-                      <dd>{it.quantidade ?? "—"}</dd>
-                      <dt>Sua proposta</dt>
-                      <dd>{formatarMoeda(it.meuValor)}</dd>
-                    </dl>
-                    <div className="colocacao-item-compra">
-                      <strong>{ordinal(it.colocacao)}</strong>
-                      <span className="texto-fraco pequeno">{it.participantes ? `de ${it.participantes}` : "colocação"}</span>
-                    </div>
-                    <div className="etiquetas-item">
-                      <span className={`chip ${COR_CHANCE[it.chance]}`} title={it.explicacao}>
-                        {ROTULO_CHANCE[it.chance]}
+
+            <ul className="cartoes-itens">
+              {visiveis.map(({ it, conversa, analise, convocado }) => {
+                const expandido = aberto === it.numero;
+                return (
+                  <li key={it.numero} className={`cartao-item chance-${it.chance} ${convocado ? "convocado" : ""} ${expandido ? "expandido" : ""}`}>
+                    <button className="topo-cartao-item" onClick={() => setAberto(expandido ? null : it.numero)} aria-expanded={expandido}>
+                      <span className="colocacao-cartao">
+                        <strong>{ordinal(analise?.minhaColocacao ?? it.colocacao)}</strong>
+                        <small>{(analise?.minhaColocacao != null ? analise.total : it.participantes) ? `de ${analise?.minhaColocacao != null ? analise.total : it.participantes}` : "colocação"}</small>
                       </span>
-                      {it.pendencias.map((p) => (
-                        <span key={p.tipo} className="chip vermelho">
-                          {p.rotulo}
+                      <span className="corpo-cartao-item">
+                        <span className="nome-cartao-item">
+                          <b>Item {it.numero}</b> {it.descricao}
                         </span>
-                      ))}
-                      {it.situacao && it.chance !== "fora" && <span className="chip verde">{it.situacao}</span>}
-                    </div>
-                    <button className="botao acento pequeno" onClick={() => setItemAberto(it.numero)}>
-                      <Eye /> Ver item
+                        <span className="etiquetas-item">
+                          <span className={`chip ${COR_CHANCE[it.chance]}`} title={it.explicacao}>
+                            {ROTULO_CHANCE[it.chance]}
+                          </span>
+                          {it.pendencias.map((p) => (
+                            <span key={p.tipo} className="chip vermelho">
+                              {p.rotulo}
+                            </span>
+                          ))}
+                          {conversa.paraVoce > 0 && (
+                            <span className="chip azul">
+                              <MessageSquare size={11} /> Pregoeiro falou com você
+                            </span>
+                          )}
+                          {it.situacao && it.chance !== "fora" && <span className="chip cinza">{it.situacao}</span>}
+                        </span>
+                        <span className="analise-cartao texto-suave">
+                          {[
+                            it.etapa,
+                            analise?.souPrimeira ? "Você é a 1ª válida" : analise && analise.aFrenteValidas > 0 ? `${analise.aFrenteValidas} válida${analise.aFrenteValidas > 1 ? "s" : ""} à sua frente` : "",
+                            analise?.desclassificadas ? `${analise.desclassificadas} desclassificada${analise.desclassificadas > 1 ? "s" : ""}` : "",
+                            analise?.aFrenteSemAnexos ? `${analise.aFrenteSemAnexos} à frente sem anexos` : "",
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </span>
+                      </span>
+                      <span className="valores-cartao">
+                        <span>
+                          <small>Sua proposta</small>
+                          <b>{it.meuValor != null ? formatarMoeda(it.meuValor) : "—"}</b>
+                        </span>
+                        {it.melhorValor != null && it.melhorValor !== it.meuValor && (
+                          <span>
+                            <small>Melhor valor</small>
+                            <b>{formatarMoeda(it.melhorValor)}</b>
+                          </span>
+                        )}
+                        {it.quantidade != null && <small className="texto-fraco">Qtde {it.quantidade}</small>}
+                      </span>
+                      <span className="mais-cartao" aria-hidden>
+                        {expandido ? <Minus size={18} /> : <Plus size={18} />}
+                      </span>
                     </button>
+                    {expandido && (
+                      <div className="participacao-cartao">
+                        <ItemCompras compra={c} item={it} cnpj={cnpj} />
+                      </div>
+                    )}
                   </li>
-                ))}
-              </ul>
-            )}
-            {c.lidaEm && (
-              <details className="mensagens-compra">
-                <summary>
-                  <MessageSquare size={14} /> Mensagens da compra ({c.mensagens.length})
-                </summary>
-                <Conversa compra={c} />
-              </details>
-            )}
+                );
+              })}
+            </ul>
+
+            <details className="mensagens-compra">
+              <summary>
+                <MessageSquare size={14} /> Mensagens da licitação ({c.mensagens.length})
+                {geral.length > 0 && geral.length !== c.mensagens.length ? <span className="texto-fraco"> · {geral.length} gerais</span> : null}
+              </summary>
+              <Conversa compra={c} cnpj={cnpj} />
+            </details>
           </>
         )}
       </div>
@@ -819,15 +905,17 @@ function JanelaCompra({ compra: c, cnpj, agora, aoFechar, aoCadastrar }: { compr
   );
 }
 
-function Conversa({ compra: c }: { compra: CompraAcomp }) {
+function Conversa({ compra: c, cnpj }: { compra: CompraAcomp; cnpj: string }) {
   const [texto, setTexto] = useState("");
   const [item, setItem] = useState(() => c.itens.find((i) => i.pendencias.length || i.chatAberto)?.numero ?? 0);
+  const [so, setSo] = useState<"todas" | "voce">("todas");
   const [enviando, setEnviando] = useState(false);
-  const fim = useRef<HTMLDivElement>(null);
-  const ultimas = c.mensagens.slice(-40);
+  const caixa = useRef<HTMLDivElement>(null);
+  const paraVoce = (m: CompraAcomp["mensagens"][number]) => m.quem === "pregoeiro" && !!cnpj && (m.destinatario === cnpj || m.texto.replace(/\D/g, "").includes(cnpj));
+  const lista = [...c.mensagens].sort((a, b) => dataDe(a.dataHora) - dataDe(b.dataHora)).filter((m) => so === "todas" || paraVoce(m) || m.quem === "voce");
+  const ultimas = lista.slice(-80);
   useEffect(() => {
-    const caixa = fim.current?.parentElement;
-    if (caixa) caixa.scrollTop = caixa.scrollHeight;
+    if (caixa.current) caixa.current.scrollTop = caixa.current.scrollHeight;
   }, [ultimas.length]);
 
   async function enviar() {
@@ -844,27 +932,41 @@ function Conversa({ compra: c }: { compra: CompraAcomp }) {
     }
   }
 
+  let dia = "";
   return (
     <section className="conversa-acomp">
-      <h3>
-        <MessageSquare size={15} /> Mensagens
-      </h3>
-      <div className="mensagens-acomp">
+      <div className="filtro-conversa">
+        <button className={so === "todas" ? "ativo" : ""} onClick={() => setSo("todas")}>
+          Todas
+        </button>
+        <button className={so === "voce" ? "ativo" : ""} onClick={() => setSo("voce")}>
+          Só comigo
+        </button>
+      </div>
+      <div className="chat-compras" ref={caixa}>
         {ultimas.length === 0 ? (
-          <p className="texto-fraco pequeno">Nenhuma mensagem nesta compra.</p>
+          <p className="texto-fraco pequeno">Nenhuma mensagem.</p>
         ) : (
-          ultimas.map((m) => (
-            <div key={m.id} className={`msg-acomp ${m.quem}`}>
-              <span className="quem-acomp">
-                {m.quem === "pregoeiro" ? "Pregoeiro" : m.quem === "voce" ? "Você" : "Sistema"}
-                {m.item ? ` · item ${m.item}` : ""}
-                <span className="texto-fraco"> {dataHora(m.dataHora)}</span>
-              </span>
-              <span>{m.texto}</span>
-            </div>
-          ))
+          ultimas.map((m) => {
+            const d = m.dataHora ? new Date(dataDe(m.dataHora)).toLocaleDateString("pt-BR") : "";
+            const mostrarDia = d && d !== dia;
+            dia = d || dia;
+            const lado = m.quem === "pregoeiro" ? "pregoeiro" : m.quem === "voce" && m.remetente && cnpj && m.remetente !== cnpj ? "outra" : m.quem;
+            return (
+              <div key={m.id} className="linha-chat">
+                {mostrarDia && <span className="dia-chat">{d}</span>}
+                <div className={`msg-compras ${lado} ${paraVoce(m) ? "para-voce" : ""}`}>
+                  <span className="quem-acomp">
+                    {m.quem === "pregoeiro" ? (paraVoce(m) ? "Pregoeiro → você" : "Pregoeiro") : m.quem === "voce" ? (lado === "outra" ? "Outra empresa" : "Você") : "Sistema"}
+                    {m.item ? ` · item ${m.item}` : ""}
+                  </span>
+                  <span>{m.texto}</span>
+                  <span className="hora-chat">{m.dataHora ? new Date(dataDe(m.dataHora)).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : ""}</span>
+                </div>
+              </div>
+            );
+          })
         )}
-        <div ref={fim} />
       </div>
       <div className="enviar-acomp">
         <select value={item} onChange={(e) => setItem(Number(e.target.value))} aria-label="Sobre qual item">
