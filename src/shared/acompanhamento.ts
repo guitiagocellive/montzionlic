@@ -121,6 +121,9 @@ export interface Participacao {
   abertura: string | null;
   linkPncp: string | null;
   encerrada: boolean;
+  /** Da lista de participações (sem abrir a compra): diligência ou convocação de remanescentes em andamento. */
+  diligencia: boolean;
+  convocacaoRemanescentes: boolean;
 }
 
 export function lerParticipacao(bruto: unknown): Participacao | null {
@@ -144,6 +147,8 @@ export function lerParticipacao(bruto: unknown): Participacao | null {
     abertura: texto(primeiro(c.dataHoraAbertura, c.dataHoraPrevisaoAbertura, c.dataHoraInicioDisputa)) || null,
     linkPncp: texto(c.linkPncp) || null,
     encerrada: ["RE", "AN", "FR", "DE"].includes(sitCod) || !!c.homologada,
+    diligencia: x.possuiDiligenciaEmAndamento === true,
+    convocacaoRemanescentes: x.possuiConvRemanescentesEmAndamento === true,
   };
 }
 
@@ -327,6 +332,11 @@ export interface PainelAcompanhamento {
   igual?: boolean;
   /** A lista veio da última leitura guardada no computador (ainda sem leitura nova). */
   deCache?: boolean;
+  /** Totais informados pelo Compras.gov.br (mesmo sem baixar todas as páginas). */
+  totalAndamento?: number;
+  totalFinalizadas?: number;
+  /** Compras sendo lidas agora (abertas pela pessoa). */
+  lendo?: Record<string, boolean> | null;
 }
 
 export interface CompraAcomp extends Participacao {

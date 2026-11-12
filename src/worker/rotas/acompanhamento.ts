@@ -41,3 +41,32 @@ rotasAcompanhamento.post("/avisos", async (c) => {
   for (let i = 0; i < comandos.length; i += 500) await c.env.DB.batch(comandos.slice(i, i + 500));
   return c.json({ ok: true, aceitos: avisos.length });
 });
+
+// Favoritos e apelidos das compras (a equipe toda vê os mesmos).
+rotasAcompanhamento.get("/marcas", async (c) => {
+  const { results } = await c.env.DB.prepare("SELECT chave, favorito, apelido FROM acompanhamento_marcas").all<{ chave: string; favorito: number; apelido: string | null }>();
+  const marcas: Record<string, { favorito: boolean; apelido: string }> = {};
+  for (const r of results) marcas[r.chave] = { favorito: !!r.favorito, apelido: r.apelido ?? "" };
+  return c.json({ marcas });
+});
+
+rotasAcompanhamento.put("/marcas/:chave", async (c) => {
+  const chave = c.req.param("chave");
+  if (!/^\d{17}$/.test(chave)) return c.json({ erro: "Compra inválida." }, 400);
+  const corpo = (await lerJson(c)) ?? {};
+  const atual = await c.env.DB.prepare("SELECT favorito, apelido FROM acompanhamento_marcas WHERE chave = ?").bind(chave).first<{ favorito: number; apelido: string | null }>();
+  const favorito = "favorito" in corpo ? !!corpo.favorito : !!atual?.favorito;
+  const apelido = "apelido" in corpo ? String(corpo.apelido ?? "").trim().slice(0, 80) : (atual?.apelido ?? "");
+  const usuario = c.get("usuario");
+  if (!favorito && !apelido) {
+    await c.env.DB.prepare("DELETE FROM acompanhamento_marcas WHERE chave = ?").bind(chave).run();
+  } else {
+    await c.env.DB.prepare(
+      `INSERT INTO acompanhamento_marcas (chave, favorito, apelido, atualizado_por, atualizado_em) VALUES (?, ?, ?, ?, datetime('now'))
+       ON CONFLICT(chave) DO UPDATE SET favorito = excluded.favorito, apelido = excluded.apelido, atualizado_por = excluded.atualizado_por, atualizado_em = excluded.atualizado_em`,
+    )
+      .bind(chave, favorito ? 1 : 0, apelido || null, usuario?.id ?? null)
+      .run();
+  }
+  return c.json({ ok: true, favorito, apelido });
+});

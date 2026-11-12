@@ -114,6 +114,8 @@ export const ponte = {
   estado: () => chamar<EstadoPonte & { motor?: boolean; fase?: string; aviso?: string }>("estado", {}, 8_000),
   /** Abre a janela de login do gov.br (mostrar = abre mesmo se já estiver logado). */
   entrar: (mostrar = false) => chamar<{ ok: boolean; jaLogado?: boolean }>("entrar", { atualizar: mostrar }),
+  /** Abre a página de login do gov.br de novo na janela do Compras (quando ela travou, deu erro ou ficou em branco). */
+  recarregarLogin: () => chamar<{ ok: boolean }>("recarregar", {}),
   painel: () => chamar<PainelRobo>("painel", {}, 5_000),
   configurar: (config: Record<string, unknown>) => chamar<{ ok: boolean }>("configurar", { config }, 5_000),
   confirmar: (ids: number[]) => chamar<{ ok: boolean }>("confirmar", { ids }, 5_000),
@@ -126,7 +128,7 @@ export const ponte = {
   /** Classificação do item (melhor lance de cada participante), lida na hora. */
   classificacao: (compra: string, item: number) => chamar<{ posicoes: { valor: number; nosso: boolean }[]; em: number }>("classificacao", { compra, item }, 60_000),
   /** Participações lidas pelo aplicativo (aba Acompanhamento). compra: ler essa já; atualizar: ler tudo já. */
-  acompanhamento: (compra = "", atualizar = false, desde = 0) => chamar<PainelAcompanhamento>("acompanhamento", { compra, atualizar, desde }, 8_000),
+  acompanhamento: (compra = "", atualizar = false, desde = 0, mais = false) => chamar<PainelAcompanhamento>("acompanhamento", { compra, atualizar, desde, mais }, 8_000),
   /** Consulta ou ação do fornecedor no Compras.gov.br (só endereços de uma lista fechada no aplicativo). */
   fornecedor: (pedido: PedidoFornecedor, tempoMs = 130_000) => chamar<RespostaFornecedor>("fornecedor", { pedido }, tempoMs),
   /** Mensagem ao pregoeiro (só vai quando o pregoeiro abriu a conversa para você). */

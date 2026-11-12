@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -52,7 +53,22 @@ type acompanhamento struct {
 	sujo          bool     // mudou desde a última gravação em disco
 	doCache       bool     // o que está na memória veio do disco (última sessão), ainda sem leitura nova
 	cnpjCache     string
+	// Totais que o Compras.gov.br informa (cabeçalho register-count), mesmo sem baixar todas as páginas.
+	totalAndamento   int
+	totalFinalizadas int
+	// Páginas de finalizadas que a página pediu ("Carregar mais"); 1 = só as 10 mais recentes.
+	paginasFinalizadas int
+	detalhando         map[string]bool // compras abertas pela pessoa sendo lidas agora
+	lendoMais          bool
 }
+
+// usoDaPessoa: última vez que a pessoa abriu uma compra ou mexeu no Compras.gov.br pela plataforma. Enquanto ela
+// usa, as leituras de fundo (lista, coletor da Análise de empresas) esperam: o captcha e a conexão ficam para ela.
+var usoDaPessoa atomic.Int64
+
+func marcarUso() { usoDaPessoa.Store(time.Now().UnixMilli()) }
+
+func pessoaUsando() bool { return time.Since(time.UnixMilli(usoDaPessoa.Load())) < 45*time.Second }
 
 // Compra da lista de participações (chave e se é do sistema legado).
 type compraAcomp struct {
@@ -220,7 +236,12 @@ func (m *motor) cicloAcompanhamento() {
 			}
 		}
 		desde := time.Since(a.em)
-		precisa := a.forcar || len(a.pedidos) > 0 || desde > intervaloAcompanhamento || ((faltam || a.doCache) && desde > 20*time.Second)
+		_ = faltam // as compras sem detalhe são lidas quando a pessoa abre (não forçam leitura de fundo)
+		precisa := a.forcar || desde > intervaloAcompanhamento || (a.doCache && desde > 20*time.Second)
+		// A pessoa está usando (abriu uma compra, cadastrando...): a leitura de fundo espera, salvo se ela pediu.
+		if !a.forcar && pessoaUsando() && a.andamento != nil {
+			precisa = false
+		}
 		// Durante a disputa com o robô ligado, só lê quando a pessoa pede (o captcha fica para a sala).
 		if robo && !a.forcar && len(a.pedidos) == 0 && a.andamento != nil && !a.doCache {
 			precisa = false
@@ -245,54 +266,30 @@ func (m *motor) coletarAcompanhamento() {
 	soPedidos := !forcar && len(a.pedidos) > 0 && a.andamento != nil && time.Since(a.em) < intervaloAcompanhamento
 	quantosPedidos := len(a.pedidos)
 	finalizadas := forcar || a.finalizadas == nil || time.Since(a.finalizadasEm) > intervaloFinalizadas
-	// Escolhe as compras a detalhar: as pedidas pela página e, depois, as lidas há mais tempo.
+	// Detalhe automático só das compras com convocação ou diligência em andamento (para os avisos do sino),
+	// no máximo 2 por volta e lidas há mais de 15 min. O resto só é lido quando a pessoa abre a compra.
 	escolhidas := []compraAcomp{}
-	vistas := map[string]bool{}
-	legado := map[string]bool{}
-	for _, lista := range []json.RawMessage{a.andamento, a.finalizadas} {
-		for _, x := range listaDe(lista) {
-			if k := chaveDaParticipacao(x); k != "" {
-				legado[k] = legadoDaParticipacao(x)
-			}
-		}
-	}
-	for _, k := range a.pedidos {
-		if !vistas[k] && len(escolhidas) < detalhesPorVez {
-			vistas[k] = true
-			escolhidas = append(escolhidas, compraAcomp{k, legado[k]})
-		}
-	}
-	a.pedidos = nil
-	candidatas := []string{}
 	for _, x := range listaDe(a.andamento) {
-		if k := chaveDaParticipacao(x); k != "" && !vistas[k] {
-			vistas[k] = true
-			candidatas = append(candidatas, k)
-		}
-	}
-	idade := func(k string) int64 {
-		if d := a.detalhes[k]; d != nil {
-			return d.Em
-		}
-		return 0
-	}
-	sort.SliceStable(candidatas, func(i, j int) bool { return idade(candidatas[i]) < idade(candidatas[j]) })
-	for _, k := range candidatas {
-		if len(escolhidas) >= detalhesPorVez {
+		if len(escolhidas) >= 2 {
 			break
 		}
-		// Já lida há pouco: espera a próxima volta.
-		if time.Since(time.UnixMilli(idade(k))) < intervaloAcompanhamento-time.Minute {
+		k := chaveDaParticipacao(x)
+		if k == "" || (x["possuiDiligenciaEmAndamento"] != true && x["possuiConvRemanescentesEmAndamento"] != true) {
 			continue
 		}
-		escolhidas = append(escolhidas, compraAcomp{k, legado[k]})
+		if d := a.detalhes[k]; d != nil && time.Since(time.UnixMilli(d.Em)) < 15*time.Minute {
+			continue
+		}
+		escolhidas = append(escolhidas, compraAcomp{k, legadoDaParticipacao(x)})
 	}
+	a.pedidos = nil
 	a.forcar = false
 	a.mu.Unlock()
 
-	if soPedidos && len(escolhidas) > quantosPedidos {
-		escolhidas = escolhidas[:quantosPedidos]
+	if soPedidos {
+		escolhidas = nil
 	}
+	_ = quantosPedidos
 	erro := m.lerAcompanhamento(!soPedidos, finalizadas, escolhidas)
 
 	a.mu.Lock()
@@ -352,6 +349,12 @@ func (m *motor) aplicarLeitura(v leituraAcomp, comLista bool) error {
 	}
 	if len(v.Andamento) > 0 && string(v.Andamento) != "null" {
 		a.andamento = v.Andamento
+	}
+	if v.TotalAndamento > 0 {
+		a.totalAndamento = v.TotalAndamento
+	}
+	if v.TotalFinalizadas > 0 {
+		a.totalFinalizadas = v.TotalFinalizadas
 	}
 	if len(v.Finalizadas) > 0 && string(v.Finalizadas) != "null" {
 		a.finalizadas, a.finalizadasEm = v.Finalizadas, agora
@@ -437,7 +440,7 @@ func (m *motor) aplicarLeitura(v leituraAcomp, comLista bool) error {
 }
 
 // Acompanhamento devolve o que já foi lido. compra: a página quer essa compra lida agora; atualizar: ler tudo já.
-func (m *motor) Acompanhamento(compra string, atualizar bool, desde int) any {
+func (m *motor) Acompanhamento(compra string, atualizar bool, desde int, mais bool) any {
 	m.mu.Lock()
 	cnpjAgora := m.cnpj
 	m.mu.Unlock()
@@ -452,13 +455,22 @@ func (m *motor) Acompanhamento(compra string, atualizar bool, desde int) any {
 		a.forcar = true
 	}
 	if compra != "" {
-		if d := a.detalhes[compra]; d == nil || time.Since(time.UnixMilli(d.Em)) > time.Minute {
-			a.pedidos = append(a.pedidos, compra)
+		marcarUso()
+		if d := a.detalhes[compra]; (d == nil || time.Since(time.UnixMilli(d.Em)) > time.Minute) && !a.detalhando[compra] {
+			if a.detalhando == nil {
+				a.detalhando = map[string]bool{}
+			}
+			a.detalhando[compra] = true
+			go m.detalharAberta(compra)
 		}
 	}
-	buscando := a.buscando || a.forcar || len(a.pedidos) > 0
+	if mais {
+		a.paginasFinalizadas = max(1, a.paginasFinalizadas) + 3
+		go m.lerMaisFinalizadasAcomp()
+	}
+	buscando := a.buscando || a.forcar || len(a.detalhando) > 0
 	if desde > 0 && desde == a.versao {
-		resposta := mapa{"igual": true, "versao": a.versao, "buscando": buscando, "em": a.em.UnixMilli(), "agora": time.Now().UnixMilli(), "problema": a.erro}
+		resposta := mapa{"igual": true, "versao": a.versao, "buscando": buscando, "lendo": a.detalhando, "em": a.em.UnixMilli(), "agora": time.Now().UnixMilli(), "problema": a.erro}
 		a.mu.Unlock()
 		m.mu.Lock()
 		resposta["conectado"] = m.token != ""
@@ -468,15 +480,18 @@ func (m *motor) Acompanhamento(compra string, atualizar bool, desde int) any {
 		return resposta
 	}
 	resposta := mapa{
-		"deCache":     a.doCache,
-		"versao":      a.versao,
-		"andamento":   a.andamento,
-		"finalizadas": a.finalizadas,
-		"detalhes":    a.detalhes,
-		"em":          a.em.UnixMilli(),
-		"problema":    a.erro,
-		"buscando":    a.buscando || a.forcar || len(a.pedidos) > 0,
-		"agora":       time.Now().UnixMilli(),
+		"deCache":          a.doCache,
+		"versao":           a.versao,
+		"andamento":        a.andamento,
+		"finalizadas":      a.finalizadas,
+		"detalhes":         a.detalhes,
+		"em":               a.em.UnixMilli(),
+		"problema":         a.erro,
+		"buscando":         a.buscando || a.forcar || len(a.detalhando) > 0,
+		"lendo":            a.detalhando,
+		"totalAndamento":   a.totalAndamento,
+		"totalFinalizadas": a.totalFinalizadas,
+		"agora":            time.Now().UnixMilli(),
 	}
 	if a.em.IsZero() {
 		resposta["em"] = 0
@@ -516,20 +531,19 @@ func (m *motor) EnviarMensagem(compra string, item int, texto string) any {
 		}
 		return mapa{"erro": "A mensagem não foi enviada: " + motivo}
 	}
-	a := &m.acomp
-	a.mu.Lock()
-	a.pedidos = append(a.pedidos, compra)
-	a.mu.Unlock()
+	go m.detalharAberta(compra)
 	return mapa{"ok": true}
 }
 
 type leituraAcomp struct {
-	Erro        string                    `json:"erro"`
-	Erros       []string                  `json:"erros"`
-	Andamento   json.RawMessage           `json:"andamento"`
-	Finalizadas json.RawMessage           `json:"finalizadas"`
-	Detalhes    map[string]*detalheCompra `json:"detalhes"`
-	Formatos    []string                  `json:"formatos"`
+	TotalAndamento   int                       `json:"-"`
+	TotalFinalizadas int                       `json:"-"`
+	Erro             string                    `json:"erro"`
+	Erros            []string                  `json:"erros"`
+	Andamento        json.RawMessage           `json:"andamento"`
+	Finalizadas      json.RawMessage           `json:"finalizadas"`
+	Detalhes         map[string]*detalheCompra `json:"detalhes"`
+	Formatos         []string                  `json:"formatos"`
 }
 
 const fe = "/comprasnet-fase-externa"
@@ -558,6 +572,20 @@ func (m *motor) lerAcompanhamentoDireto(lista, finalizadas bool, escolhidas []co
 			l := listaQualquer(r.Corpo)
 			if pagina == 0 {
 				v.Formatos = append(v.Formatos, fmt.Sprintf("direto filtro %s: %d na 1ª página, páginas=%s total=%s", filtro, len(l), r.Cab.Get("pages-count"), r.Cab.Get("register-count")))
+				total := 0
+				fmt.Sscan(r.Cab.Get("register-count"), &total)
+				if total == 0 {
+					paginasTot := 0
+					fmt.Sscan(r.Cab.Get("pages-count"), &paginasTot)
+					if paginasTot <= 1 {
+						total = len(l)
+					}
+				}
+				if filtro == "2" {
+					v.TotalAndamento = total
+				} else {
+					v.TotalFinalizadas = total
+				}
 			}
 			todas = append(todas, l...)
 			paginas := 0
@@ -575,7 +603,10 @@ func (m *motor) lerAcompanhamentoDireto(lista, finalizadas bool, escolhidas []co
 		}
 		var f json.RawMessage
 		if finalizadas {
-			if f, err = participacoes("6", 3); err != nil {
+			m.acomp.mu.Lock()
+			paginas := max(1, m.acomp.paginasFinalizadas)
+			m.acomp.mu.Unlock()
+			if f, err = participacoes("6", paginas); err != nil {
 				return err
 			}
 		}
@@ -587,16 +618,6 @@ func (m *motor) lerAcompanhamentoDireto(lista, finalizadas bool, escolhidas []co
 			return err
 		}
 		v.Erros, v.Formatos = nil, nil
-		// Primeira leitura: já detalha as compras em andamento ainda sem detalhe (até 12 por vez).
-		if len(escolhidas) == 0 {
-			m.acomp.mu.Lock()
-			for _, x := range listaDe(m.acomp.andamento) {
-				if k := chaveDaParticipacao(x); k != "" && semDetalhe(m.acomp.detalhes[k]) && len(escolhidas) < 12 {
-					escolhidas = append(escolhidas, compraAcomp{k, legadoDaParticipacao(x)})
-				}
-			}
-			m.acomp.mu.Unlock()
-		}
 	}
 	var wg sync.WaitGroup
 	fila := make(chan compraAcomp)
@@ -702,6 +723,71 @@ func (m *motor) detalharDireto(c compraAcomp) *detalheCompra {
 		d.Erros = append(d.Erros, "mensagens: "+motivoLeitura(r, err))
 	}
 	return d
+}
+
+// detalharAberta lê já a compra que a pessoa abriu (itens, participação e chat), sem esperar a volta da lista.
+func (m *motor) detalharAberta(chave string) {
+	a := &m.acomp
+	defer func() {
+		a.mu.Lock()
+		delete(a.detalhando, chave)
+		a.versao++
+		a.mu.Unlock()
+	}()
+	legado := false
+	a.mu.Lock()
+	for _, lista := range []json.RawMessage{a.andamento, a.finalizadas} {
+		for _, x := range listaDe(lista) {
+			if chaveDaParticipacao(x) == chave {
+				legado = legadoDaParticipacao(x)
+			}
+		}
+	}
+	a.mu.Unlock()
+	marcarUso()
+	d := m.detalharDireto(compraAcomp{chave, legado})
+	_ = m.aplicarLeitura(leituraAcomp{Detalhes: map[string]*detalheCompra{chave: d}}, false)
+}
+
+// lerMaisFinalizadasAcomp: "Carregar mais" das finalizadas (as próximas páginas, 10 por página).
+func (m *motor) lerMaisFinalizadasAcomp() {
+	a := &m.acomp
+	a.mu.Lock()
+	if a.lendoMais {
+		a.mu.Unlock()
+		return
+	}
+	a.lendoMais = true
+	ja := listaDe(a.finalizadas)
+	paginas := a.paginasFinalizadas
+	a.mu.Unlock()
+	defer func() {
+		a.mu.Lock()
+		a.lendoMais = false
+		a.versao++
+		a.mu.Unlock()
+	}()
+	marcarUso()
+	todas := make([]json.RawMessage, 0, len(ja)+30)
+	for _, x := range ja {
+		b, _ := json.Marshal(x)
+		todas = append(todas, b)
+	}
+	for pagina := len(ja) / 10; pagina < paginas; pagina++ {
+		r, err := m.consultarDiretoOpc("GET", fe+"/v1/compras/participacoes", fmt.Sprintf("filtro=6&pagina=%d&tamanhoPagina=10", pagina), true, nil, "", true)
+		if err != nil || !okHTTP(r.Status) {
+			break
+		}
+		l := listaQualquer(r.Corpo)
+		todas = append(todas, l...)
+		if len(l) < 10 {
+			break
+		}
+	}
+	a.mu.Lock()
+	a.finalizadas = juntarLista(todas)
+	a.sujo = true
+	a.mu.Unlock()
 }
 
 // ---------- última leitura guardada no computador (a aba abre na hora, antes da leitura nova) ----------

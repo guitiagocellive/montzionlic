@@ -257,6 +257,7 @@ func (m *motor) PedidoCompras(p pedidoCompras) any {
 	if err := validarPedido(&p, m.p.cfg.Compras); err != nil {
 		return mapa{"erro": err.Error()}
 	}
+	marcarUso()
 	if p.Metodo == "GET" && !leiturasPorMinuto.permitir() {
 		return mapa{"erro": "Muitas consultas seguidas ao Compras.gov.br: espere alguns segundos e tente de novo."}
 	}

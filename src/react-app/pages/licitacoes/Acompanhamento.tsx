@@ -1,13 +1,14 @@
-import { BellRing, ClipboardCopy, FilePlus2, Eye, Download, ExternalLink, LogIn, MessageSquare, RefreshCw, Send, TriangleAlert } from "lucide-react";
+import { Bell, BellRing, ClipboardCopy, FilePlus2, Eye, Download, ExternalLink, LogIn, MessageSquare, Pencil, RefreshCw, Search, Send, Star, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type AvisoAcomp, avisosDe, type CompraAcomp, dataDe, montarCompras, type PainelAcompanhamento, ROTULO_CHANCE } from "../../../shared/acompanhamento";
-import { mensagemDeErro } from "../../api";
+import { api, mensagemDeErro } from "../../api";
 import { avisar, Modal } from "../../components/Ui";
 import { formatarMoeda } from "../../formato";
 import { link } from "../../rota";
 import { CadastroProposta, NovaProposta } from "./CadastroProposta";
 import { COR_CHANCE, ItemCompras } from "./ItemCompras";
 import { noAplicativo, ponte, temPonte } from "../../robo/ponte";
+import { BotaoRecarregarGovBr } from "../../robo/ErroCompras";
 
 // Aba Acompanhamento: as participações no Compras.gov.br (em andamento e finalizadas), com a colocação de
 // cada item, a chance de ser chamado, os avisos do pregoeiro e a conversa com ele. Quem lê é o aplicativo do
@@ -42,6 +43,26 @@ export function Acompanhamento() {
   const versao = useRef(0);
   const [novaProposta, setNovaProposta] = useState(false);
   const [cadastro, setCadastro] = useState<string | null>(null);
+  const [verAvisos, setVerAvisos] = useState(false);
+  const [busca, setBusca] = useState("");
+  const [marcas, setMarcas] = useState<Record<string, { favorito: boolean; apelido: string }>>({});
+  const [apelidando, setApelidando] = useState<CompraAcomp | null>(null);
+
+  // Favoritos e apelidos (da equipe toda), guardados na plataforma.
+  useEffect(() => {
+    api<{ marcas: Record<string, { favorito: boolean; apelido: string }> }>("/acompanhamento/marcas").then((r) => setMarcas(r.marcas), () => {});
+  }, []);
+  async function marcar(chave: string, novo: Partial<{ favorito: boolean; apelido: string }>) {
+    const antes = marcas[chave] ?? { favorito: false, apelido: "" };
+    const depois = { ...antes, ...novo };
+    setMarcas((m) => ({ ...m, [chave]: depois }));
+    try {
+      await api(`/acompanhamento/marcas/${chave}`, { metodo: "PUT", corpo: novo });
+    } catch (e) {
+      setMarcas((m) => ({ ...m, [chave]: antes }));
+      avisar(mensagemDeErro(e), "erro");
+    }
+  }
 
   useEffect(() => {
     if (ligada) return;
@@ -62,8 +83,15 @@ export function Acompanhamento() {
         if (p.igual) {
           // Nada mudou: só atualiza o "lendo…" e a hora, sem montar a lista de novo.
           setPainel((atual) =>
-            atual && (atual.buscando !== p.buscando || atual.em !== p.em || atual.fase !== p.fase || atual.problema !== p.problema || atual.conectado !== p.conectado)
-              ? { ...atual, buscando: p.buscando, em: p.em, fase: p.fase, problema: p.problema, conectado: p.conectado }
+            atual &&
+            (atual.buscando !== p.buscando ||
+              atual.em !== p.em ||
+              atual.fase !== p.fase ||
+              atual.problema !== p.problema ||
+              atual.conectado !== p.conectado ||
+              (p.cnpj && atual.cnpj !== p.cnpj) ||
+              JSON.stringify(atual.lendo ?? []) !== JSON.stringify(p.lendo ?? []))
+              ? { ...atual, buscando: p.buscando, em: p.em, fase: p.fase, problema: p.problema, conectado: p.conectado, cnpj: p.cnpj || atual.cnpj, lendo: p.lendo }
               : atual,
           );
         } else {
@@ -127,7 +155,21 @@ export function Acompanhamento() {
   const fase = painel?.fase ?? "";
   // Já tem a última leitura guardada no computador: mostra a lista na hora e atualiza por trás.
   const temGuardado = (painel?.andamento?.length ?? 0) + (painel?.finalizadas?.length ?? 0) > 0;
-  const lista = aba === "finalizadas" ? finalizadas : aba === "andamento" ? andamento : andamento.filter((c) => FILTROS[aba].fases.includes(c.faseCodigo));
+  const base =
+    aba === "finalizadas"
+      ? finalizadas
+      : aba === "favoritas"
+        ? [...andamento, ...finalizadas].filter((c) => marcas[c.chave]?.favorito)
+        : aba === "andamento"
+          ? andamento
+          : andamento.filter((c) => FILTROS[aba].fases.includes(c.faseCodigo));
+  const termo = busca.trim().toLowerCase();
+  const lista = base
+    .filter((c) => !termo || [c.numero, c.uasg, c.orgao, c.objeto, marcas[c.chave]?.apelido ?? "", nomeCompra(c)].some((t) => t.toLowerCase().includes(termo)))
+    .sort((a, b) => Number(!!marcas[b.chave]?.favorito) - Number(!!marcas[a.chave]?.favorito));
+  const totalFinalizadas = Math.max(painel?.totalFinalizadas ?? 0, finalizadas.length);
+  const totalAndamento = Math.max(painel?.totalAndamento ?? 0, andamento.length);
+  const urgentes = avisos.filter((a) => a.urgente).length;
   const compraAberta = [...andamento, ...finalizadas].find((c) => c.chave === aberta) ?? null;
   const emPrimeiro = andamento.reduce((s, c) => s + c.itens.filter((i) => i.colocacao === 1 && i.chance !== "fora").length, 0);
   const convocacoes = andamento.reduce((s, c) => s + c.itens.filter((i) => i.pendencias.length).length, 0);
@@ -145,6 +187,10 @@ export function Acompanhamento() {
         {ligada && painel?.conectado && (
           <div className="cabecalho-acoes">
             <span className="texto-fraco pequeno">{painel.buscando ? "Lendo…" : painel.em ? `Atualizado ${ha(painel.em, agora)}` : ""}</span>
+            <button className={`botao-sino-acomp ${urgentes ? "urgente" : ""}`} onClick={() => setVerAvisos(true)} aria-label={`Avisos (${avisos.length})`} title="Avisos das suas participações">
+              {urgentes ? <BellRing /> : <Bell />}
+              {avisos.length > 0 && <span className="contador-sino">{avisos.length > 99 ? "99+" : avisos.length}</span>}
+            </button>
             <button className="botao acento" onClick={() => setNovaProposta(true)}>
               <FilePlus2 /> Cadastrar proposta
             </button>
@@ -191,9 +237,12 @@ export function Acompanhamento() {
           <div>
             <h2>{fase === "aguardando-login" ? "Entre com a sua conta gov.br na janela que abriu" : "Entre na sua conta do Compras.gov.br"}</h2>
             <p className="texto-suave">Depois de entrar uma vez, o aplicativo acompanha as participações sozinho e avisa no sino quando o pregoeiro chamar.</p>
-            <button className="botao acento" onClick={() => ponte.entrar(fase === "aguardando-login").catch((e) => avisar(mensagemDeErro(e), "erro"))}>
-              <LogIn /> {fase === "aguardando-login" ? "Mostrar a janela de login" : "Entrar com gov.br"}
-            </button>
+            <div className="linha-acoes">
+              <button className="botao acento" onClick={() => ponte.entrar(fase === "aguardando-login").catch((e) => avisar(mensagemDeErro(e), "erro"))}>
+                <LogIn /> {fase === "aguardando-login" ? "Mostrar a janela de login" : "Entrar com gov.br"}
+              </button>
+              {fase === "aguardando-login" && <BotaoRecarregarGovBr />}
+            </div>
           </div>
         </section>
       ) : !temGuardado && (fase === "entrando" || (!painel.em && !painel.andamento)) ? (
@@ -230,6 +279,9 @@ export function Acompanhamento() {
                   <LogIn /> {fase === "aguardando-login" ? "Mostrar a janela de login" : "Entrar com gov.br"}
                 </button>
               )}
+              {!painel.conectado && fase === "aguardando-login" && (
+                <BotaoRecarregarGovBr />
+              )}
             </div>
           )}
           {(painel.andamento?.length ?? 0) > andamento.length && (
@@ -245,7 +297,7 @@ export function Acompanhamento() {
           <div className="resumo-acomp entrar">
             <div>
               <span>Em andamento</span>
-              <strong>{andamento.length}</strong>
+              <strong>{totalAndamento}</strong>
             </div>
             <div>
               <span>Itens em 1º lugar</span>
@@ -257,24 +309,35 @@ export function Acompanhamento() {
             </div>
             <div>
               <span>Finalizadas</span>
-              <strong>{finalizadas.length}</strong>
+              <strong>{totalFinalizadas}</strong>
             </div>
           </div>
 
-          {avisos.length > 0 && <Avisos avisos={avisos} compras={andamento} aoAbrir={(k) => abrir(k)} />}
 
-          <div className="lista-compras-topo">
-            <span className="texto-fraco pequeno">
-              Exibindo {lista.length} registro(s) · {painel.buscando ? "lendo o Compras.gov.br…" : `atualizado ${ha(painel.em, agora)}`}
-            </span>
+          <div className="barra-acomp">
+            <div className="entrada com-icone busca-acomp">
+              <Search aria-hidden="true" />
+              <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por número, órgão, objeto ou apelido" aria-label="Buscar participações" />
+            </div>
             <select value={aba} onChange={(e) => setAba(e.target.value as Filtro)} aria-label="Filtrar participações">
               {(Object.keys(FILTROS) as Filtro[]).map((f) => (
                 <option key={f} value={f}>
-                  {FILTROS[f].rotulo} ({f === "finalizadas" ? finalizadas.length : f === "andamento" ? andamento.length : andamento.filter((c) => FILTROS[f].fases.includes(c.faseCodigo)).length})
+                  {FILTROS[f].rotulo} (
+                  {f === "finalizadas"
+                    ? totalFinalizadas
+                    : f === "favoritas"
+                      ? [...andamento, ...finalizadas].filter((c) => marcas[c.chave]?.favorito).length
+                      : f === "andamento"
+                        ? totalAndamento
+                        : andamento.filter((c) => FILTROS[f].fases.includes(c.faseCodigo)).length}
+                  )
                 </option>
               ))}
             </select>
           </div>
+          <span className="texto-fraco pequeno linha-contagem-acomp">
+            Exibindo {lista.length} registro(s) · {painel.buscando ? "lendo o Compras.gov.br…" : `atualizado ${ha(painel.em, agora)}`}
+          </span>
 
           {lista.length === 0 ? (
             <p className="texto-fraco vazio-acomp">
@@ -284,9 +347,54 @@ export function Acompanhamento() {
           ) : (
             <div className="lista-compras">
               {lista.map((c) => (
-                <LinhaCompra key={c.chave} compra={c} cnpj={painel.cnpj ?? ""} aoAbrir={() => abrir(c.chave)} />
+                <LinhaCompra
+                  key={c.chave}
+                  compra={c}
+                  cnpj={painel.cnpj ?? ""}
+                  marca={marcas[c.chave]}
+                  lendo={!!painel.lendo?.[c.chave]}
+                  aoAbrir={() => abrir(c.chave)}
+                  aoFavoritar={() => marcar(c.chave, { favorito: !marcas[c.chave]?.favorito })}
+                  aoApelidar={() => setApelidando(c)}
+                />
               ))}
             </div>
+          )}
+          {aba === "finalizadas" && !termo && finalizadas.length < totalFinalizadas && (
+            <button
+              className="botao secundario carregar-mais-acomp"
+              disabled={painel.buscando}
+              onClick={() => ponte.acompanhamento("", false, 0, true).then(() => avisar("Buscando mais finalizadas no Compras.gov.br…"), (e) => avisar(mensagemDeErro(e), "erro"))}
+            >
+              <RefreshCw className={painel.buscando ? "girando" : ""} /> Carregar mais ({totalFinalizadas - finalizadas.length} restantes)
+            </button>
+          )}
+          {verAvisos && (
+            <Modal titulo={`Avisos (${avisos.length})`} aoFechar={() => setVerAvisos(false)}>
+              {avisos.length ? (
+                <Avisos
+                  avisos={avisos}
+                  compras={andamento}
+                  aoAbrir={(k) => {
+                    setVerAvisos(false);
+                    abrir(k);
+                  }}
+                />
+              ) : (
+                <p className="texto-fraco">Nenhum aviso agora. As convocações e mensagens do pregoeiro aparecem aqui (e no sino da plataforma).</p>
+              )}
+            </Modal>
+          )}
+          {apelidando && (
+            <JanelaApelido
+              compra={apelidando}
+              atual={marcas[apelidando.chave]?.apelido ?? ""}
+              aoSalvar={(apelido) => {
+                marcar(apelidando.chave, { apelido });
+                setApelidando(null);
+              }}
+              aoFechar={() => setApelidando(null)}
+            />
           )}
           {novaProposta && (
             <NovaProposta
@@ -313,15 +421,10 @@ export function Acompanhamento() {
 }
 
 function Avisos({ avisos, compras, aoAbrir }: { avisos: AvisoAcomp[]; compras: CompraAcomp[]; aoAbrir: (chave: string) => void }) {
-  const [todos, setTodos] = useState(false);
-  const mostrar = todos ? avisos : avisos.slice(0, 5);
   return (
-    <section className="cartao avisos-acomp entrar">
-      <h2>
-        <BellRing size={16} /> Avisos
-      </h2>
+    <section className="avisos-acomp janela-avisos">
       <ul>
-        {mostrar.map((a) => {
+        {avisos.map((a) => {
           const c = compras.find((x) => x.chave === a.compra);
           return (
             <li key={a.chave} className={a.urgente ? "urgente" : ""}>
@@ -334,18 +437,49 @@ function Avisos({ avisos, compras, aoAbrir }: { avisos: AvisoAcomp[]; compras: C
           );
         })}
       </ul>
-      {avisos.length > 5 && (
-        <button className="botao-link" onClick={() => setTodos((v) => !v)}>
-          {todos ? "Mostrar menos" : `Ver todos os ${avisos.length} avisos`}
-        </button>
-      )}
     </section>
   );
 }
 
-type Filtro = "andamento" | "propostas" | "disputa" | "selecao" | "finalizadas";
+function JanelaApelido({ compra, atual, aoSalvar, aoFechar }: { compra: CompraAcomp; atual: string; aoSalvar: (apelido: string) => void; aoFechar: () => void }) {
+  const [texto, setTexto] = useState(atual);
+  return (
+    <Modal titulo="Apelido da licitação" aoFechar={aoFechar}>
+      <form
+        className="formulario"
+        onSubmit={(e) => {
+          e.preventDefault();
+          aoSalvar(texto.trim());
+        }}
+      >
+        <p className="texto-suave">
+          {nomeCompra(compra)} · {compra.orgao}
+        </p>
+        <div className="campo">
+          <label htmlFor="apelido-acomp">
+            <span className="texto-suave pequeno">Apelido (a equipe toda vê)</span>
+          </label>
+          <div className="entrada">
+            <input id="apelido-acomp" value={texto} onChange={(e) => setTexto(e.target.value)} maxLength={80} placeholder="Ex.: Notebooks Justiça GO" autoFocus />
+          </div>
+        </div>
+        <div className="linha-acoes">
+          {atual && (
+            <button type="button" className="botao secundario" onClick={() => aoSalvar("")}>
+              Tirar apelido
+            </button>
+          )}
+          <button className="botao acento">Salvar</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+type Filtro = "andamento" | "favoritas" | "propostas" | "disputa" | "selecao" | "finalizadas";
 const FILTROS: Record<Filtro, { rotulo: string; fases: string[] }> = {
   andamento: { rotulo: "Em andamento", fases: [] },
+  favoritas: { rotulo: "Favoritas", fases: [] },
   propostas: { rotulo: "Propostas", fases: ["1", "2", "6"] },
   disputa: { rotulo: "Disputa", fases: ["3", "99"] },
   selecao: { rotulo: "Seleção de fornecedores", fases: ["4"] },
@@ -365,12 +499,50 @@ function etiquetas(c: CompraAcomp, cnpj: string) {
   return { melhor, convocado, falou, doPregoeiro };
 }
 
-function LinhaCompra({ compra: c, cnpj, aoAbrir }: { compra: CompraAcomp; cnpj: string; aoAbrir: () => void }) {
+function LinhaCompra({
+  compra: c,
+  cnpj,
+  marca,
+  lendo,
+  aoAbrir,
+  aoFavoritar,
+  aoApelidar,
+}: {
+  compra: CompraAcomp;
+  cnpj: string;
+  marca?: { favorito: boolean; apelido: string };
+  lendo: boolean;
+  aoAbrir: () => void;
+  aoFavoritar: () => void;
+  aoApelidar: () => void;
+}) {
   const { melhor, convocado, falou, doPregoeiro } = etiquetas(c, cnpj);
+  const chamado = convocado || c.diligencia || c.convocacaoRemanescentes;
+  const parar = (e: React.MouseEvent | React.KeyboardEvent, f: () => void) => {
+    e.stopPropagation();
+    f();
+  };
   return (
-    <button className={`linha-compra ${convocado ? "com-chamado" : ""}`} onClick={aoAbrir}>
+    <div
+      role="button"
+      tabIndex={0}
+      className={`linha-compra ${chamado ? "com-chamado" : ""} ${marca?.favorito ? "favorita" : ""}`}
+      onClick={aoAbrir}
+      onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), aoAbrir())}
+    >
+      <span className="marcas-linha-compra">
+        <button className={`botao-favorito ${marca?.favorito ? "ativo" : ""}`} onClick={(e) => parar(e, aoFavoritar)} aria-label={marca?.favorito ? "Tirar dos favoritos" : "Favoritar"} title={marca?.favorito ? "Tirar dos favoritos" : "Favoritar"}>
+          <Star size={16} />
+        </button>
+      </span>
       <span className="titulo-linha-compra">
-        <strong>{nomeCompra(c).toUpperCase()}</strong>
+        {marca?.apelido && <span className="apelido-compra">{marca.apelido}</span>}
+        <strong>
+          {nomeCompra(c).toUpperCase()}
+          <button className="botao-apelido" onClick={(e) => parar(e, aoApelidar)} aria-label="Dar um apelido" title={marca?.apelido ? "Mudar o apelido" : "Dar um apelido"}>
+            <Pencil size={12} />
+          </button>
+        </strong>
         <span>
           {c.uasg} - {c.orgao || "Órgão"}
         </span>
@@ -380,7 +552,8 @@ function LinhaCompra({ compra: c, cnpj, aoAbrir }: { compra: CompraAcomp; cnpj: 
         <small>Etapa</small> {c.fase || "—"}
       </span>
       <span className="etiquetas-compra">
-        {convocado && <span className="chip vermelho">Convocado</span>}
+        {(convocado || c.convocacaoRemanescentes) && <span className="chip vermelho">Convocado</span>}
+        {c.diligencia && <span className="chip vermelho">Diligência</span>}
         {falou && <span className="chip azul">Pregoeiro falou com você</span>}
         {melhor && melhor.colocacao != null && (
           <span className={`chip ${COR_CHANCE[melhor.chance]}`} title={melhor.explicacao}>
@@ -388,14 +561,14 @@ function LinhaCompra({ compra: c, cnpj, aoAbrir }: { compra: CompraAcomp; cnpj: 
           </span>
         )}
         {melhor && melhor.colocacao == null && melhor.chance !== "aguardando" && <span className={`chip ${COR_CHANCE[melhor.chance]}`}>{ROTULO_CHANCE[melhor.chance]}</span>}
-        {!c.lidaEm && <span className="chip cinza">Lendo itens…</span>}
+        {lendo && <span className="chip cinza">Lendo…</span>}
         {doPregoeiro > 0 && !falou && (
           <span className="chip cinza">
             <MessageSquare size={12} /> {doPregoeiro}
           </span>
         )}
       </span>
-    </button>
+    </div>
   );
 }
 

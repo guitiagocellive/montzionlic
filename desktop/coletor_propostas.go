@@ -121,6 +121,10 @@ func (m *motor) cicloColetorPropostas() {
 
 // passoColetor faz UMA leitura: um item da fila, ou monta a fila, ou lê mais uma página de Finalizadas.
 func (m *motor) passoColetor() {
+	// A pessoa está usando a plataforma com o Compras.gov.br: o coletor (fundo) espera e não disputa o captcha.
+	if pessoaUsando() {
+		return
+	}
 	c := coletor
 	c.mu.Lock()
 	c.carregar()

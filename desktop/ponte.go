@@ -587,6 +587,7 @@ func (p *ponte) atender(sessao, payload string) {
 		Texto     string                `json:"texto"`
 		Pedido    pedidoCompras         `json:"pedido"`
 		Desde     int                   `json:"desde"`
+		Mais      bool                  `json:"mais"`
 		Chaves    []string              `json:"chaves"`
 	}
 	if json.Unmarshal([]byte(payload), &pedido) != nil {
@@ -608,7 +609,7 @@ func (p *ponte) atender(sessao, payload string) {
 	case "diagnostico":
 		resposta = mapa{"texto": diagnostico()}
 	case "acompanhamento":
-		resposta = p.motor.Acompanhamento(pedido.Compra, pedido.Atualizar, pedido.Desde)
+		resposta = p.motor.Acompanhamento(pedido.Compra, pedido.Atualizar, pedido.Desde, pedido.Mais)
 	case "propostasColetadas":
 		resposta = p.motor.PropostasColetadas()
 	case "propostasEnviadas":
@@ -619,6 +620,10 @@ func (p *ponte) atender(sessao, payload string) {
 		resposta = p.motor.PedidoCompras(pedido.Pedido)
 	case "mensagem":
 		resposta = p.motor.EnviarMensagem(pedido.Compra, pedido.Item, pedido.Texto)
+	case "recarregar":
+		// "Recarregar a janela do gov.br": abre a página de login de novo, mesmo se a janela estava aberta.
+		marcarRecarregarCompras(true)
+		resposta = p.executar("entrar", "", 0, 0, "", true)
 	default:
 		resposta = p.executar(pedido.Tipo, pedido.Compra, pedido.Item, pedido.Valor, pedido.Fase, pedido.Atualizar)
 	}
@@ -646,6 +651,9 @@ func (p *ponte) executar(tipo, compra string, item int, valor float64, fase stri
 		if logado && !atualizar {
 			return mapa{"ok": true, "jaLogado": true}
 		}
+		if !logado {
+			marcarRecarregarCompras(false)
+		}
 		if p.abrirCompras != nil {
 			if !p.abrirCompras() {
 				return mapa{"erro": "Não foi possível abrir a janela do Compras.gov.br."}
@@ -659,6 +667,9 @@ func (p *ponte) executar(tipo, compra string, item int, valor float64, fase stri
 			}
 		}
 		if a != nil {
+			if recarregarComprasForcado.Swap(false) {
+				_, _ = p.cdp.Chamar(a.sessao, "Page.navigate", mapa{"url": p.cfg.paginaLogin()}, 10*time.Second)
+			}
 			_, _ = p.cdp.Chamar("", "Target.activateTarget", mapa{"targetId": a.alvo}, 5*time.Second)
 			return mapa{"ok": true}
 		}

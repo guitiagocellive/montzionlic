@@ -20,6 +20,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
@@ -30,31 +31,32 @@ var dllCarregador []byte
 var licencaCarregador []byte
 
 const (
-	classeJanela     = "MontzionJanela"
-	linkWebView2     = "https://go.microsoft.com/fwlink/p/?LinkId=2124703"
-	wmDestroy        = 0x0002
-	wmMove           = 0x0003
-	wmSize           = 0x0005
-	wmSetFocus       = 0x0007
-	wmClose          = 0x0010
-	wmGetMinMax      = 0x0024
-	wmApp            = 0x8000
-	wmAbrirCompra    = wmApp + 1
-	wmEsconder       = wmApp + 2
-	wmRecriarCompras = wmApp + 3
-	wsOverlapped     = 0x00CF0000 // WS_OVERLAPPEDWINDOW
-	cwUseDefault     = 0x80000000
-	swHide           = 0
-	swMaximize       = 3
-	swShow           = 5
-	swRestore        = 9
-	idiApp           = 1 // ícone do grupo 1 (gerar_recursos.py)
-	imageIcon        = 1
-	lrDefaultSize    = 0x40
-	lrShared         = 0x8000
-	smCySmIcon       = 50
-	smCxSmIcon       = 49
-	wmSetIcon        = 0x0080
+	classeJanela        = "MontzionJanela"
+	linkWebView2        = "https://go.microsoft.com/fwlink/p/?LinkId=2124703"
+	wmDestroy           = 0x0002
+	wmMove              = 0x0003
+	wmSize              = 0x0005
+	wmSetFocus          = 0x0007
+	wmClose             = 0x0010
+	wmGetMinMax         = 0x0024
+	wmApp               = 0x8000
+	wmAbrirCompra       = wmApp + 1
+	wmEsconder          = wmApp + 2
+	wmRecriarCompras    = wmApp + 3
+	wmRecarregarCompras = wmApp + 4
+	wsOverlapped        = 0x00CF0000 // WS_OVERLAPPEDWINDOW
+	cwUseDefault        = 0x80000000
+	swHide              = 0
+	swMaximize          = 3
+	swShow              = 5
+	swRestore           = 9
+	idiApp              = 1 // ícone do grupo 1 (gerar_recursos.py)
+	imageIcon           = 1
+	lrDefaultSize       = 0x40
+	lrShared            = 0x8000
+	smCySmIcon          = 50
+	smCxSmIcon          = 49
+	wmSetIcon           = 0x0080
 )
 
 var (
@@ -278,6 +280,12 @@ func (a *aplicativo) procedimento(hwnd, msg, wParam, lParam uintptr) uintptr {
 			a.compras.esconder()
 		}
 		return 0
+	case wmRecarregarCompras:
+		// A página do gov.br não carregou (demorou, caiu a conexão): tenta de novo a partir do login.
+		if a.compras != nil && a.compras.controle != 0 {
+			metodo(a.compras.web, 5, utf16(a.compras.inicial)) // Navigate
+		}
+		return 0
 	case wmRecriarCompras:
 		// O navegador da janela do Compras.gov.br caiu: fecha a janela morta e abre uma nova (se estava à vista).
 		if a.compras != nil && a.compras.hwnd == hwnd {
@@ -346,6 +354,18 @@ func (j *janelaWeb) mostrar() {
 		metodo(j.controle, 23) // NotifyParentWindowPositionChanged
 	}
 	focar(j.hwnd)
+}
+
+// fonte: endereço que a janela está mostrando ("" se não deu para ler).
+func (j *janelaWeb) fonte() string {
+	if j.web == 0 {
+		return ""
+	}
+	var p uintptr
+	if falhou(metodo(j.web, 4, uintptr(unsafe.Pointer(&p)))) || p == 0 { // get_Source
+		return ""
+	}
+	return textoCOM(p)
 }
 
 // viva: o navegador desta janela ainda responde (get_Source falha quando o processo dele morreu).
@@ -517,6 +537,32 @@ func (a *aplicativo) ligarWeb(j *janelaWeb) {
 				return 0
 			}), uintptr(unsafe.Pointer(&token)))
 		}
+		if !j.principal {
+			// Página do gov.br/Compras que não carregou (tempo esgotado, conexão caiu): tenta de novo sozinho,
+			// até 3 vezes em 2 minutos, pela página de login (o link antigo do gov.br expira).
+			metodo(web, 15, novoManipulador(func(_, args uintptr) uintptr { // add_NavigationCompleted
+				var ok int32
+				var status int32
+				metodo(args, 3, uintptr(unsafe.Pointer(&ok)))     // get_IsSuccess
+				metodo(args, 4, uintptr(unsafe.Pointer(&status))) // get_WebErrorStatus
+				if ok != 0 {
+					return 0
+				}
+				switch status {
+				case 6, 7, 9, 10, 11, 12, 13, 16: // sem resposta, tempo esgotado, conexão caiu/recusada, DNS, inesperado
+					if tentarDeNovoCompras() {
+						registrarLog("janela do Compras.gov.br: página não carregou (erro %d); tentando de novo em 4 s", status)
+						go func() {
+							time.Sleep(4 * time.Second)
+							procPostMessage.Call(j.hwnd, wmRecarregarCompras, 0, 0)
+						}()
+					} else {
+						registrarLog("janela do Compras.gov.br: página não carregou (erro %d) depois de 3 tentativas; o gov.br pode estar fora do ar", status)
+					}
+				}
+				return 0
+			}), uintptr(unsafe.Pointer(&token)))
+		}
 		metodo(web, 25, novoManipulador(func(_, args uintptr) uintptr { // add_ProcessFailed
 			var tipo int32
 			metodo(args, 3, uintptr(unsafe.Pointer(&tipo))) // get_ProcessFailedKind
@@ -560,12 +606,23 @@ func (a *aplicativo) ligarWeb(j *janelaWeb) {
 
 // Abre (ou traz para a frente) a janela do Compras.gov.br, onde a pessoa entra com o gov.br.
 func (a *aplicativo) abrirCompras() {
+	forcar := recarregarComprasForcado.Swap(false)
+	seFechada := recarregarComprasSeFechada.Swap(false)
 	if a.compras != nil {
 		if a.compras.controle != 0 && !a.compras.viva() {
 			// Janela sem navegador (aparece preta): descarta e abre outra.
 			registrarLog("janela do Compras.gov.br estava sem navegador; abrindo de novo")
 			procDestroyWindow.Call(a.compras.hwnd)
 		} else {
+			// Fechada no X (ou numa página de erro / em branco) e ainda sem login: abre a página de login de novo,
+			// em vez de mostrar a mesma tela parada.
+			visivel, _, _ := procIsWindowVisible.Call(a.compras.hwnd)
+			fonte := a.compras.fonte()
+			parada := strings.HasPrefix(fonte, "chrome-error:") || strings.HasPrefix(fonte, "edge-error:") || fonte == "" || strings.HasPrefix(fonte, "about:")
+			if forcar || (seFechada && (visivel == 0 || parada)) {
+				registrarLog("janela do Compras.gov.br: abrindo a página de login de novo (antes em %s)", semValores(fonte))
+				metodo(a.compras.web, 5, utf16(a.compras.inicial)) // Navigate
+			}
 			a.compras.mostrar()
 			return
 		}

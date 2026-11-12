@@ -8,6 +8,7 @@ import { avisar, Modal, Vazio } from "../components/Ui";
 import { paraNumero } from "../formato";
 import { link } from "../rota";
 import { noAplicativo, type PainelRobo, ponte, temPonte } from "../robo/ponte";
+import { BotaoRecarregarGovBr } from "../robo/ErroCompras";
 
 // Página Disputas: o robô roda dentro do aplicativo (recebe os lances em tempo real e responde na hora).
 // Aqui só mostramos o que ele vê, guardamos a configuração de cada item e registramos os lances.
@@ -628,9 +629,12 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
               Abre a janela de login do gov.br (certificado ou senha). Quando você entrar, ela fecha sozinha e as suas disputas aparecem aqui, só as que estão
               acontecendo.
             </p>
-            <button className="botao acento" onClick={() => entrar(fase === "aguardando-login")} disabled={entrando}>
-              <LogIn /> {fase === "aguardando-login" ? "Mostrar a janela de login" : "Entrar com gov.br"}
-            </button>
+            <div className="linha-acoes">
+              <button className="botao acento" onClick={() => entrar(fase === "aguardando-login")} disabled={entrando}>
+                <LogIn /> {fase === "aguardando-login" ? "Mostrar a janela de login" : "Entrar com gov.br"}
+              </button>
+              {fase === "aguardando-login" && <BotaoRecarregarGovBr />}
+            </div>
           </div>
         </section>
       ) : fase === "entrando" || fase === "buscando" || (fase === "erro-lista" && !compras.length) ? (
@@ -654,6 +658,7 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
                 <button className="botao secundario" onClick={() => entrar(true)}>
                   Mostrar a janela do Compras.gov.br
                 </button>
+                <BotaoRecarregarGovBr />
                 <button className="botao secundario" onClick={copiarDiagnostico}>
                   <ClipboardCopy /> Copiar diagnóstico
                 </button>
