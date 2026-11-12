@@ -1,10 +1,10 @@
-import { Check, ChevronDown, ClipboardCopy, Download, LogIn, Play, RefreshCw, Square, TriangleAlert, Zap } from "lucide-react";
+import { Check, ChevronDown, ClipboardCopy, Download, ListOrdered, LogIn, Play, RefreshCw, Square, TriangleAlert, Zap } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { podeEditar, podeVer } from "../../shared/permissoes";
 import { type CompraDisputa, type ConfigItemRobo, FASES, ITEM_ROBO_PADRAO, type ItemDisputa, lerCompra, lerItemDisputa, SEGUNDOS_FINAIS } from "../../shared/robo";
 import type { Usuario } from "../../shared/tipos";
 import { api, mensagemDeErro } from "../api";
-import { avisar, Vazio } from "../components/Ui";
+import { avisar, Modal, Vazio } from "../components/Ui";
 import { paraNumero } from "../formato";
 import { link } from "../rota";
 import { noAplicativo, type PainelRobo, ponte, temPonte } from "../robo/ponte";
@@ -49,6 +49,7 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
   const [textos, setTextos] = useState<Record<string, string>>({});
   const [entrando, setEntrando] = useState(false);
   const [entrandoDesde, setEntrandoDesde] = useState<number | null>(null);
+  const [classificacao, setClassificacao] = useState<{ compra: string; item: number; titulo: string } | null>(null);
   const mexidas = useRef(new Set<string>());
   const configCarregada = useRef(new Set<string>());
   const lancesEnviados = useRef(new Set<number>());
@@ -283,6 +284,14 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
                         {i.descricao && ` - ${i.descricao}`}
                       </strong>
                       {situacao && <span className={`selo-situacao ${situacao}`}>{situacao.toUpperCase()}</span>}
+                      {i.colocacao && (
+                        <span className="selo-colocacao" title="Pela última classificação lida">
+                          {i.colocacao.posicao}º de {i.colocacao.total}
+                        </span>
+                      )}
+                      <button className="botao secundario pequeno botao-classificacao" onClick={() => setClassificacao({ compra: c.chave, item: i.numero, titulo: `Item ${i.numero}${i.descricao ? ` - ${i.descricao}` : ""}` })}>
+                        <ListOrdered size={14} /> Classificação
+                      </button>
                     </div>
                     <div className="item-disputa-grade">
                       <label className="campo">
@@ -324,8 +333,14 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
                         <span>Meu lance</span>
                         <strong className={nosso ? "texto-verde" : "texto-perigo"}>{moeda(i.nossoLance, cfg.quatroCasas)}</strong>
                       </div>
-                      <div className={`cronometro-disputa ${restante != null && restante <= SEGUNDOS_FINAIS ? "final" : ""}`}>
-                        {i.fase === "AL" ? "aleatório" : restante != null ? relogio(restante) : "—"}
+                      <div className={`cronometro-disputa ${restante != null && restante <= SEGUNDOS_FINAIS ? "final" : ""}`} title="Tempo que falta para a etapa terminar">
+                        <span>{i.fase === "AL" ? "aleatório" : restante != null ? relogio(restante) : "—"}</span>
+                        {i.fase !== "AL" && restante != null && (
+                          <small>
+                            termina às{" "}
+                            {new Date(i.fimEm ?? Date.now() + restante * 1000).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                          </small>
+                        )}
                       </div>
                       <button
                         className={`botao-robo ${cfg.ligado ? "ligado" : ""}`}
@@ -341,7 +356,7 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
                         <input type="checkbox" checked={cfg.quatroCasas} onChange={(e) => mudarItem(k, { quatroCasas: e.target.checked })} /> Permitir lances com 4 casas decimais
                       </label>
                       <label>
-                        <input type="checkbox" checked={cfg.aguardarFinais} onChange={(e) => mudarItem(k, { aguardarFinais: e.target.checked })} /> Esperar os últimos{" "}
+                        <input type="checkbox" checked={cfg.naoAguardar} onChange={(e) => mudarItem(k, { naoAguardar: e.target.checked })} /> Não esperar os últimos{" "}
                         {SEGUNDOS_FINAIS} segundos para cobrir
                       </label>
                     </div>
@@ -349,6 +364,16 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
                       <span className="texto-fraco pequeno">{FASES[i.fase] ?? i.fase}</span>
                       <span className={`mensagem-robo ${msg?.erro ? "erro" : ""}`}>{cfg.ligado ? (msg?.texto ?? "Robô ligado") : "Robô parado"}</span>
                     </div>
+                    {(() => {
+                      // Confirmação do Compras.gov.br: o que ele respondeu ao último lance enviado neste item.
+                      const ultimo = painel?.ultimosPorItem?.[k] ?? [...(painel?.lances ?? [])].reverse().find((l) => l.compra === c.chave && l.item === i.numero);
+                      return ultimo ? (
+                        <p className={`confirmacao-lance ${ultimo.ok ? "ok" : "erro"}`}>
+                          Último lance enviado: <b>{moeda(ultimo.valor, cfg.quatroCasas)}</b> às {new Date(ultimo.em).toLocaleTimeString("pt-BR")} —{" "}
+                          {ultimo.ok ? "aceito pelo Compras.gov.br" : `recusado pelo Compras.gov.br${ultimo.mensagem ? `: ${ultimo.mensagem}` : ""}`}
+                        </p>
+                      ) : null;
+                    })()}
                   </div>
                 );
               })}
@@ -506,6 +531,53 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
           )}
         </>
       )}
+      {classificacao && <JanelaClassificacao {...classificacao} quatro={(config[`${classificacao.compra}:${classificacao.item}`] ?? ITEM_ROBO_PADRAO).quatroCasas} aoFechar={() => setClassificacao(null)} />}
     </>
+  );
+}
+
+/** Classificação do item (melhor lance de cada participante), lida na hora pelo aplicativo no Compras.gov.br. */
+function JanelaClassificacao({ compra, item, titulo, quatro, aoFechar }: { compra: string; item: number; titulo: string; quatro: boolean; aoFechar: () => void }) {
+  const [estado, setEstado] = useState<{ posicoes?: { valor: number; nosso: boolean }[]; erro?: string; em?: number } | null>(null);
+  const ler = () => {
+    setEstado(null);
+    ponte
+      .classificacao(compra, item)
+      .then((r) => setEstado(r))
+      .catch((e) => setEstado({ erro: mensagemDeErro(e) }));
+  };
+  useEffect(ler, [compra, item]);
+  return (
+    <Modal titulo={`Classificação · ${titulo}`} aoFechar={aoFechar}>
+      {!estado ? (
+        <p className="texto-suave carregando-linha">
+          <RefreshCw className="girando" /> Lendo a classificação no Compras.gov.br…
+        </p>
+      ) : estado.erro ? (
+        <p className="alerta erro">{estado.erro}</p>
+      ) : !estado.posicoes?.length ? (
+        <p className="texto-fraco">Ainda não há lances neste item.</p>
+      ) : (
+        <>
+          <ol className="lista-classificacao">
+            {estado.posicoes.map((p, n) => (
+              <li key={n} className={p.nosso ? "nosso" : ""}>
+                <span className="pos">{n + 1}º</span>
+                <span>{p.nosso ? "Você" : "Concorrente"}</span>
+                <b>{moeda(p.valor, quatro)}</b>
+              </li>
+            ))}
+          </ol>
+          <p className="texto-fraco pequeno">
+            Melhor lance de cada participante, como na sala de disputa. Lida às {estado.em ? new Date(estado.em).toLocaleTimeString("pt-BR") : "—"}.
+          </p>
+        </>
+      )}
+      <div className="linha-acoes">
+        <button className="botao secundario" onClick={ler}>
+          <RefreshCw /> Atualizar
+        </button>
+      </div>
+    </Modal>
   );
 }

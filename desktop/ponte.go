@@ -541,6 +541,8 @@ func (p *ponte) atender(sessao, payload string) {
 		resposta = mapa{"texto": diagnostico()}
 	case "acompanhamento":
 		resposta = p.motor.Acompanhamento(pedido.Compra, pedido.Atualizar, pedido.Desde)
+	case "classificacao":
+		resposta = p.motor.Classificacao(pedido.Compra, pedido.Item)
 	case "fornecedor":
 		resposta = p.motor.PedidoCompras(pedido.Pedido)
 	case "mensagem":

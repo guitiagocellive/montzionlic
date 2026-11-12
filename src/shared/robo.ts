@@ -1,9 +1,8 @@
 // Robô de lances do Compras.gov.br: a regra de decisão de cada item.
 //
-// Cobre na hora: assim que alguém passa na frente, dá o menor lance que coloca a empresa em 1º.
-// Se não der para ser 1º sem passar do lance mínimo, dá o lance mínimo (melhor colocação possível).
-// Nunca envia abaixo do lance mínimo.
-// "Esperar os segundos finais" (opcional) faz ele só cobrir nos últimos 10 segundos do cronômetro.
+// Espera os 10 segundos finais do cronômetro ("Não esperar" cobre na hora). Se dá para ser 1º acima do mínimo,
+// cobre o melhor lance; se não dá, o robô do aplicativo busca a melhor colocação possível pela classificação
+// (cobre o concorrente mais barato que ainda está acima do mínimo). Nunca envia abaixo do lance mínimo.
 
 /** Segundos finais em que o robô começa a dar lances. */
 export const SEGUNDOS_FINAIS = 10;
@@ -15,13 +14,13 @@ export interface ConfigItemRobo {
   minimo: number | null;
   /** Quanto baixar do melhor lance a cada lance (%). O intervalo mínimo do edital sempre é respeitado. */
   desconto: number;
-  /** Opcional: só cobre nos últimos 10 segundos. Padrão: cobre na hora. */
-  aguardarFinais: boolean;
+  /** Cobrir na hora, sem esperar os 10 segundos finais (padrão: espera). */
+  naoAguardar: boolean;
   /** Lances com 4 casas decimais (senão, centavos). */
   quatroCasas: boolean;
 }
 
-export const ITEM_ROBO_PADRAO: ConfigItemRobo = { ligado: false, minimo: null, desconto: 0.5, aguardarFinais: false, quatroCasas: false };
+export const ITEM_ROBO_PADRAO: ConfigItemRobo = { ligado: false, minimo: null, desconto: 0.5, naoAguardar: false, quatroCasas: false };
 
 /** Fases do item no Compras.gov.br (FaseItemEnum). */
 export const FASES: Record<string, string> = {
@@ -109,7 +108,7 @@ export function decidir(estado: EstadoItem, item: ConfigItemRobo | undefined): D
   if (estado.situacao === "G") return { acao: "aguardar", tipo: "ganhando", motivo: "Ganhando" };
 
   // Espera os 10 segundos finais (no encerramento aleatório não há cronômetro: qualquer segundo pode ser o último).
-  if (item.aguardarFinais && estado.fase === "LA" && estado.restanteSeg != null && estado.restanteSeg > SEGUNDOS_FINAIS) {
+  if (!item.naoAguardar && estado.fase === "LA" && estado.restanteSeg != null && estado.restanteSeg > SEGUNDOS_FINAIS) {
     return { acao: "aguardar", tipo: "aguardando-final", motivo: `Aguardando entrar nos últimos ${SEGUNDOS_FINAIS} segundos para enviar lance` };
   }
 
@@ -139,7 +138,7 @@ export function normalizarItem(bruto: unknown): ConfigItemRobo {
     ligado: b.ligado === true,
     minimo: minimo != null && Number.isFinite(minimo) && minimo > 0 ? minimo : null,
     desconto: Number.isFinite(desconto) && desconto >= 0 && desconto <= 50 ? desconto : ITEM_ROBO_PADRAO.desconto,
-    aguardarFinais: b.aguardarFinais === true,
+    naoAguardar: b.naoAguardar === true,
     quatroCasas: b.quatroCasas === true,
   };
 }
@@ -165,6 +164,10 @@ export interface ItemDisputa extends EstadoItem {
   descricao: string;
   quantidade: number | null;
   valorEstimado: number | null;
+  /** Hora de término (ms) quando o Compras.gov.br informa. */
+  fimEm: number | null;
+  /** Colocação pela última classificação lida pelo robô. */
+  colocacao: { posicao: number; total: number } | null;
 }
 
 /** Converte um item vindo de /comprasnet-disputa/v1/compras/{compra}/itens/em-disputa. */
@@ -175,6 +178,11 @@ export function lerItemDisputa(bruto: Record<string, unknown>): ItemDisputa {
     descricao: String(bruto.descricao ?? bruto.descricaoDetalhada ?? bruto.identificacao ?? ""),
     quantidade: numero(bruto.quantidade),
     valorEstimado: numero(bruto.valorEstimado),
+    fimEm: numero(bruto.fimEm),
+    colocacao: (() => {
+      const c = bruto.classificacaoRobo as { posicao?: number; total?: number } | undefined;
+      return c && c.posicao ? { posicao: Number(c.posicao), total: Number(c.total) || 0 } : null;
+    })(),
     fase: String(bruto.fase ?? ""),
     restanteSeg: numero(bruto.tempoRestanteEmSegundos),
     melhorLance: valorDe(bruto.melhorValorGeral),

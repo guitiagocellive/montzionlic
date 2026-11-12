@@ -1,10 +1,11 @@
 {
-  "versao": "3.1.6",
+  "versao": "3.1.7",
   "data": "2026-11-12",
   "novidades": [
-    "Corrigido: login com certificado digital parado no gov.br. Ao abrir, o Montzion encerra o motor da janela que ficava preso de uma abertura anterior (era ele que escondia a escolha do certificado / PIN do token).",
-    "Robô cobre NA HORA: assim que alguém passa na frente, ele dá o lance para voltar ao 1º lugar, até o seu lance mínimo. Esperar os últimos 10 segundos virou opção.",
-    "Disputas: compras na etapa Disputa que não vinham na lista do Compras.gov.br agora aparecem (o robô também usa as suas participações).",
-    "Acompanhamento: itens e chat da licitação voltam a aparecer (o Compras.gov.br devolvia vazio sem o captcha)."
+    "Robô busca a MELHOR COLOCAÇÃO POSSÍVEL: se não dá para ser 1º acima do seu mínimo, ele cobre o concorrente mais barato que ainda está acima do mínimo, em vez de descer direto ao mínimo.",
+    "Espera os últimos 10 segundos por padrão; a opção agora é \"Não esperar os últimos 10 segundos para cobrir\".",
+    "Cronômetro com o tempo que falta e a hora de término (também nas dispensas, que só informam a hora de término).",
+    "Botão Classificação em cada item (melhor lance de cada participante) e selo com a sua colocação.",
+    "Confirmação em cada item: o último lance enviado e se o Compras.gov.br aceitou ou recusou."
   ]
 }

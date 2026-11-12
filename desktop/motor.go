@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -96,12 +97,15 @@ type motor struct {
 	ultimoPedido time.Time
 
 	acomp acompanhamento // aba Acompanhamento (participações, itens, mensagens)
+
+	ranking map[string]*classificacaoItem // classificação (melhor lance de cada participante) por item
+	ultimos map[string]registroLance      // último lance enviado por item (com a resposta do Compras.gov.br)
 }
 
 func novoMotor(p *ponte) *motor {
 	m := &motor{
 		p: p, compras: map[string]*compraMotor{}, config: map[string]configItem{}, mensagens: map[string]mensagemItem{},
-		enviando: map[string]time.Time{}, fechadaOK: map[string]bool{}, inscricoes: map[string]string{},
+		enviando: map[string]time.Time{}, fechadaOK: map[string]bool{}, inscricoes: map[string]string{}, ranking: map[string]*classificacaoItem{}, ultimos: map[string]registroLance{},
 		fase: "sem-login", versaoSistema: "6.4.4", plataforma: "WEB",
 		httpc: &http.Client{Timeout: 8 * time.Second, Transport: &http.Transport{Proxy: http.ProxyFromEnvironment, MaxIdleConnsPerHost: 4, IdleConnTimeout: 90 * time.Second}},
 	}
@@ -736,7 +740,8 @@ func (m *motor) tempoAcabou(c *compraMotor, agora time.Time) bool {
 
 func (m *motor) estadoAgora(it *itemMotor, agora time.Time) estadoItem {
 	e := lerItem(it.bruto)
-	if e.RestanteSeg != nil && !it.recebidoEm.IsZero() {
+	// Só desconta o tempo desde a leitura quando veio "tempo restante" (a hora de término já é absoluta).
+	if _, temRestante := it.bruto["tempoRestanteEmSegundos"]; temRestante && e.RestanteSeg != nil && !it.recebidoEm.IsZero() {
 		r := *e.RestanteSeg - agora.Sub(it.recebidoEm).Seconds()
 		if r < 0 {
 			r = 0
@@ -939,7 +944,14 @@ func (m *motor) avaliar(k string) {
 		return
 	}
 	e := m.estadoAgora(it, agora)
+	// Classificação recente (e lida com o mesmo melhor lance de agora): a regra usa para a melhor colocação.
+	if r := m.ranking[k]; r != nil && !r.em.IsZero() && agora.Sub(r.em) < 6*time.Second && e.Melhor != nil && math.Abs(r.melhor-*e.Melhor) < 1e-9 {
+		e.Concorrentes = append([]float64{}, r.concorrentes...)
+	}
 	d := decidir(e, &cfg)
+	if d.Tipo == "precisa-classificacao" {
+		m.pedirClassificacao(compra, numero, k)
+	}
 	if !d.Enviar {
 		if m.mensagens[k].Texto != d.Motivo {
 			m.mensagens[k] = mensagemItem{Texto: d.Motivo}
@@ -979,6 +991,7 @@ func (m *motor) enviarLance(compra string, numero int, k string, d decisao, fase
 	m.mu.Lock()
 	m.seqLance++
 	reg := registroLance{ID: m.seqLance, Compra: compra, Item: numero, Valor: d.Valor, OK: ok, Mensagem: msg, Em: agora.UnixMilli(), ReacaoMs: reacao + agora.Sub(inicio).Milliseconds()}
+	m.ultimos[chaveItem(compra, numero)] = reg
 	m.lances = append(m.lances, reg)
 	if ok {
 		m.ultimo = &reg
@@ -1051,6 +1064,19 @@ func (m *motor) Painel() any {
 			if e.Situacao != "" {
 				copia["situacaoParticipanteDisputa"] = e.Situacao
 			}
+			if e.FimEm != nil {
+				copia["fimEm"] = e.FimEm.UnixMilli()
+			}
+			// Colocação pela última classificação lida (melhor lance de cada participante).
+			if r := m.ranking[chaveItem(chave, n)]; r != nil && len(r.todos) > 0 {
+				pos := 0
+				for i, p := range r.todos {
+					if p.Nosso {
+						pos = i + 1
+					}
+				}
+				copia["classificacaoRobo"] = mapa{"posicao": pos, "total": len(r.todos), "em": r.em.UnixMilli()}
+			}
 			itens = append(itens, copia)
 		}
 		compras = append(compras, map[string]any{
@@ -1068,7 +1094,7 @@ func (m *motor) Painel() any {
 	return mapa{
 		"versao": versao, "fase": m.fase, "aviso": m.aviso, "conectado": m.token != "", "tempoReal": m.tempoReal,
 		"direto": !agora.Before(m.diretoAte), "descartadas": m.descartadas, "listaEm": m.listaEm.UnixMilli(),
-		"compras": compras, "mensagens": mensagens, "lances": lances, "ultimoLance": m.ultimo, "agora": agora.UnixMilli(),
+		"compras": compras, "mensagens": mensagens, "lances": lances, "ultimoLance": m.ultimo, "agora": agora.UnixMilli(), "ultimosPorItem": m.ultimos,
 	}
 }
 
@@ -1124,4 +1150,134 @@ func (m *motor) comprasEmDisputaDoAcompanhamento() []map[string]any {
 		saida = append(saida, info)
 	}
 	return saida
+}
+
+// ---------- classificação do item (melhor lance de cada participante) ----------
+
+type posicaoClassificacao struct {
+	Valor float64 `json:"valor"`
+	Nosso bool    `json:"nosso"`
+}
+
+type classificacaoItem struct {
+	concorrentes []float64
+	todos        []posicaoClassificacao
+	melhor       float64 // melhor lance do item quando a classificação foi lida
+	em           time.Time
+	pedidaEm     time.Time
+	buscando     bool
+	erro         string
+}
+
+// pedirClassificacao lê a classificação em segundo plano (no máximo uma vez a cada 1,5 s por item) e reavalia.
+func (m *motor) pedirClassificacao(compra string, numero int, k string) {
+	r := m.ranking[k]
+	if r == nil {
+		r = &classificacaoItem{}
+		m.ranking[k] = r
+	}
+	if r.buscando || time.Since(r.pedidaEm) < 1500*time.Millisecond {
+		return
+	}
+	r.buscando, r.pedidaEm = true, time.Now()
+	go func() {
+		_, _ = m.lerClassificacao(compra, numero)
+		m.avaliar(k)
+	}()
+}
+
+func valorDoLance(o map[string]any) *float64 {
+	for _, k := range []string{"valorInformado", "valorCalculado", "valor", "melhorValor", "valorLance", "melhorLance"} {
+		if v := valorDe(o[k]); v != nil {
+			return v
+		}
+	}
+	return nil
+}
+
+// lerClassificacao: melhor lance de cada participante no item (a mesma lista de "melhores lances" da sala).
+func (m *motor) lerClassificacao(compra string, numero int) (*classificacaoItem, error) {
+	k := chaveItem(compra, numero)
+	caminho := fmt.Sprintf("/comprasnet-disputa/v1/compras/%s/itens/%d/lances/por-participante", url.PathEscape(compra), numero)
+	r, err := m.consultarDireto("GET", caminho, "tamanhoPagina=100&pagina=0", true, nil, "")
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	ci := m.ranking[k]
+	if ci == nil {
+		ci = &classificacaoItem{}
+		m.ranking[k] = ci
+	}
+	ci.buscando = false
+	if err == nil && !okHTTP(r.Status) {
+		err = fmt.Errorf("o Compras.gov.br respondeu %d: %s", r.Status, mensagemErro(r.Corpo))
+	}
+	if err != nil {
+		ci.erro = err.Error()
+		registrarLog("robô: classificação do item %d da compra %s: %v", numero, mascararNumeros(compra), err)
+		return ci, err
+	}
+	var nosso *float64
+	var melhor *float64
+	if c := m.compras[compra]; c != nil {
+		if it := c.itens[numero]; it != nil {
+			e := lerItem(it.bruto)
+			nosso, melhor = e.Nosso, e.Melhor
+		}
+	}
+	todos := []posicaoClassificacao{}
+	achouNosso := false
+	for _, bruto := range listaQualquer(r.Corpo) {
+		var o map[string]any
+		if json.Unmarshal(bruto, &o) != nil {
+			continue
+		}
+		v := valorDoLance(o)
+		if v == nil {
+			continue
+		}
+		part, _ := o["participante"].(map[string]any)
+		ident := soDigitos(textoDe(firstNonNil(o["identificacaoParticipante"], o["identificacao"], func() any {
+			if part != nil {
+				return part["identificacao"]
+			}
+			return nil
+		}())))
+		meu := (m.cnpj != "" && ident == soDigitos(m.cnpj)) || o["proprio"] == true || o["lanceProprio"] == true || o["meuLance"] == true || o["participanteLogado"] == true
+		if meu {
+			achouNosso = true
+		}
+		todos = append(todos, posicaoClassificacao{Valor: *v, Nosso: meu})
+	}
+	// Sem identificação na lista: o nosso é o de valor igual ao nosso lance atual.
+	if !achouNosso && nosso != nil {
+		for i := range todos {
+			if math.Abs(todos[i].Valor-*nosso) < 0.00005 {
+				todos[i].Nosso = true
+				break
+			}
+		}
+	}
+	sort.SliceStable(todos, func(i, j int) bool { return todos[i].Valor < todos[j].Valor })
+	conc := []float64{}
+	for _, p := range todos {
+		if !p.Nosso {
+			conc = append(conc, p.Valor)
+		}
+	}
+	ci.todos, ci.concorrentes, ci.em, ci.erro = todos, conc, time.Now(), ""
+	if melhor != nil {
+		ci.melhor = *melhor
+	}
+	return ci, nil
+}
+
+// Classificacao para o botão "Classificação" da página Disputas (lê na hora).
+func (m *motor) Classificacao(compra string, numero int) any {
+	ci, err := m.lerClassificacao(compra, numero)
+	if err != nil {
+		return mapa{"erro": "Não consegui a classificação agora: " + err.Error()}
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return mapa{"posicoes": ci.todos, "em": ci.em.UnixMilli()}
 }

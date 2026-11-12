@@ -11996,3 +11996,62 @@ label.botao.desativado {
     justify-items: start;
   }
 }
+
+/* ---------- Disputas: cronômetro, classificação e confirmação ---------- */
+.cronometro-disputa {
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+}
+.cronometro-disputa small {
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--texto-fraco);
+  white-space: nowrap;
+}
+.selo-colocacao {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--azul-fundo);
+  color: var(--azul);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.botao-classificacao {
+  margin-left: auto;
+}
+.confirmacao-lance {
+  margin: 6px 0 0;
+  font-size: 0.78rem;
+}
+.confirmacao-lance.ok {
+  color: var(--verde);
+}
+.confirmacao-lance.erro {
+  color: var(--vermelho);
+}
+.lista-classificacao {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.lista-classificacao li {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--superficie-2);
+  font-variant-numeric: tabular-nums;
+}
+.lista-classificacao li.nosso {
+  background: var(--azul-fundo);
+  color: var(--azul);
+  font-weight: 600;
+}
+.lista-classificacao .pos {
+  font-weight: 700;
+}

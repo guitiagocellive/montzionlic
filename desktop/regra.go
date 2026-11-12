@@ -2,26 +2,28 @@ package main
 
 // Regra de decisão do robô (a mesma de src/shared/robo.ts, rodando dentro do aplicativo para responder na hora).
 //
-// Cobre na hora: assim que alguém passa na frente, dá o menor lance que coloca a empresa em 1º; se não der sem
-// passar do lance mínimo, vai no lance mínimo. Nunca envia abaixo do mínimo.
-// "Esperar os segundos finais" (opcional) só cobre nos últimos 10 segundos do cronômetro.
+// Espera os 10 segundos finais do cronômetro (como o Siga Pregão); "Não esperar" cobre na hora.
+// Na hora de agir: se dá para ser 1º acima do mínimo, cobre o melhor lance. Se não dá, busca a MELHOR
+// COLOCAÇÃO POSSÍVEL pela classificação dos concorrentes: cobre o concorrente mais barato que ainda está acima
+// do mínimo (ex.: 2º com 1.100, 3º com 550 e mínimo 760 → lance 1.099,xx e fica em 2º), sem descer à toa até o
+// mínimo. Sem a classificação, só vai ao mínimo nos segundos finais. Nunca envia abaixo do mínimo.
 
 import (
 	"fmt"
 	"math"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const segundosFinais = 10
 
 type configItem struct {
-	Ligado         bool     `json:"ligado"`
-	Minimo         *float64 `json:"minimo"`
-	Desconto       float64  `json:"desconto"`
-	NaoAguardar    bool     `json:"naoAguardar"` // antigo (a regra agora cobre na hora por padrão)
-	AguardarFinais bool     `json:"aguardarFinais"`
-	QuatroCasas    bool     `json:"quatroCasas"`
+	Ligado      bool     `json:"ligado"`
+	Minimo      *float64 `json:"minimo"`
+	Desconto    float64  `json:"desconto"`
+	NaoAguardar bool     `json:"naoAguardar"` // cobrir na hora, sem esperar os 10 s finais
+	QuatroCasas bool     `json:"quatroCasas"`
 }
 
 type estadoItem struct {
@@ -35,6 +37,9 @@ type estadoItem struct {
 	Numero        int
 	Descricao     string
 	ValorEstimado *float64
+	FimEm         *time.Time
+	// Melhor lance de cada concorrente (sem o nosso), pela classificação do item; nil = ainda não lida.
+	Concorrentes []float64
 }
 
 type decisao struct {
@@ -129,7 +134,8 @@ func decidir(e estadoItem, c *configItem) decisao {
 	if e.Situacao == "G" {
 		return decisao{Tipo: "ganhando", Motivo: "Ganhando"}
 	}
-	if c.AguardarFinais && e.Fase == "LA" && e.RestanteSeg != nil && *e.RestanteSeg > segundosFinais {
+	final := e.Fase == "AL" || (e.RestanteSeg != nil && *e.RestanteSeg <= segundosFinais)
+	if !c.NaoAguardar && e.Fase == "LA" && e.RestanteSeg != nil && *e.RestanteSeg > segundosFinais {
 		return decisao{Tipo: "aguardando-final", Motivo: fmt.Sprintf("Aguardando entrar nos últimos %d segundos para enviar lance", segundosFinais)}
 	}
 	if nosso <= minimo {
@@ -144,10 +150,14 @@ func decidir(e estadoItem, c *configItem) decisao {
 	if alvo >= minimo && alvo < nosso {
 		return decisao{Enviar: true, Tipo: "lance", Valor: alvo, Motivo: "Cobrindo o melhor lance (" + reaisTexto(melhor, q) + ") com " + reaisTexto(alvo, q)}
 	}
-	if minimo <= arredondarAbaixo(nosso-passoMinimo(nosso, e, q), q) {
-		return decisao{Enviar: true, Tipo: "minimo", Valor: minimo, Motivo: "Não dá para ser 1º acima do mínimo: lance no mínimo (" + reaisTexto(minimo, q) + ")"}
+	// Não dá para ser 1º sem passar do mínimo: melhor colocação possível pela classificação.
+	if e.Concorrentes != nil {
+		return melhorColocacao(e, c, minimo, nosso)
 	}
-	return decisao{Tipo: "no-minimo", Motivo: "No lance mínimo: melhor colocação possível"}
+	if final && minimo <= arredondarAbaixo(nosso-passoMinimo(nosso, e, q), q) {
+		return decisao{Enviar: true, Tipo: "minimo", Valor: minimo, Motivo: "Segundos finais sem a classificação: lance no mínimo (" + reaisTexto(minimo, q) + ")"}
+	}
+	return decisao{Tipo: "precisa-classificacao", Motivo: "Não dá para ser 1º acima do mínimo: lendo a classificação para achar a melhor colocação"}
 }
 
 // ---------- leitura dos itens da sala de disputa ----------
@@ -200,10 +210,79 @@ func lerItem(b map[string]any) estadoItem {
 	if n := numeroDe(b["numero"]); n != nil {
 		e.Numero = int(*n)
 	}
+	// Na dispensa o Compras.gov.br manda a hora de término em vez do tempo restante.
+	if fim := fimDaContagem(b["dataHoraFimContagem"]); fim != nil {
+		e.FimEm = fim
+		if e.RestanteSeg == nil {
+			r := math.Max(0, time.Until(*fim).Seconds())
+			e.RestanteSeg = &r
+		}
+	}
 	// A situação vem do tópico do fornecedor; quando o aviso geral chega antes, deduz pelos valores
 	// (perdendo assim que alguém cobre: é aí que o robô precisa agir na hora).
 	if e.Melhor != nil && e.Nosso != nil && *e.Melhor < *e.Nosso-1e-9 {
 		e.Situacao = "P"
 	}
 	return e
+}
+
+// melhorColocacao: o menor "degrau" possível acima do mínimo. Fica à frente de todo concorrente que está acima do
+// mínimo cobrindo o mais barato deles; os que estão abaixo do mínimo não dá para passar.
+func melhorColocacao(e estadoItem, c *configItem, minimo, nosso float64) decisao {
+	q := c.QuatroCasas
+	alvoConc := math.Inf(1)
+	for _, v := range e.Concorrentes {
+		if v > minimo+1e-9 && v < alvoConc {
+			alvoConc = v
+		}
+	}
+	posicao := func(lance float64) int {
+		p := 1
+		for _, v := range e.Concorrentes {
+			if v <= lance+1e-9 { // empate: quem deu antes fica na frente
+				p++
+			}
+		}
+		return p
+	}
+	if math.IsInf(alvoConc, 1) {
+		return decisao{Tipo: "melhor-possivel", Motivo: fmt.Sprintf("Melhor colocação possível com o seu mínimo: %dº lugar (os concorrentes à frente estão abaixo do mínimo)", posicao(nosso))}
+	}
+	desconto := arredondarAcima(alvoConc*math.Max(c.Desconto, 0)/100, q)
+	lance := arredondarAbaixo(alvoConc-math.Max(desconto, passoMinimo(alvoConc, e, q)), q)
+	if lance < minimo {
+		lance = minimo
+	}
+	if lance >= alvoConc-1e-9 { // o degrau não cabe acima do mínimo
+		return decisao{Tipo: "melhor-possivel", Motivo: fmt.Sprintf("Melhor colocação possível com o seu mínimo: %dº lugar", posicao(nosso))}
+	}
+	if nosso < alvoConc-1e-9 {
+		return decisao{Tipo: "melhor-possivel", Motivo: fmt.Sprintf("Na melhor colocação possível: %dº lugar (à frente do lance de %s)", posicao(nosso), reaisTexto(alvoConc, q))}
+	}
+	if !(lance < nosso-1e-9) {
+		return decisao{Tipo: "melhor-possivel", Motivo: fmt.Sprintf("Na melhor colocação possível: %dº lugar", posicao(nosso))}
+	}
+	return decisao{Enviar: true, Tipo: "colocacao", Valor: lance, Motivo: fmt.Sprintf("Melhor colocação possível (%dº lugar): cobrindo %s com %s", posicao(lance), reaisTexto(alvoConc, q), reaisTexto(lance, q))}
+}
+
+// fimDaContagem lê a hora de término do item ("dataHoraFimContagem"), no horário de Brasília quando vem sem fuso.
+func fimDaContagem(v any) *time.Time {
+	s := strings.TrimSpace(textoDe(v))
+	if s == "" {
+		return nil
+	}
+	brasilia := time.FixedZone("BRT", -3*3600)
+	for _, f := range []string{time.RFC3339Nano, time.RFC3339, "2006-01-02T15:04:05.000", "2006-01-02T15:04:05", "2006-01-02 15:04:05", "02/01/2006 15:04:05"} {
+		var t time.Time
+		var err error
+		if strings.Contains(f, "Z07") {
+			t, err = time.Parse(f, s)
+		} else {
+			t, err = time.ParseInLocation(f, s, brasilia)
+		}
+		if err == nil {
+			return &t
+		}
+	}
+	return nil
 }

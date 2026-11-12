@@ -100,6 +100,8 @@ export interface PainelRobo {
   mensagens: Record<string, { texto: string; erro?: boolean }>;
   lances: { id: number; compra: string; item: number; valor: number; ok: boolean; mensagem: string; em: number; reacaoMs: number }[];
   ultimoLance: { valor: number; em: number; reacaoMs: number } | null;
+  /** Último lance enviado em cada item ("compra:item"), com a resposta do Compras.gov.br. */
+  ultimosPorItem?: Record<string, { valor: number; ok: boolean; mensagem: string; em: number }>;
 }
 
 export const ponte = {
@@ -112,6 +114,8 @@ export const ponte = {
   atualizar: () => chamar<{ ok: boolean }>("atualizar", {}, 5_000),
   /** Últimas linhas do registro do aplicativo, sem chaves nem documentos (para mandar ao suporte). */
   diagnostico: () => chamar<{ texto: string }>("diagnostico", {}, 10_000),
+  /** Classificação do item (melhor lance de cada participante), lida na hora. */
+  classificacao: (compra: string, item: number) => chamar<{ posicoes: { valor: number; nosso: boolean }[]; em: number }>("classificacao", { compra, item }, 60_000),
   /** Participações lidas pelo aplicativo (aba Acompanhamento). compra: ler essa já; atualizar: ler tudo já. */
   acompanhamento: (compra = "", atualizar = false, desde = 0) => chamar<PainelAcompanhamento>("acompanhamento", { compra, atualizar, desde }, 8_000),
   /** Consulta ou ação do fornecedor no Compras.gov.br (só endereços de uma lista fechada no aplicativo). */
