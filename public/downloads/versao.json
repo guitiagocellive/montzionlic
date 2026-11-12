@@ -1,11 +1,9 @@
 {
-  "versao": "3.1.11",
+  "versao": "3.1.12",
   "data": "2026-11-12",
   "novidades": [
-    "Cadastro com um clique pelo quadro: o botão \"Cadastrar\" no card acha a compra no Compras.gov.br, puxa os itens do orçamento (valor, marca e modelo), marca os viáveis e só pede para confirmar.",
-    "Cadastrar proposta agora é por busca: digite só o número e a UASG, escolha a compra na lista e cadastre.",
-    "Na busca de licitações, compras do Compras.gov.br têm o botão \"Cadastrar proposta\".",
-    "Equidade de gênero como na tela oficial: Sim/Não e, se Sim, o nível (Bronze, Prata, Ouro...) da lista oficial do Compras.gov.br.",
-    "Janela de cadastro com visual novo: etapas, prazo com contagem, itens mais legíveis e aviso de valor acima do estimado."
+    "Login do gov.br: quando a página abre \"crua\" (sem cores, sem imagens e com o erro do hCaptcha FERL0010000), o aplicativo percebe, limpa o cache do navegador e recarrega sozinho.",
+    "Se continuar quebrada, o \"Copiar diagnóstico\" mostra quais arquivos do gov.br/hCaptcha não carregaram (sinal de antivírus, firewall ou instabilidade do gov.br).",
+    "Cadastro de proposta: valor de referência do órgão; sigiloso e não informado calculados pelo orçamento."
   ]
 }

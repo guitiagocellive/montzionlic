@@ -76,6 +76,7 @@ type ponte struct {
 	esconderCompras func()
 	estavaLogado    bool // para esconder a janela só na hora em que o login acontece
 	motor           *motor
+	recargasLogin   []time.Time // recargas da página de login do gov.br que abriu quebrada (sem estilo/captcha)
 }
 
 var (
@@ -162,6 +163,9 @@ func (p *ponte) verAlvo(t infoAlvo) {
 	}
 	if atual != nil && atual.url != t.URL && tipo != "plataforma" {
 		registrarLog("ponte: janela do Compras.gov.br em %s", semValores(t.URL))
+		if paginaLoginGovBr.MatchString(t.URL) {
+			go p.conferirPaginaLogin(atual.sessao)
+		}
 	}
 	if atual != nil {
 		atual.url = t.URL
@@ -200,6 +204,9 @@ func (p *ponte) verAlvo(t infoAlvo) {
 		p.alvos[t.TargetID] = &sessaoAlvo{tipo: tipo, sessao: v.SessionID, alvo: t.TargetID, url: t.URL}
 		p.mu.Unlock()
 		p.prepararSessao(v.SessionID, tipo)
+		if tipo == "compras" && paginaLoginGovBr.MatchString(t.URL) {
+			go p.conferirPaginaLogin(v.SessionID)
+		}
 		if tipo == "compras" && semSessao.MatchString(t.URL) && p.cfg.Login != "" {
 			p.irParaLogin(v.SessionID)
 		}
@@ -406,6 +413,66 @@ func (p *ponte) guardarLista(sessao, pedido string) {
 	case p.novaLista <- struct{}{}:
 	default:
 	}
+}
+
+var paginaLoginGovBr = regexp.MustCompile(`^https://(?:certificado\.)?sso\.acesso\.gov\.br/`)
+
+const scriptPaginaQuebrada = `(() => {
+  const imgs = [...document.images];
+  const quebradas = imgs.filter((i) => i.complete && i.naturalWidth === 0).length;
+  let regras = 0;
+  for (const f of document.styleSheets) { try { regras += f.cssRules.length; } catch (e) { regras += 1; } }
+  const falhas = performance.getEntriesByType("resource")
+    .filter((r) => (r.responseStatus && r.responseStatus >= 400) || (r.transferSize === 0 && r.decodedBodySize === 0 && r.duration > 0 && !r.name.startsWith("data:")))
+    .map((r) => { try { return new URL(r.name).host + " " + (r.responseStatus || "sem resposta"); } catch (e) { return "?"; } });
+  return JSON.stringify({ imgs: imgs.length, quebradas, regras, hcaptcha: !!window.hcaptcha, falhas: [...new Set(falhas)].slice(0, 8) });
+})()`
+
+// conferirPaginaLogin: a página de login do gov.br às vezes abre "crua" (sem estilo, sem imagens e com o erro
+// do hCaptcha FERL0010000) — típico de cache do navegador corrompido depois de o aplicativo ser fechado à força,
+// ou de uma rede que bloqueia os arquivos do gov.br/hCaptcha. Detecta, limpa o cache e recarrega (até 2 vezes).
+func (p *ponte) conferirPaginaLogin(sessao string) {
+	time.Sleep(5 * time.Second)
+	saida, err := p.avaliar(sessao, scriptPaginaQuebrada, 10*time.Second)
+	if err != nil {
+		return
+	}
+	var v struct {
+		Imgs, Quebradas, Regras int
+		Hcaptcha                bool
+		Falhas                  []string
+	}
+	if json.Unmarshal([]byte(saida), &v) != nil {
+		return
+	}
+	quebrada := v.Regras == 0 || (v.Imgs > 0 && v.Quebradas == v.Imgs)
+	if !quebrada {
+		return
+	}
+	registrarLog("ponte: página de login do gov.br abriu sem estilo/imagens (regras CSS %d, imagens %d/%d quebradas, hCaptcha %v, falhas: %s)",
+		v.Regras, v.Quebradas, v.Imgs, v.Hcaptcha, strings.Join(v.Falhas, ", "))
+	p.mu.Lock()
+	recentes := p.recargasLogin[:0]
+	for _, t := range p.recargasLogin {
+		if time.Since(t) < 3*time.Minute {
+			recentes = append(recentes, t)
+		}
+	}
+	p.recargasLogin = recentes
+	if len(recentes) >= 2 {
+		p.mu.Unlock()
+		registrarLog("ponte: a página de login continua quebrada depois de limpar o cache: a rede (antivírus, firewall, proxy ou DNS) pode estar bloqueando os arquivos do gov.br/hCaptcha, ou o gov.br está instável")
+		return
+	}
+	p.recargasLogin = append(p.recargasLogin, time.Now())
+	p.mu.Unlock()
+	_, _ = p.cdp.Chamar(sessao, "Network.enable", nil, 5*time.Second)
+	if _, err := p.cdp.Chamar(sessao, "Network.clearBrowserCache", nil, 15*time.Second); err != nil {
+		registrarLog("ponte: não limpou o cache do navegador: %v", err)
+	}
+	_, _ = p.cdp.Chamar(sessao, "Page.reload", map[string]any{"ignoreCache": true}, 10*time.Second)
+	registrarLog("ponte: cache limpo e página de login recarregada")
+	go p.conferirPaginaLogin(sessao)
 }
 
 // Executa um script na janela do Compras.gov.br e devolve o texto que ele retornar.
