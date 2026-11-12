@@ -59,32 +59,36 @@ const (
 var (
 	kernel32 = syscall.NewLazyDLL("kernel32.dll")
 
-	procCoInitializeEx     = ole32.NewProc("CoInitializeEx")
-	procCoTaskMemFree      = ole32.NewProc("CoTaskMemFree")
-	procGetModuleHandle    = kernel32.NewProc("GetModuleHandleW")
-	procRegisterClassEx    = user32.NewProc("RegisterClassExW")
-	procCreateWindowEx     = user32.NewProc("CreateWindowExW")
-	procDefWindowProc      = user32.NewProc("DefWindowProcW")
-	procDestroyWindow      = user32.NewProc("DestroyWindow")
-	procShowWindow         = user32.NewProc("ShowWindow")
-	procUpdateWindow       = user32.NewProc("UpdateWindow")
-	procGetMessage         = user32.NewProc("GetMessageW")
-	procTranslateMessage   = user32.NewProc("TranslateMessage")
-	procDispatchMessage    = user32.NewProc("DispatchMessageW")
-	procPostMessage        = user32.NewProc("PostMessageW")
-	procPostQuitMessage    = user32.NewProc("PostQuitMessage")
-	procGetClientRect      = user32.NewProc("GetClientRect")
-	procGetWindowRect      = user32.NewProc("GetWindowRect")
-	procLoadImage          = user32.NewProc("LoadImageW")
-	procLoadCursor         = user32.NewProc("LoadCursorW")
-	procSendMessage        = user32.NewProc("SendMessageW")
-	procGetSystemMetrics   = user32.NewProc("GetSystemMetrics")
-	procFindWindow         = user32.NewProc("FindWindowW")
-	procIsIconic           = user32.NewProc("IsIconic")
-	procSetForeground      = user32.NewProc("SetForegroundWindow")
-	procShellExecute       = shell32.NewProc("ShellExecuteW")
-	procGetDpiForWindow    = user32.NewProc("GetDpiForWindow")
-	procSetProcessDpiAware = user32.NewProc("SetProcessDpiAwarenessContext")
+	procCoInitializeEx      = ole32.NewProc("CoInitializeEx")
+	procCoTaskMemFree       = ole32.NewProc("CoTaskMemFree")
+	procGetModuleHandle     = kernel32.NewProc("GetModuleHandleW")
+	procRegisterClassEx     = user32.NewProc("RegisterClassExW")
+	procCreateWindowEx      = user32.NewProc("CreateWindowExW")
+	procDefWindowProc       = user32.NewProc("DefWindowProcW")
+	procDestroyWindow       = user32.NewProc("DestroyWindow")
+	procShowWindow          = user32.NewProc("ShowWindow")
+	procUpdateWindow        = user32.NewProc("UpdateWindow")
+	procGetMessage          = user32.NewProc("GetMessageW")
+	procTranslateMessage    = user32.NewProc("TranslateMessage")
+	procDispatchMessage     = user32.NewProc("DispatchMessageW")
+	procPostMessage         = user32.NewProc("PostMessageW")
+	procJanelaDoProcesso    = user32.NewProc("GetWindowThreadProcessId")
+	procAbrirProcesso       = kernel32.NewProc("OpenProcess")
+	procEncerrarProcesso    = kernel32.NewProc("TerminateProcess")
+	procFecharIdentificador = kernel32.NewProc("CloseHandle")
+	procPostQuitMessage     = user32.NewProc("PostQuitMessage")
+	procGetClientRect       = user32.NewProc("GetClientRect")
+	procGetWindowRect       = user32.NewProc("GetWindowRect")
+	procLoadImage           = user32.NewProc("LoadImageW")
+	procLoadCursor          = user32.NewProc("LoadCursorW")
+	procSendMessage         = user32.NewProc("SendMessageW")
+	procGetSystemMetrics    = user32.NewProc("GetSystemMetrics")
+	procFindWindow          = user32.NewProc("FindWindowW")
+	procIsIconic            = user32.NewProc("IsIconic")
+	procSetForeground       = user32.NewProc("SetForegroundWindow")
+	procShellExecute        = shell32.NewProc("ShellExecuteW")
+	procGetDpiForWindow     = user32.NewProc("GetDpiForWindow")
+	procSetProcessDpiAware  = user32.NewProc("SetProcessDpiAwarenessContext")
 )
 
 type retangulo struct{ esquerda, topo, direita, baixo int32 }
@@ -656,4 +660,36 @@ func pedirJanelaCompras() bool {
 	}
 	r, _, _ := procPostMessage.Call(app.principal.hwnd, wmAbrirCompra, 0, 0)
 	return r != 0
+}
+
+// fecharJanelaAberta pede para a janela do Montzion que está aberta fechar, como clicar no X (usado ao atualizar:
+// fechar a janela principal encerra aquele Montzion por completo).
+func fecharJanelaAberta() bool {
+	hwnd, _, _ := procFindWindow.Call(utf16(classeJanela), utf16(nomeApp))
+	if hwnd == 0 {
+		return false
+	}
+	procPostMessage.Call(hwnd, wmClose, 0, 0)
+	return true
+}
+
+// encerrarMontzionAberto: se a janela não fechar sozinha, encerra só o processo dono dela (o Montzion antigo).
+func encerrarMontzionAberto() bool {
+	hwnd, _, _ := procFindWindow.Call(utf16(classeJanela), utf16(nomeApp))
+	if hwnd == 0 {
+		return false
+	}
+	var pid uint32
+	procJanelaDoProcesso.Call(hwnd, uintptr(unsafe.Pointer(&pid)))
+	if pid == 0 || int(pid) == os.Getpid() {
+		return false
+	}
+	const processoEncerrar = 0x0001
+	h, _, _ := procAbrirProcesso.Call(processoEncerrar, 0, uintptr(pid))
+	if h == 0 {
+		return false
+	}
+	defer procFecharIdentificador.Call(h)
+	ok, _, _ := procEncerrarProcesso.Call(h, 0)
+	return ok != 0
 }

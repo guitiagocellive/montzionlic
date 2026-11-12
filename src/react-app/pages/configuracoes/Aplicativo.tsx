@@ -76,8 +76,8 @@ function AtualizacaoApp() {
               </ul>
             )}
             <p className="texto-fraco pequeno" style={{ margin: "6px 0 0" }}>
-              Baixe e abra o instalador: ele atualiza o aplicativo sozinho, sem perder login nem configurações. Depois abra o
-              Montzion de novo.
+              Baixe e abra o instalador: ele fecha esta janela do Montzion, instala a versão nova e abre de novo sozinho, sem
+              perder configurações. Se houver disputa com o robô ligado, atualize depois que ela acabar.
             </p>
           </div>
           <a className="botao acento" href="/downloads/Montzion-Instalador.exe" download="Montzion-Instalador.exe">
@@ -165,7 +165,8 @@ function AplicativoNavegador() {
             administrador.
           </li>
           <li>
-            Já tinha instalado uma versão antiga? Baixe e abra o instalador de novo: ele atualiza sozinho.
+            Já tinha instalado uma versão antiga? Baixe e abra o instalador de novo: ele fecha o Montzion aberto, atualiza e abre
+            a versão nova sozinho.
           </li>
           <li>
             Para remover: <strong>Configurações do Windows → Aplicativos → Montzion → Desinstalar</strong>.

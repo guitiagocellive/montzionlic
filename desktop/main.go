@@ -264,6 +264,36 @@ func ligarPonte(arquivoPorta string, porta int, abrirCompras func() bool, escond
 
 // Abre o Montzion na janela própria do aplicativo. Só se o Windows não tiver o motor WebView2
 // (raro: vem no Windows 10 e 11) cai para o modo aplicativo do Edge/Chrome.
+// fecharVersaoAberta fecha o Montzion que estiver aberto (pedido de fechar; se em 10 s não fechar, encerra o
+// processo dele) e espera ele soltar a trava. Devolve true se havia um aberto.
+func fecharVersaoAberta() bool {
+	if l, err := net.Listen("tcp", portaTrava); err == nil {
+		l.Close()
+		return false // nenhum aberto
+	}
+	if !fecharJanelaAberta() {
+		return false
+	}
+	livre := func(espera time.Duration) bool {
+		limite := time.Now().Add(espera)
+		for time.Now().Before(limite) {
+			if l, err := net.Listen("tcp", portaTrava); err == nil {
+				l.Close()
+				return true
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+		return false
+	}
+	if !livre(10 * time.Second) {
+		registrarLog("atualização: a janela aberta não fechou em 10 s; encerrando o Montzion antigo")
+		encerrarMontzionAberto()
+		livre(5 * time.Second)
+	}
+	time.Sleep(700 * time.Millisecond) // o motor da janela (WebView2) termina de sair
+	return true
+}
+
 func abrir() {
 	trava, err := net.Listen("tcp", portaTrava)
 	if err != nil {
@@ -376,10 +406,16 @@ func main() {
 		atual, _ = filepath.EvalSymlinks(atual)
 		destino := filepath.Join(pastaInstalacao(), nomeApp+".exe")
 		if !strings.EqualFold(filepath.Clean(atual), filepath.Clean(destino)) {
+			_, erroJa := os.Stat(destino)
+			atualizacao := erroJa == nil
+			// Atualização com o Montzion aberto: fecha a janela aberta antes, para a versão nova abrir no lugar.
+			if fecharVersaoAberta() {
+				registrarLog("atualização: a janela aberta foi fechada para abrir a versão nova")
+			}
 			if _, err := instalar(atual); err != nil {
 				registrarLog("instalação falhou: %v", err)
 				mensagem("Não foi possível instalar o Montzion: "+err.Error()+"\n\nA plataforma vai abrir mesmo assim.\nDetalhes em "+filepath.Join(pastaInstalacao(), "montzion.log"), mbOK|mbIconInfo)
-			} else {
+			} else if !atualizacao {
 				mensagem("Montzion instalado!\n\nCriamos um atalho na área de trabalho e no menu Iniciar.\nAgora o Montzion vai abrir.", mbOK|mbIconInfo)
 			}
 		}
