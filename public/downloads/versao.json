@@ -1,9 +1,9 @@
 {
-  "versao": "3.0.6",
+  "versao": "3.0.7",
   "data": "2026-11-11",
   "novidades": [
-    "Robô: corrigido o travamento em \"Entrando na sala de disputa\" — o aviso do Sicaf que o portal abre depois do login tomava o lugar da página; agora o aviso é ignorado e o robô clica em \"Dispensas e Pregões\" sozinho.",
-    "Robô: funciona com a Área de Trabalho nova (tela verde) e avisa quando o portal pede para escolher a empresa.",
+    "Robô: reconhece o item \"Licitação e Dispensa (novo)\" do menu do portal (o caminho real até a sala de disputa) e entra sozinho.",
+    "Robô: ignora o aviso do Sicaf que o portal abre depois do login.",
     "Página Disputas: botão \"Copiar diagnóstico\" para mandar ao suporte."
   ]
 }

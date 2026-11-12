@@ -68,6 +68,7 @@ type ponte struct {
 	tentativas        map[string]int       // portal -> quantas vezes tentou (alterna entre os itens mais prováveis do menu)
 	portalPedeEscolha bool                 // a página do portal pede para escolher empresa/perfil
 	voltouDoAviso     map[string]time.Time
+	urlTentada        map[string]string
 	menuVisto         map[string]bool // endereços do portal cujo menu já foi anotado no registro
 	// Janela própria do aplicativo: abre/foca a janela nativa do Compras.gov.br (nil = aba do navegador).
 	abrirCompras func() bool
@@ -83,7 +84,7 @@ var (
 )
 
 func novaPonte(cfg configPonte, cdp *clienteCDP) *ponte {
-	p := &ponte{cfg: cfg, cdp: cdp, alvos: map[string]*sessaoAlvo{}, ligando: map[string]bool{}, pedidos: map[string]bool{}, novaLista: make(chan struct{}, 1), tentouSala: map[string]time.Time{}, tentativas: map[string]int{}, menuVisto: map[string]bool{}, voltouDoAviso: map[string]time.Time{}}
+	p := &ponte{cfg: cfg, cdp: cdp, alvos: map[string]*sessaoAlvo{}, ligando: map[string]bool{}, pedidos: map[string]bool{}, novaLista: make(chan struct{}, 1), tentouSala: map[string]time.Time{}, tentativas: map[string]int{}, menuVisto: map[string]bool{}, voltouDoAviso: map[string]time.Time{}, urlTentada: map[string]string{}}
 	p.motor = novoMotor(p)
 	return p
 }
@@ -762,6 +763,21 @@ func notaSala(it itemMenu) int {
 	if strings.Contains(t, "disputa") || strings.Contains(l, "disputa") {
 		n += 3
 	}
+	// Menu real do portal: "Licitação e Dispensa (novo)" -> /assinadas/dispensa_eletronica.asp leva ao sistema novo
+	// (onde fica a sala de disputa). O "(legado)" é o pregão antigo, que o robô não usa.
+	if strings.Contains(l, "dispensa_eletronica") || regexp.MustCompile(`licita(ç|c)(ã|a)o\s+e\s+dispensa`).MatchString(t) {
+		n += 8
+	}
+	if strings.Contains(t, "(novo)") {
+		n += 2
+	}
+	// Página intermediária do sistema novo: botão "Acessar"/"Prosseguir" para ir à sala.
+	if regexp.MustCompile(`^(acessar|prosseguir|continuar|ir para o (novo )?sistema)`).MatchString(strings.TrimSpace(t)) {
+		n += 3
+	}
+	if strings.Contains(t, "(legado)") || strings.Contains(l, "/assinadas/pregao.asp") {
+		n -= 4
+	}
 	// Card da Área de Trabalho nova: "Dispensas e Pregões".
 	if regexp.MustCompile(`dispensas?\s+e\s+preg|preg(õ|o)es\s+e\s+dispensas`).MatchString(t) {
 		n += 6
@@ -805,11 +821,15 @@ func (p *ponte) abrirSalaPeloPortal() bool {
 		p.mu.Lock()
 		ultima, vezes := p.tentouSala[a.alvo], p.tentativas[a.alvo]
 		p.mu.Unlock()
-		if time.Since(ultima) < 20*time.Second {
+		// Espera 20 s entre tentativas na mesma página; se a janela mudou de página, tenta na hora.
+		p.mu.Lock()
+		mesmaPagina := p.urlTentada[a.alvo] == a.url
+		p.mu.Unlock()
+		if mesmaPagina && time.Since(ultima) < 20*time.Second {
 			continue
 		}
 		// Área de Trabalho nova: pede a chave da sala com a sessão dela e abre a sala direto.
-		if areaTrabalho.MatchString(a.url) && vezes%2 == 0 {
+		if areaTrabalho.MatchString(a.url) && (!mesmaPagina || vezes%2 == 0) {
 			// Só pede a chave com a página carregada (no meio da navegação a resposta vem vazia).
 			if pronto, _ := p.avaliar(a.sessao, `document.readyState`, 3*time.Second); pronto != "complete" {
 				continue
@@ -824,6 +844,7 @@ func (p *ponte) abrirSalaPeloPortal() bool {
 			}
 			p.mu.Lock()
 			p.tentouSala[a.alvo] = time.Now()
+			p.urlTentada[a.alvo] = a.url
 			p.tentativas[a.alvo]++
 			p.mu.Unlock()
 			if len(r.Chave) >= 8 && !strings.ContainsAny(r.Chave, " <{") {
@@ -851,9 +872,10 @@ func (p *ponte) abrirSalaPeloPortal() bool {
 		}
 		// Caminho direto: o portal já traz a chave da sala (compras-id) em algum link. A sala troca essa
 		// chave pela sessão do fornecedor sozinha (como acontece quando a pessoa clica no menu).
-		if v.Chave != "" && vezes%2 == 0 {
+		if v.Chave != "" && (!mesmaPagina || vezes%2 == 0) {
 			p.mu.Lock()
 			p.tentouSala[a.alvo] = time.Now()
+			p.urlTentada[a.alvo] = a.url
 			p.tentativas[a.alvo]++
 			p.mu.Unlock()
 			destino := p.cfg.paginaDisputas() + "?compras-id=" + url.QueryEscape(v.Chave)
@@ -899,6 +921,7 @@ func (p *ponte) abrirSalaPeloPortal() bool {
 		}
 		p.mu.Lock()
 		p.tentouSala[a.alvo] = time.Now()
+		p.urlTentada[a.alvo] = a.url
 		p.tentativas[a.alvo]++
 		p.mu.Unlock()
 		registrarLog("ponte: abrindo a sala de disputa pelo menu (tentativa %d): %s -> %s", vezes+1, v.Itens[melhor].Texto, semValores(v.Itens[melhor].Link))

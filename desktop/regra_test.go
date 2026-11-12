@@ -48,3 +48,23 @@ func TestStomp(t *testing.T) {
 		t.Errorf("quadro: %+v", q)
 	}
 }
+
+func TestNotaSalaMenuReal(t *testing.T) {
+	itens := []itemMenu{
+		{"Alterar seus Dados Cadastrais", "/assinadas/Atualiza_Dados/Atualiza_Dados.asp"},
+		{"Licitação e Dispensa (novo)", "/assinadas/dispensa_eletronica.asp"},
+		{"Pregão e Concorrência (legado)", "/assinadas/pregao.asp"},
+		{"Em que está Participando (Lances)", "/assinadas/cotacao.asp?filtro=1"},
+		{"Consultar suas Propostas", "/assinadas/cotacao.asp?filtro=2"},
+		{"Sair", "/logoff.asp"},
+	}
+	melhor, nota := -1, 2
+	for i, it := range itens {
+		if n := notaSala(it); n > nota {
+			melhor, nota = i, n
+		}
+	}
+	if melhor != 1 {
+		t.Fatalf("esperava \"Licitação e Dispensa (novo)\", veio %d (nota %d)", melhor, nota)
+	}
+}
