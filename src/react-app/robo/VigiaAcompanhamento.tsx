@@ -27,11 +27,13 @@ export function VigiaAcompanhamento() {
   useEffect(() => {
     let vivo = true;
     let parado = false;
+    let ultima = 0;
     const vigiar = async () => {
       if (!vivo || parado || !temPonte()) return;
       try {
-        const p = await ponte.acompanhamento();
-        if (!p?.em) return;
+        const p = await ponte.acompanhamento("", false, ultima);
+        if (!p?.em || p.igual) return;
+        ultima = p.versao ?? 0;
         const enviados = lerEnviados();
         const novos = avisosDe(montarCompras(p.andamento, p.detalhes), p.agora).filter((a) => !enviados.has(a.chave));
         if (!novos.length) return;

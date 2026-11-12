@@ -113,7 +113,7 @@ export const ponte = {
   /** Últimas linhas do registro do aplicativo, sem chaves nem documentos (para mandar ao suporte). */
   diagnostico: () => chamar<{ texto: string }>("diagnostico", {}, 10_000),
   /** Participações lidas pelo aplicativo (aba Acompanhamento). compra: ler essa já; atualizar: ler tudo já. */
-  acompanhamento: (compra = "", atualizar = false) => chamar<PainelAcompanhamento>("acompanhamento", { compra, atualizar }, 8_000),
+  acompanhamento: (compra = "", atualizar = false, desde = 0) => chamar<PainelAcompanhamento>("acompanhamento", { compra, atualizar, desde }, 8_000),
   /** Consulta ou ação do fornecedor no Compras.gov.br (só endereços de uma lista fechada no aplicativo). */
   fornecedor: (pedido: PedidoFornecedor, tempoMs = 130_000) => chamar<RespostaFornecedor>("fornecedor", { pedido }, tempoMs),
   /** Mensagem ao pregoeiro (só vai quando o pregoeiro abriu a conversa para você). */

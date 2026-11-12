@@ -46,6 +46,7 @@ type acompanhamento struct {
 	forcar        bool
 	pedidos       []string // compras que a página pediu para ler já
 	viuCampos     bool     // já registrou no log os nomes dos campos (para o diagnóstico)
+	versao        int      // muda quando algo muda (a página só baixa tudo de novo nessa hora)
 }
 
 // Compra da lista de participações (chave e se é do sistema legado).
@@ -291,6 +292,7 @@ func (m *motor) coletarAcompanhamento() {
 
 	a.mu.Lock()
 	a.buscando = false
+	a.versao++
 	if !soPedidos {
 		a.em = time.Now() // hora da última leitura da lista
 	}
@@ -303,28 +305,26 @@ func (m *motor) coletarAcompanhamento() {
 }
 
 func (m *motor) lerAcompanhamento(lista, finalizadas bool, escolhidas []compraAcomp) error {
-	s := m.p.sessaoLogada(false)
-	if s == nil {
-		return fmt.Errorf("entre no Compras.gov.br para acompanhar as participações")
-	}
-	if err := m.p.garantirSala(s); err != nil {
-		return err
-	}
-	entrada, _ := json.Marshal(mapa{"lista": lista, "finalizadas": finalizadas, "detalhar": escolhidas})
-	saida, err := m.p.avaliar(s.sessao, scriptAcompanhamento+"("+string(entrada)+")", 3*time.Minute)
+	// Direto do aplicativo; a página só se o direto não chegar ao Compras.gov.br.
+	v, err := m.lerAcompanhamentoDireto(lista, finalizadas, escolhidas)
 	if err != nil {
-		return fmt.Errorf("não foi possível ler as participações: %v", err)
-	}
-	var v struct {
-		Erro        string                    `json:"erro"`
-		Erros       []string                  `json:"erros"`
-		Andamento   json.RawMessage           `json:"andamento"`
-		Finalizadas json.RawMessage           `json:"finalizadas"`
-		Detalhes    map[string]*detalheCompra `json:"detalhes"`
-		Formatos    []string                  `json:"formatos"`
-	}
-	if json.Unmarshal([]byte(saida), &v) != nil {
-		return fmt.Errorf("resposta estranha do Compras.gov.br")
+		registrarLog("acompanhamento: leitura direta falhou (%v); usando a página", err)
+		s := m.p.sessaoLogada(false)
+		if s == nil {
+			return fmt.Errorf("entre no Compras.gov.br para acompanhar as participações")
+		}
+		if err := m.p.garantirSala(s); err != nil {
+			return err
+		}
+		entrada, _ := json.Marshal(mapa{"lista": lista, "finalizadas": finalizadas, "detalhar": escolhidas})
+		saida, err := m.p.avaliar(s.sessao, scriptAcompanhamento+"("+string(entrada)+")", 3*time.Minute)
+		if err != nil {
+			return fmt.Errorf("não foi possível ler as participações: %v", err)
+		}
+		v = leituraAcomp{}
+		if json.Unmarshal([]byte(saida), &v) != nil {
+			return fmt.Errorf("resposta estranha do Compras.gov.br")
+		}
 	}
 	if v.Erro != "" {
 		return fmt.Errorf("sessão do Compras.gov.br expirada: entre de novo")
@@ -414,7 +414,7 @@ func (m *motor) lerAcompanhamento(lista, finalizadas bool, escolhidas []compraAc
 }
 
 // Acompanhamento devolve o que já foi lido. compra: a página quer essa compra lida agora; atualizar: ler tudo já.
-func (m *motor) Acompanhamento(compra string, atualizar bool) any {
+func (m *motor) Acompanhamento(compra string, atualizar bool, desde int) any {
 	a := &m.acomp
 	a.mu.Lock()
 	if atualizar {
@@ -425,7 +425,19 @@ func (m *motor) Acompanhamento(compra string, atualizar bool) any {
 			a.pedidos = append(a.pedidos, compra)
 		}
 	}
+	buscando := a.buscando || a.forcar || len(a.pedidos) > 0
+	if desde > 0 && desde == a.versao {
+		resposta := mapa{"igual": true, "versao": a.versao, "buscando": buscando, "em": a.em.UnixMilli(), "agora": time.Now().UnixMilli(), "problema": a.erro}
+		a.mu.Unlock()
+		m.mu.Lock()
+		resposta["conectado"] = m.token != ""
+		resposta["fase"] = m.fase
+		resposta["cnpj"] = m.cnpj
+		m.mu.Unlock()
+		return resposta
+	}
 	resposta := mapa{
+		"versao":      a.versao,
 		"andamento":   a.andamento,
 		"finalizadas": a.finalizadas,
 		"detalhes":    a.detalhes,
@@ -477,4 +489,112 @@ func (m *motor) EnviarMensagem(compra string, item int, texto string) any {
 	a.pedidos = append(a.pedidos, compra)
 	a.mu.Unlock()
 	return mapa{"ok": true}
+}
+
+type leituraAcomp struct {
+	Erro        string                    `json:"erro"`
+	Erros       []string                  `json:"erros"`
+	Andamento   json.RawMessage           `json:"andamento"`
+	Finalizadas json.RawMessage           `json:"finalizadas"`
+	Detalhes    map[string]*detalheCompra `json:"detalhes"`
+	Formatos    []string                  `json:"formatos"`
+}
+
+const fe = "/comprasnet-fase-externa"
+
+func okHTTP(st int) bool { return st >= 200 && st < 300 }
+
+// lerAcompanhamentoDireto faz a mesma leitura do script da página, mas direto do aplicativo e com até 4
+// compras ao mesmo tempo. Só devolve erro se não conseguir falar com o Compras.gov.br.
+func (m *motor) lerAcompanhamentoDireto(lista, finalizadas bool, escolhidas []compraAcomp) (leituraAcomp, error) {
+	v := leituraAcomp{Detalhes: map[string]*detalheCompra{}}
+	participacoes := func(filtro string, maxPaginas int) (json.RawMessage, error) {
+		var todas []json.RawMessage
+		for pagina := 0; pagina < maxPaginas; pagina++ {
+			r, err := m.consultarDireto("GET", fe+"/v1/compras/participacoes", fmt.Sprintf("filtro=%s&pagina=%d&tamanhoPagina=10", filtro, pagina), true, nil, "")
+			if err != nil {
+				return nil, err
+			}
+			if !okHTTP(r.Status) {
+				v.Erros = append(v.Erros, fmt.Sprintf("participações (%s, página %d): %d %s", filtro, pagina+1, r.Status, mensagemErro(r.Corpo)))
+				if pagina == 0 {
+					return nil, nil
+				}
+				break
+			}
+			l := listaQualquer(r.Corpo)
+			if pagina == 0 {
+				v.Formatos = append(v.Formatos, fmt.Sprintf("filtro %s: %d na 1ª página, páginas=%s total=%s", filtro, len(l), r.Cab.Get("pages-count"), r.Cab.Get("register-count")))
+			}
+			todas = append(todas, l...)
+			paginas := 0
+			fmt.Sscan(r.Cab.Get("pages-count"), &paginas)
+			if len(l) < 10 || (paginas > 0 && pagina+1 >= paginas) {
+				break
+			}
+		}
+		return juntarLista(todas), nil
+	}
+	if lista {
+		a, err := participacoes("2", 8)
+		if err != nil {
+			return v, err
+		}
+		v.Andamento = a
+		if finalizadas {
+			f, err := participacoes("6", 3)
+			if err != nil {
+				return v, err
+			}
+			v.Finalizadas = f
+		}
+	}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	fila := make(chan compraAcomp)
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for c := range fila {
+				d := m.detalharDireto(c)
+				mu.Lock()
+				v.Detalhes[c.Chave] = d
+				mu.Unlock()
+			}
+		}()
+	}
+	for _, c := range escolhidas {
+		fila <- c
+	}
+	close(fila)
+	wg.Wait()
+	return v, nil
+}
+
+func (m *motor) detalharDireto(c compraAcomp) *detalheCompra {
+	d := &detalheCompra{}
+	k := url.PathEscape(c.Chave)
+	if r, err := m.consultarDireto("GET", fe+"/v1/compras/"+k+"/participacao", "", false, nil, ""); err == nil && okHTTP(r.Status) {
+		d.Participacao = r.Corpo
+	} else if err == nil {
+		d.Erros = append(d.Erros, fmt.Sprintf("participação: %d", r.Status))
+	}
+	r, err := m.consultarDireto("GET", fe+"/v1/compras/"+k+"/itens/em-selecao-fornecedores", "filtro=2&pagina=0&tamanhoPagina=100", true, nil, "")
+	if err == nil && okHTTP(r.Status) && len(listaQualquer(r.Corpo)) > 0 {
+		d.Itens, d.OrigemItens = juntarLista(listaQualquer(r.Corpo)), "selecao"
+	} else {
+		r2, err2 := m.consultarDireto("GET", fe+"/v1/compras/"+k+"/itens", "pagina=0&tamanhoPagina=100", true, nil, "")
+		if err2 == nil && okHTTP(r2.Status) {
+			d.Itens, d.OrigemItens = juntarLista(listaQualquer(r2.Corpo)), "itens"
+		} else {
+			d.Erros = append(d.Erros, fmt.Sprintf("itens: %v/%v", r.Status, r2.Status))
+		}
+	}
+	if r, err := m.consultarDireto("GET", "/comprasnet-mensagem/v2/chat/"+k, fmt.Sprintf("legadoAsp=%v&size=50&page=0", c.Legado), true, nil, ""); err == nil && okHTTP(r.Status) {
+		d.Mensagens = juntarLista(listaQualquer(r.Corpo))
+	} else if err == nil {
+		d.Erros = append(d.Erros, fmt.Sprintf("mensagens: %d", r.Status))
+	}
+	return d
 }

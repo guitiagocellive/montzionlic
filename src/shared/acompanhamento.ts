@@ -188,6 +188,8 @@ export interface ItemAcomp {
   /** Situação do item como o Compras.gov.br escreve ("Aguardando julgamento"...). */
   etapa: string;
   valorEstimado: number | null;
+  /** A sua proposta como veio na lista de itens (reserva quando a tela do item demora). */
+  propostaBruta: unknown;
 }
 
 const PENDENCIAS: [string, Pendencia["tipo"], string][] = [
@@ -240,6 +242,7 @@ export function lerItemAcomp(bruto: unknown): ItemAcomp | null {
     prazoIntencao: texto(primeiro(obj(x.prazosFaseRecursal).dataHoraLimiteIRJulgamento, obj(x.prazosFaseRecursal).dataHoraLimiteIRHabilitacao)),
     etapa: texto(primeiro(x.descricaoSituacao, x.situacaoDescricao, x.detalheSituacao, x.descricaoFase, x.situacaoSelecao)) || fase,
     valorEstimado: valorDe(primeiro(x.valorEstimado, x.valorUnitarioEstimado, x.valorEstimadoUnitario)),
+    propostaBruta: Object.keys(p).length ? p : null,
   };
   const { chance, explicacao } = calcularChance(item, situacaoItem, desclassificado);
   item.chance = chance;
@@ -319,6 +322,9 @@ export interface PainelAcompanhamento {
   fase: string;
   agora: number;
   cnpj?: string;
+  /** Muda quando algo muda; com "igual" o aplicativo só avisa que nada mudou desde a versão pedida. */
+  versao?: number;
+  igual?: boolean;
 }
 
 export interface CompraAcomp extends Participacao {
@@ -326,6 +332,9 @@ export interface CompraAcomp extends Participacao {
   mensagens: MensagemAcomp[];
   lidaEm: number | null;
   erros: string[];
+  /** Da sua participação na compra. */
+  meEpp: boolean | null;
+  uf: string;
 }
 
 export function montarCompras(lista: unknown[] | null, detalhes: Record<string, DetalheBruto> | null): CompraAcomp[] {
@@ -353,6 +362,8 @@ export function montarCompras(lista: unknown[] | null, detalhes: Record<string, 
       mensagens,
       lidaEm: d?.em ?? null,
       erros: d?.erros ?? [],
+      meEpp: d?.participacao && obj(d.participacao).declaracaoMeEpp != null ? obj(d.participacao).declaracaoMeEpp === true : null,
+      uf: texto(primeiro(obj(obj(obj(d?.participacao).participante).endereco).uf, obj(obj(d?.participacao).participante).uf)),
     });
   }
   return saida;
@@ -477,7 +488,9 @@ export function lerProposta(bruto: unknown): PropostaEmpresa {
 
 /** Resposta de "item com as propostas": a sua proposta (propostaItem) e as de todas (propostasItem). */
 export function lerItemComPropostas(dados: unknown, meuCnpj: string) {
-  const d = obj(dados);
+  // Na fase de seleção a resposta é uma lista com o item (e as propostas dentro dele).
+  const d = Array.isArray(dados) && dados.length && obj(dados[0]).propostasItem ? obj(dados[0]) : obj(dados);
+  if (Array.isArray(dados) && dados.length && obj(dados[0]).propostasItem) dados = d;
   const todas = propostasDoItem(dados).map((p, i) => ({ ...p, colocacao: p.colocacao ?? i + 1 }));
   const minhaBruta = d.propostaItem ? lerProposta(d.propostaItem) : null;
   const minha = (meuCnpj && todas.find((p) => p.cnpj === meuCnpj)) || minhaBruta;

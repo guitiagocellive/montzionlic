@@ -1,10 +1,11 @@
 {
-  "versao": "3.1.1",
+  "versao": "3.1.2",
   "data": "2026-11-12",
   "novidades": [
-    "Acompanhamento no desenho do Compras.gov.br: lista de participações com etapa e etiquetas (Chance boa até o 4º lugar, Convocado, Pregoeiro falou com você), janela da compra com os itens e o botão \"Ver item\".",
-    "Ver item: Minha proposta (classificação, declarações, UF, chat, proposta, anexos, diligências, recursos e lances) e Todas as propostas (a seta de cada empresa mostra o chat dela com o pregoeiro, a proposta, os anexos e as diligências).",
-    "Anexos só podem ser enviados quando o pregoeiro convoca, e depois de marcar \"Ciente\", como no Compras.gov.br.",
-    "Mais rápido: a lista é relida a cada 3 minutos e a compra que você abre é lida na hora."
+    "Bem mais rápido e sem o erro \"Execution context was destroyed\": o aplicativo consulta o Compras.gov.br direto, com a sua sessão, e só usa a página oficial para o captcha quando ele é exigido.",
+    "A tela não redesenha mais tudo a cada poucos segundos: só quando algo muda.",
+    "Chat certo em cada lugar: na compra, o chat da licitação; em Minha proposta, o seu chat com o pregoeiro naquele item; em Todas as propostas, o chat de cada empresa com o pregoeiro.",
+    "Todas as propostas pela mesma tela da fase de seleção do Compras.gov.br.",
+    "Novo: cadastrar proposta pela plataforma (declarações, valor, quantidade, marca, modelo, anexo), alterar e excluir."
   ]
 }

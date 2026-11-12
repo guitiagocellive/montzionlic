@@ -118,6 +118,13 @@ Não existe cadastro público: só um administrador adiciona pessoas.
   - **Anexos só com convocação** e depois de marcar **"Ciente"** (como na tela oficial); diligência e recursos só quando
     o prazo está aberto. Toda ação pede confirmação.
   - Avisos (convocações, situação da proposta, mensagens do pregoeiro) também vão para o **sino** da equipe.
+  - **Cadastrar proposta** (botão no topo e, nas compras em fase de propostas, dentro da janela da compra): informa
+    UASG, modalidade, número e ano; aceita as **declarações** (texto oficial, ME/EPP, programa de integridade e equidade
+    de gênero quando exigidos) e cadastra, altera ou exclui a **proposta de cada item** (valor unitário ou desconto,
+    quantidade, marca e modelo para materiais; anexo quando o item exige). Cada envio pede confirmação.
+  - **Rápido**: o aplicativo consulta o Compras.gov.br direto com a sessão do gov.br (`desktop/direto.go`); a página
+    oficial só gera o captcha, um por vez e só nas telas que exigem (ele aprende quais são). A página da plataforma só
+    baixa o painel de novo quando algo muda (versão).
   - O aplicativo relê a lista a cada 3 minutos (10 por página, como a tela oficial, que responde 206) e lê na hora a
     compra que você abre. Só aceita endereços de fornecedor de uma **lista fechada** (`desktop/compras_acesso.go`, com
     teste), no máximo 40 consultas por minuto.

@@ -1,10 +1,11 @@
-import { BellRing, ClipboardCopy, Eye, Download, ExternalLink, LogIn, MessageSquare, RefreshCw, Send, TriangleAlert } from "lucide-react";
+import { BellRing, ClipboardCopy, FilePlus2, Eye, Download, ExternalLink, LogIn, MessageSquare, RefreshCw, Send, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type AvisoAcomp, avisosDe, type CompraAcomp, dataDe, montarCompras, type PainelAcompanhamento, ROTULO_CHANCE } from "../../../shared/acompanhamento";
 import { mensagemDeErro } from "../../api";
 import { avisar, Modal } from "../../components/Ui";
 import { formatarMoeda } from "../../formato";
 import { link } from "../../rota";
+import { CadastroProposta, NovaProposta } from "./CadastroProposta";
 import { COR_CHANCE, ItemCompras } from "./ItemCompras";
 import { noAplicativo, ponte, temPonte } from "../../robo/ponte";
 
@@ -38,6 +39,9 @@ export function Acompanhamento() {
   const [aberta, setAberta] = useState<string | null>(() => new URLSearchParams(window.location.search).get("compra"));
   const [agora, setAgora] = useState(Date.now());
   const pedida = useRef<string | null>(aberta); // compra que veio pelo link: ler já
+  const versao = useRef(0);
+  const [novaProposta, setNovaProposta] = useState(false);
+  const [cadastro, setCadastro] = useState<string | null>(null);
 
   useEffect(() => {
     if (ligada) return;
@@ -53,15 +57,26 @@ export function Acompanhamento() {
       try {
         const compra = pedida.current ?? "";
         pedida.current = null;
-        const p = await ponte.acompanhamento(compra);
-        if (vivo) setPainel(p);
+        const p = await ponte.acompanhamento(compra, false, versao.current);
+        if (!vivo) return;
+        if (p.igual) {
+          // Nada mudou: só atualiza o "lendo…" e a hora, sem montar a lista de novo.
+          setPainel((atual) =>
+            atual && (atual.buscando !== p.buscando || atual.em !== p.em || atual.fase !== p.fase || atual.problema !== p.problema || atual.conectado !== p.conectado)
+              ? { ...atual, buscando: p.buscando, em: p.em, fase: p.fase, problema: p.problema, conectado: p.conectado }
+              : atual,
+          );
+        } else {
+          versao.current = p.versao ?? 0;
+          setPainel(p);
+        }
       } catch (e) {
         if (/desconhecido/i.test(mensagemDeErro(e))) setAntigo(true);
       }
       if (vivo) setAgora(Date.now());
     };
     ler();
-    const t = setInterval(ler, 3000);
+    const t = setInterval(ler, 2000);
     return () => {
       vivo = false;
       clearInterval(t);
@@ -91,6 +106,7 @@ export function Acompanhamento() {
 
   async function atualizar() {
     try {
+      versao.current = 0;
       setPainel(await ponte.acompanhamento(aberta ?? "", true));
       avisar("Lendo as participações no Compras.gov.br…");
     } catch (e) {
@@ -127,6 +143,9 @@ export function Acompanhamento() {
         {ligada && painel?.conectado && (
           <div className="cabecalho-acoes">
             <span className="texto-fraco pequeno">{painel.buscando ? "Lendo…" : painel.em ? `Atualizado ${ha(painel.em, agora)}` : ""}</span>
+            <button className="botao acento" onClick={() => setNovaProposta(true)}>
+              <FilePlus2 /> Cadastrar proposta
+            </button>
             <button className="botao secundario" onClick={atualizar} disabled={painel.buscando}>
               <RefreshCw className={painel.buscando ? "girando" : ""} /> Atualizar
             </button>
@@ -254,7 +273,17 @@ export function Acompanhamento() {
               ))}
             </div>
           )}
-          {compraAberta && <JanelaCompra compra={compraAberta} cnpj={painel.cnpj ?? ""} agora={agora} aoFechar={() => abrir(null)} />}
+          {novaProposta && (
+            <NovaProposta
+              aoFechar={() => setNovaProposta(false)}
+              aoEscolher={(k) => {
+                setNovaProposta(false);
+                setCadastro(k);
+              }}
+            />
+          )}
+          {cadastro && <CadastroProposta chave={cadastro} cnpj={painel.cnpj ?? ""} aoFechar={() => setCadastro(null)} />}
+          {compraAberta && !cadastro && <JanelaCompra compra={compraAberta} cnpj={painel.cnpj ?? ""} agora={agora} aoFechar={() => abrir(null)} aoCadastrar={() => setCadastro(compraAberta.chave)} />}
           <p className="texto-fraco pequeno nota-acomp">
             O aplicativo relê a lista a cada 3 minutos e a compra que você abre na hora. A chance é uma estimativa pela colocação: o pregoeiro analisa a 1ª colocada e,
             se ela for recusada ou inabilitada, chama a próxima. Algo diferente do Compras.gov.br?{" "}
@@ -359,7 +388,7 @@ const PASSOS = ["Propostas", "Disputa", "Seleção de fornecedores", "Remanescen
 const passoDa = (c: CompraAcomp) => (["1", "2", "6"].includes(c.faseCodigo) ? 0 : ["3", "99"].includes(c.faseCodigo) ? 1 : c.faseCodigo === "4" ? 2 : c.encerrada ? 3 : -1);
 
 /** Janela da compra (como "Acompanhamento seleção de fornecedores"): itens com colocação e o "Ver item". */
-function JanelaCompra({ compra: c, cnpj, agora, aoFechar }: { compra: CompraAcomp; cnpj: string; agora: number; aoFechar: () => void }) {
+function JanelaCompra({ compra: c, cnpj, agora, aoFechar, aoCadastrar }: { compra: CompraAcomp; cnpj: string; agora: number; aoFechar: () => void; aoCadastrar: () => void }) {
   const [itemAberto, setItemAberto] = useState<number | null>(null);
   const passo = passoDa(c);
   const indice = c.itens.findIndex((i) => i.numero === itemAberto);
@@ -402,6 +431,14 @@ function JanelaCompra({ compra: c, cnpj, agora, aoFechar }: { compra: CompraAcom
           </>
         ) : (
           <>
+            {["1", "2", "6"].includes(c.faseCodigo) && (
+              <div className="alerta aviso linha-erro-item">
+                <span>Esta compra está na fase de propostas: dá para cadastrar ou alterar a proposta daqui.</span>
+                <button className="botao acento pequeno" onClick={aoCadastrar}>
+                  <FilePlus2 /> Cadastrar / alterar proposta
+                </button>
+              </div>
+            )}
             <div className="lista-compras-topo">
               <span className="texto-fraco pequeno">{c.lidaEm ? `Exibindo ${c.itens.length} item(ns) · lidos ${ha(c.lidaEm, agora)}` : "Lendo os itens no Compras.gov.br…"}</span>
               {c.linkPncp && (

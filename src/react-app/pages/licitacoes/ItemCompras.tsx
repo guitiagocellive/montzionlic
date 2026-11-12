@@ -13,6 +13,7 @@ import {
   lerItemComPropostas,
   lerLances,
   lerMensagem,
+  lerProposta,
   type MensagemAcomp,
   type PropostaEmpresa,
   propostasDoItem,
@@ -34,7 +35,10 @@ export const COR_CHANCE: Record<string, string> = { ganhou: "verde", alta: "verd
 
 export async function pedir(p: PedidoFornecedor) {
   const r = await ponte.fornecedor(p);
-  if (r.status >= 400 || r.status === 0) throw new Error(r.mensagem || `O Compras.gov.br respondeu ${r.status}.`);
+  if (r.status >= 400 || r.status === 0) {
+    const m = (r.mensagem ?? "").trim();
+    throw new Error(m && m !== "[]" && m !== "{}" ? m : `O Compras.gov.br respondeu ${r.status || "sem dados"}.`);
+  }
   return r;
 }
 
@@ -152,9 +156,19 @@ export function ItemCompras({
   const dados = useCarga(
     true,
     async () => {
+      // 1) tela da fase de seleção ("Todas as propostas" oficial); 2) item com as propostas; 3) propostas iniciais.
+      const naoExiste = (e: unknown) => /40[034]|não encontr|not found|sem dados/i.test(mensagemDeErro(e));
+      try {
+        const d = await consultar(`/v1/compras/${compra.chave}/em-selecao-fornecedores/itens/${item.numero}/propostas`, { query: "ordenacao-propostas=P", captcha: false });
+        const lido = lerItemComPropostas(d, cnpj);
+        if (lido.todas.length) return { ...lido, iniciais: false };
+      } catch (e) {
+        if (!naoExiste(e)) throw e;
+      }
       try {
         return { ...lerItemComPropostas(await consultar(`${base}/propostas`), cnpj), iniciais: false };
       } catch (e) {
+        if (!naoExiste(e)) throw e;
         const d = await consultar(`${base}/propostas-iniciais`).catch(() => {
           throw e;
         });
@@ -164,7 +178,8 @@ export function ItemCompras({
     `${compra.chave}:${item.numero}`,
   );
   const nomes = useMemo(() => new Map((dados.dados?.todas ?? []).map((p) => [p.cnpj, p.empresa])), [dados.dados]);
-  const minha = dados.dados?.minha ?? null;
+  // Reserva: a sua proposta como veio na lista de itens (aparece na hora, antes da tela do item responder).
+  const minha = dados.dados?.minha ?? (item.propostaBruta ? lerProposta(item.propostaBruta) : null);
   const participantes = dados.dados?.participantes ?? item.participantes;
   const colocacao = minha?.colocacao ?? item.colocacao;
 
@@ -212,11 +227,11 @@ export function ItemCompras({
             </div>
             <div>
               <span>Declarações</span>
-              <strong>ME/EPP: {minha ? (minha.meEpp ? "Sim" : "Não") : "—"}</strong>
+              <strong>ME/EPP: {minha?.meEpp || compra.meEpp ? "Sim" : compra.meEpp === false || minha ? "Não" : "—"}</strong>
             </div>
             <div>
               <span>UF do fornecedor</span>
-              <strong>{minha?.uf || "—"}</strong>
+              <strong>{minha?.uf || compra.uf || "—"}</strong>
             </div>
           </div>
           <p className="texto-fraco pequeno explicacao-chance">{item.explicacao}</p>
@@ -227,7 +242,7 @@ export function ItemCompras({
           ))}
 
           <Secao titulo="Chat" aberta>
-            {() => <Chat compra={compra} item={item} cnpj={cnpj} nomes={nomes} podeEscrever />}
+            {() => <Chat compra={compra} item={item} cnpj={cnpj} nomes={nomes} participante={cnpj} podeEscrever />}
           </Secao>
           <Secao titulo="Proposta" aberta>
             {() => (
@@ -302,11 +317,29 @@ function DadosProposta({ p }: { p: PropostaEmpresa }) {
 
 // ---------- Chat do item ----------
 
-function Chat({ compra, item, cnpj, nomes, empresa, podeEscrever }: { compra: CompraAcomp; item: ItemAcomp; cnpj: string; nomes: Map<string, string>; empresa?: PropostaEmpresa; podeEscrever?: boolean }) {
+/** Chat do item com uma empresa (a sua, em "Minha proposta", ou a de cada colocada, em "Todas as propostas"). */
+function Chat({
+  compra,
+  item,
+  cnpj,
+  nomes,
+  empresa,
+  participante,
+  podeEscrever,
+}: {
+  compra: CompraAcomp;
+  item: ItemAcomp;
+  cnpj: string;
+  nomes: Map<string, string>;
+  empresa?: PropostaEmpresa;
+  participante?: string;
+  podeEscrever?: boolean;
+}) {
+  const de = participante ?? empresa?.cnpj ?? "";
   const carga = useCarga(
     true,
     async () => {
-      const query = `size=300&page=0&legadoAsp=false${empresa ? `&identificadorParticipante=${empresa.cnpj}` : ""}`;
+      const query = `size=300&page=0&legadoAsp=false${de ? `&identificadorParticipante=${de}` : ""}`;
       const r = await pedir({ caminho: `/comprasnet-mensagem/v2/chat/${compra.chave}/itens/${item.numero}`, query, captcha: true });
       const lista = Array.isArray(r.dados) ? r.dados : [];
       return lista
@@ -314,7 +347,7 @@ function Chat({ compra, item, cnpj, nomes, empresa, podeEscrever }: { compra: Co
         .filter((m): m is MensagemAcomp => !!m)
         .sort((a, b) => dataDe(a.dataHora) - dataDe(b.dataHora));
     },
-    `${compra.chave}:${item.numero}:${empresa?.cnpj ?? ""}`,
+    `${compra.chave}:${item.numero}:${de}`,
   );
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);

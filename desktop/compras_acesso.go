@@ -26,6 +26,8 @@ const (
 
 var leiturasPermitidas = []*regexp.Regexp{
 	regexp.MustCompile(ce + `/v1` + cmp + it + `/(?:propostas|propostas-iniciais)$`),
+	regexp.MustCompile(ce + `/v1` + cmp + `/em-selecao-fornecedores/itens/\d{1,5}/propostas$`),
+	regexp.MustCompile(ce + `/v1` + cmp + `/em-selecao-fornecedores/participacoes/` + id + `/itens/\d{1,5}/propostas$`),
 	regexp.MustCompile(ce + `/v1` + cmp + it + `/participacoes/` + id + `/(?:anexos|diligencias|diligencias/` + id + `)$`),
 	regexp.MustCompile(ce + `/v2` + cmp + it + `/participacoes/` + id + `/anexos/` + id + `$`),
 	regexp.MustCompile(ce + `/v2` + cmp + it + `/participacoes/` + id + `/diligencias/anexos-(?:governo|participante)/` + id + `$`),
@@ -37,6 +39,11 @@ var leiturasPermitidas = []*regexp.Regexp{
 	regexp.MustCompile(ce + `/v2` + cmp + it + `/relatorio-diligencias$`),
 	regexp.MustCompile(`^/comprasnet-mensagem/v2/chat/\d{17}/itens/\d{1,5}$`),
 	regexp.MustCompile(`^/comprasnet-disputa/v1` + cmp + it + `/lances(?:/por-participante)?$`),
+	// Cadastro de proposta: a compra, a sua participação, os itens (com a sua proposta) e os textos das declarações.
+	regexp.MustCompile(ce + `/v1` + cmp + `$`),
+	regexp.MustCompile(ce + `/v1` + cmp + `/participacao$`),
+	regexp.MustCompile(ce + `/v1` + cmp + `/itens$`),
+	regexp.MustCompile(ce + `/v1/declaracoes$`),
 }
 
 // Ações do fornecedor (cada uma confirmada pela pessoa na plataforma antes de vir para cá).
@@ -47,12 +54,17 @@ var acoesPermitidas = map[string][]*regexp.Regexp{
 		regexp.MustCompile(`^/comprasnet-fase-externa/v1` + cmp + it + `/intencoes-recurso$`),
 		regexp.MustCompile(`^/comprasnet-fase-externa/v1` + cmp + it + `/recursos$`),
 		regexp.MustCompile(`^/comprasnet-fase-externa/v1` + cmp + it + `/recursos/` + id + `/contrarrazoes$`),
+		regexp.MustCompile(`^/comprasnet-fase-externa/v1` + cmp + `/participacao$`),      // aceitar as declarações
+		regexp.MustCompile(`^/comprasnet-fase-externa/v1` + cmp + it + `/participacao$`), // cadastrar a proposta do item
 	},
-	"PUT": { // concluir o envio do recurso / da contrarrazão
+	"PUT": {
+		regexp.MustCompile(`^/comprasnet-fase-externa/v1` + cmp + `/participacao$`),
+		regexp.MustCompile(`^/comprasnet-fase-externa/v1` + cmp + it + `/participacao$`), // alterar a proposta do item // concluir o envio do recurso / da contrarrazão
 		regexp.MustCompile(`^/comprasnet-fase-externa/v1` + cmp + it + `/recursos$`),
 		regexp.MustCompile(`^/comprasnet-fase-externa/v1` + cmp + it + `/recursos/` + id + `/contrarrazoes$`),
 	},
-	"DELETE": { // excluir um anexo seu / desistir da intenção de recurso
+	"DELETE": { // excluir um anexo seu / a proposta de um item / desistir da intenção de recurso
+		regexp.MustCompile(`^/comprasnet-fase-externa/v1` + cmp + it + `/participacao$`),
 		regexp.MustCompile(`^/comprasnet-fase-externa/v1` + cmp + it + `/participacao/` + id + `/anexos/` + id + `$`),
 		regexp.MustCompile(`^/comprasnet-fase-externa/v1` + cmp + it + `/intencoes-recurso$`),
 		regexp.MustCompile(`^/comprasnet-fase-externa/v1` + cmp + it + `/recursos/` + id + `/arquivos$`),
@@ -105,7 +117,7 @@ func (l *limiteLeituras) permitir() bool {
 	return true
 }
 
-var leiturasPorMinuto = &limiteLeituras{limite: 40}
+var leiturasPorMinuto = &limiteLeituras{limite: 90}
 
 func caminhoPermitido(lista []*regexp.Regexp, caminho string) bool {
 	for _, r := range lista {
@@ -246,6 +258,20 @@ func (m *motor) PedidoCompras(p pedidoCompras) any {
 	if p.Metodo == "GET" && !leiturasPorMinuto.permitir() {
 		return mapa{"erro": "Muitas consultas seguidas ao Compras.gov.br: espere alguns segundos e tente de novo."}
 	}
+	// Direto do aplicativo (rápido, não depende da página); a página só se o direto não chegar ao Compras.gov.br.
+	if r, err := m.pedidoDireto(p); err == nil {
+		if p.Metodo != "GET" {
+			registrarLog("compras: %s %s → %v", p.Metodo, mascararNumeros(p.Caminho), r["status"])
+			if st, _ := r["status"].(int); st >= 200 && st < 300 {
+				m.releCompraDoCaminho(p.Caminho)
+			}
+		}
+		return r
+	} else if !strings.Contains(err.Error(), "bloqueado") && !strings.Contains(err.Error(), "dial tcp") && !strings.Contains(err.Error(), "timeout") {
+		return mapa{"erro": err.Error()}
+	} else {
+		registrarLog("compras: direto falhou (%v); usando a página", err)
+	}
 	s := m.p.sessaoLogada(false)
 	if s == nil {
 		return mapa{"erro": "Entre no Compras.gov.br para ver isso."}
@@ -277,17 +303,7 @@ func (m *motor) PedidoCompras(p pedidoCompras) any {
 	}
 	registrarLog("compras: %s %s → %d", p.Metodo, mascararNumeros(alvo), v.Status)
 	if p.Metodo != "GET" && v.Status >= 200 && v.Status < 300 {
-		// Depois de uma ação, relê a compra no acompanhamento.
-		if partes := strings.Split(p.Caminho, "/"); len(partes) > 4 {
-			for i, x := range partes {
-				if x == "compras" && i+1 < len(partes) {
-					m.acomp.mu.Lock()
-					m.acomp.pedidos = append(m.acomp.pedidos, partes[i+1])
-					m.acomp.mu.Unlock()
-					break
-				}
-			}
-		}
+		m.releCompraDoCaminho(p.Caminho)
 	}
 	if v.Base64 != "" {
 		return mapa{"status": v.Status, "nome": v.Nome, "tipo": v.Tipo, "base64": v.Base64}
@@ -304,4 +320,17 @@ func (m *motor) PedidoCompras(p pedidoCompras) any {
 		resposta["mensagem"] = mensagemErro(json.RawMessage(v.Corpo))
 	}
 	return resposta
+}
+
+// Depois de uma ação, relê a compra no acompanhamento.
+func (m *motor) releCompraDoCaminho(caminho string) {
+	partes := strings.Split(caminho, "/")
+	for i, x := range partes {
+		if x == "compras" && i+1 < len(partes) && chave17.MatchString(partes[i+1]) {
+			m.acomp.mu.Lock()
+			m.acomp.pedidos = append(m.acomp.pedidos, partes[i+1])
+			m.acomp.mu.Unlock()
+			return
+		}
+	}
 }

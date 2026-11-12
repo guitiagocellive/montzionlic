@@ -13,6 +13,13 @@ func TestListaFechadaDoFornecedor(t *testing.T) {
 		{Metodo: "POST", Caminho: "/comprasnet-fase-externa/v1/compras/" + c + "/itens/1/intencoes-recurso", Corpo: []byte(`{"etapaSelecaoFornecedores":"JP"}`)},
 		{Metodo: "POST", Caminho: "/comprasnet-fase-externa/v1/compras/" + c + "/itens/1/participacao/12345678000199/anexos", Arquivo: &arquivoEnvio{Nome: "proposta.pdf", Base64: "JVBERg=="}},
 		{Metodo: "GET", URL: "https://storage.estaleiro.serpro.gov.br/objetos/abc.pdf"},
+		{Metodo: "GET", Caminho: "/comprasnet-fase-externa/v1/compras/" + c},
+		{Metodo: "GET", Caminho: "/comprasnet-fase-externa/v1/compras/" + c + "/itens", Captcha: true, Query: "pagina=0&tamanhoPagina=100"},
+		{Metodo: "GET", Caminho: "/comprasnet-fase-externa/v1/declaracoes", Query: "fundamentoLegal=LEI_14133%20art75"},
+		{Metodo: "POST", Caminho: "/comprasnet-fase-externa/v1/compras/" + c + "/participacao", Corpo: []byte(`{"declaracaoMeEpp":true}`)},
+		{Metodo: "POST", Caminho: "/comprasnet-fase-externa/v1/compras/" + c + "/itens/2/participacao", Corpo: []byte(`{"valor":10}`)},
+		{Metodo: "PUT", Caminho: "/comprasnet-fase-externa/v1/compras/" + c + "/itens/2/participacao", Corpo: []byte(`{"valor":9}`)},
+		{Metodo: "DELETE", Caminho: "/comprasnet-fase-externa/v1/compras/" + c + "/itens/2/participacao"},
 	}
 	for _, p := range pode {
 		if err := validarPedido(&p, base); err != nil {

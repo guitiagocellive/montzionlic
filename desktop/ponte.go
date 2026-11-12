@@ -519,6 +519,7 @@ func (p *ponte) atender(sessao, payload string) {
 		IDs       []int64               `json:"ids"`
 		Texto     string                `json:"texto"`
 		Pedido    pedidoCompras         `json:"pedido"`
+		Desde     int                   `json:"desde"`
 	}
 	if json.Unmarshal([]byte(payload), &pedido) != nil {
 		return
@@ -539,7 +540,7 @@ func (p *ponte) atender(sessao, payload string) {
 	case "diagnostico":
 		resposta = mapa{"texto": diagnostico()}
 	case "acompanhamento":
-		resposta = p.motor.Acompanhamento(pedido.Compra, pedido.Atualizar)
+		resposta = p.motor.Acompanhamento(pedido.Compra, pedido.Atualizar, pedido.Desde)
 	case "fornecedor":
 		resposta = p.motor.PedidoCompras(pedido.Pedido)
 	case "mensagem":
