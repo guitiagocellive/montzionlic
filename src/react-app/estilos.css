@@ -12827,3 +12827,46 @@ p.etapa-fechada {
   gap: 8px;
   flex-wrap: wrap;
 }
+
+/* ---------- Um clique: proposta já cadastrada ---------- */
+.botao-um-clique.cadastrada {
+  border-color: color-mix(in oklab, var(--verde) 45%, transparent);
+  background: color-mix(in oklab, var(--verde) 12%, transparent);
+}
+.botao-um-clique.cadastrada:hover {
+  background: var(--verde);
+  color: #04130a;
+}
+.card-um-clique {
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.card-um-clique .chip.pequeno {
+  font-size: 0.68rem;
+  padding: 2px 8px;
+  margin-right: auto;
+}
+.botao-retirar {
+  display: inline-grid;
+  place-items: center;
+  margin-left: 8px;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 1px solid var(--borda);
+  background: transparent;
+  color: var(--texto-fraco);
+  cursor: pointer;
+  vertical-align: middle;
+}
+.botao-retirar:hover:not(:disabled) {
+  color: var(--vermelho);
+  border-color: color-mix(in oklab, var(--vermelho) 50%, transparent);
+}
+.botao.perigo {
+  color: var(--vermelho);
+}
+.tabela-um-clique tr.retirada td {
+  opacity: 0.6;
+}

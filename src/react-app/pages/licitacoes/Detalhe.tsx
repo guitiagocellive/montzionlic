@@ -299,10 +299,17 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
         <div className="ficha-principal">
           {ehDoCompras(l) && !["perdida", "ganha"].includes(l.etapa) && (
             <div className="faixa-um-clique">
-              <span>
-                <strong>Cadastro com um clique</strong> · a plataforma acha esta compra no Compras.gov.br e monta a proposta com os itens do orçamento.
-              </span>
-              <BotaoUmClique licitacaoId={l.id} />
+              {l.compras_cadastrado_em ? (
+                <span>
+                  <strong className="texto-verde">Proposta cadastrada no Compras.gov.br</strong> · {l.compras_itens ?? 0} item(ns), em{" "}
+                  {new Date(l.compras_cadastrado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}. Dá para alterar valores ou retirar itens por aqui.
+                </span>
+              ) : (
+                <span>
+                  <strong>Cadastro com um clique</strong> · a plataforma acha esta compra no Compras.gov.br e monta a proposta com os itens do orçamento.
+                </span>
+              )}
+              <BotaoUmClique licitacaoId={l.id} cadastrada={!!l.compras_cadastrado_em} aoFechar={carregar} />
             </div>
           )}
           <PainelEtapa

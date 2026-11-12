@@ -254,6 +254,10 @@ export interface LicitacaoResumo {
   data_reabertura: string | null;
   hora_reabertura: string | null;
   pncp_id: string | null;
+  link?: string | null;
+  /** Proposta cadastrada no Compras.gov.br pela plataforma: quando e quantos itens (null = não cadastrada). */
+  compras_cadastrado_em?: string | null;
+  compras_itens?: number | null;
 }
 
 export interface Licitacao {
@@ -285,6 +289,8 @@ export interface Licitacao {
   situacao_disputa: string | null;
   data_reabertura: string | null;
   hora_reabertura: string | null;
+  compras_cadastrado_em?: string | null;
+  compras_itens?: number | null;
   criado_em: string;
   atualizado_em: string;
 }

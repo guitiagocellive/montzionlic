@@ -125,7 +125,7 @@ export function QuadroLicitacoes({ usuario }: { usuario: Usuario }) {
               const total = cards.reduce((s, c) => s + (c.valor_estimado ?? 0), 0);
               return total > 0 ? <div className="coluna-rodape">{formatarMoeda(total)} estimados</div> : null;
             }}
-            renderCard={(l) => <CardLicitacao l={l} hoje={hoje} />}
+            renderCard={(l) => <CardLicitacao l={l} hoje={hoje} aoMudar={carregar} />}
           />
         </div>
       )}
@@ -144,7 +144,7 @@ export function QuadroLicitacoes({ usuario }: { usuario: Usuario }) {
 const valorCurto = (v: number) =>
   v >= 1_000_000 ? `R$ ${(v / 1_000_000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mi` : v >= 1000 ? `R$ ${Math.round(v / 1000)} mil` : formatarMoeda(v);
 
-function CardLicitacao({ l, hoje }: { l: LicitacaoResumo; hoje: string }) {
+function CardLicitacao({ l, hoje, aoMudar }: { l: LicitacaoResumo; hoje: string; aoMudar: () => void }) {
   const ativa = !["perdida", "ganha"].includes(l.etapa);
   const reaberta = ativa && !!l.data_reabertura && l.data_reabertura >= hoje;
   const data = reaberta ? l.data_reabertura : l.data_sessao;
@@ -205,9 +205,10 @@ function CardLicitacao({ l, hoje }: { l: LicitacaoResumo; hoje: string }) {
         </div>
         {l.valor_estimado != null && l.valor_estimado > 0 && <span className="card-valor">{valorCurto(l.valor_estimado)}</span>}
       </div>
-      {ativa && l.total_cotacoes > 0 && ehDoCompras(l) && (
+      {ativa && (l.total_cotacoes > 0 || !!l.compras_cadastrado_em) && ehDoCompras(l) && (
         <div className="card-um-clique">
-          <BotaoUmClique licitacaoId={l.id} compacto />
+          {l.compras_cadastrado_em && <span className="chip verde pequeno">Proposta no Compras · {l.compras_itens ?? 0} item(ns)</span>}
+          <BotaoUmClique licitacaoId={l.id} compacto cadastrada={!!l.compras_cadastrado_em} aoFechar={aoMudar} />
         </div>
       )}
     </>

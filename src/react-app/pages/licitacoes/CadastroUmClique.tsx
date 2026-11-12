@@ -1,11 +1,12 @@
 import { ErroCompras } from "../../robo/ErroCompras";
-import { CircleAlert, ExternalLink, Loader2, Send, Zap } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { CircleAlert, ExternalLink, Loader2, Pencil, Save, Send, Trash2, Zap } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Licitacao, RascunhoProposta } from "../../../shared/tipos";
 import { api, mensagemDeErro } from "../../api";
 import { avisar, Modal } from "../../components/Ui";
 import { formatarMoeda } from "../../formato";
 import { temPonte } from "../../robo/ponte";
+import { pedir } from "./ItemCompras";
 import { CadastroProposta, Declaracoes } from "./CadastroProposta";
 import {
   buscarCompras,
@@ -14,6 +15,7 @@ import {
   type CompraCarregada,
   type CompraEncontrada,
   enviarProposta,
+  FE,
   type ItemProposta,
   paraNumero,
   prazoEncerrado,
@@ -41,9 +43,14 @@ interface Linha {
   modelo: string;
   origem: string;
   aviso: string;
-  status: "" | "enviando" | "ok" | "erro";
+  status: "" | "enviando" | "ok" | "erro" | "retirada";
   erro: string;
+  /** Valores como estão no Compras.gov.br (só nos itens já cadastrados): mudou → marca para salvar a alteração. */
+  orig: string;
 }
+
+const assinatura = (x: Pick<Linha, "valor" | "quantidade" | "marca" | "modelo">) =>
+  [paraNumero(x.valor), paraNumero(x.quantidade), x.marca.trim(), x.modelo.trim()].join("|");
 
 /**
  * Monta as linhas: casa cada item do Compras.gov.br com o item da licitação (pelo número). O valor é o de
@@ -69,6 +76,7 @@ export function montarLinhas(
       aviso: "",
       status: "",
       erro: "",
+      orig: "",
     };
     if (it.proposta) {
       linha.valor = textoValor(it.proposta.valor);
@@ -77,7 +85,8 @@ export function montarLinhas(
       linha.quantidade = textoNumero(
         it.proposta.quantidade ?? it.quantidade ?? s.quantidade,
       );
-      linha.origem = "Já cadastrada";
+      linha.origem = "Cadastrada no Compras.gov.br";
+      linha.orig = assinatura(linha);
     }
     if (it.grupo) return { ...linha, valor: "", origem: it.nomeGrupo };
     if (!s.noQuadro)
@@ -108,7 +117,7 @@ export function montarLinhas(
         ? `O grupo precisa de todos os itens. Item ${problema.item.numero}: ${problema.aviso || "sem valor"}`
         : "";
     g.origem = cadastrados
-      ? `${g.item.nomeGrupo} · já cadastrado`
+      ? `${g.item.nomeGrupo} · cadastrado no Compras.gov.br`
       : `${g.item.nomeGrupo} · ${dele.length} itens: a proposta vai em cada um` +
         (g.item.referencia.tipo === "valor"
           ? ` · referência do grupo ${formatarMoeda(g.item.referencia.valor)}`
@@ -196,6 +205,7 @@ export function CadastroUmClique({
         if (!vivo) return;
         setCompra(c);
         setLinhas(montarLinhas(c.itens, ficha, rascunho));
+        sincronizar(c.itens.filter((x) => !x.grupo && x.proposta).length);
         // Guarda o link da compra na licitação (da próxima vez abre direto).
         if (!chaveDoLink(ficha.licitacao.link)) {
           api(`/licitacoes/${ficha.licitacao.id}`, {
@@ -239,6 +249,69 @@ export function CadastroUmClique({
 
   const mudar = (i: number, n: Partial<Linha>) =>
     setLinhas((ls) => ls.map((x, j) => (j === i ? { ...x, ...n } : x)));
+  // Editar um campo: num item já cadastrado, marca sozinho para "salvar alteração" quando muda do que está lá.
+  const editar = (i: number, n: Partial<Pick<Linha, "valor" | "quantidade" | "marca" | "modelo">>) =>
+    setLinhas((ls) =>
+      ls.map((x, j) => {
+        if (j !== i) return x;
+        const novo = { ...x, ...n };
+        return x.item.proposta ? { ...novo, marcado: assinatura(novo) !== x.orig, status: novo.status === "ok" ? "" : novo.status } : novo;
+      }),
+    );
+  const cadastradas = linhas.filter((x) => !x.item.grupo && x.item.proposta);
+  const jaCadastrada = cadastradas.length > 0;
+  const novas = marcadas.filter((x) => !x.item.proposta);
+  const alteradas = marcadas.filter((x) => x.item.proposta);
+  const textoBotao =
+    alteradas.length && !novas.length
+      ? `Salvar ${alteradas.length} ${alteradas.length === 1 ? "alteração" : "alterações"}`
+      : novas.length && !alteradas.length
+        ? `Cadastrar ${novas.length} ${novas.length === 1 ? "item" : "itens"}`
+        : marcadas.length
+          ? `Enviar ${marcadas.length} itens (${novas.length} novos, ${alteradas.length} alterados)`
+          : jaCadastrada
+            ? "Nada alterado"
+            : "Cadastrar itens";
+
+  const sincronizando = useRef<Promise<unknown> | null>(null);
+  // Fecha só depois de salvar a situação na licitação (o quadro recarrega já com "Alterar no Compras").
+  const fechar = () => void Promise.resolve(sincronizando.current).finally(aoFechar);
+  // Guarda na licitação do quadro se há proposta no Compras.gov.br (o card mostra "Alterar no Compras").
+  const sincronizar = useCallback(
+    (qtd: number) => {
+      if (!ficha) return;
+      const tinha = ficha.licitacao.compras_itens ?? 0;
+      if (tinha === qtd && (qtd > 0) === !!ficha.licitacao.compras_cadastrado_em) return;
+      ficha.licitacao.compras_itens = qtd;
+      ficha.licitacao.compras_cadastrado_em = qtd > 0 ? new Date().toISOString() : null;
+      sincronizando.current = api(`/licitacoes/${ficha.licitacao.id}`, { metodo: "PATCH", corpo: { compras_itens: qtd, compras_cadastrado_em: qtd > 0 ? new Date().toISOString() : null } }).catch(() => {});
+    },
+    [ficha],
+  );
+
+  async function retirar(alvos: number[], texto: string) {
+    if (!window.confirm(texto)) return;
+    setEnviando(true);
+    let ok = 0;
+    for (const i of alvos) {
+      const x = linhas[i];
+      mudar(i, { status: "enviando", erro: "" });
+      try {
+        await pedir({ metodo: "DELETE", caminho: `${FE}/v1/compras/${chave}/itens/${x.item.numero}/participacao` });
+        mudar(i, { status: "retirada", marcado: false, item: { ...x.item, proposta: null }, origem: "Retirada do Compras.gov.br", orig: "" });
+        ok++;
+      } catch (e) {
+        mudar(i, { status: "erro", erro: mensagemDeErro(e) });
+      }
+    }
+    setEnviando(false);
+    setLinhas((ls) => {
+      sincronizar(ls.filter((x) => !x.item.grupo && x.item.proposta).length);
+      return ls;
+    });
+    avisar(ok === alvos.length ? `${ok} item(ns) retirado(s) do Compras.gov.br.` : `${ok} de ${alvos.length} retirado(s). Veja os erros na lista.`, ok === alvos.length ? "sucesso" : "erro");
+  }
+  const indicesCadastrados = (filtro: (x: Linha) => boolean) => linhas.map((x, i) => (filtro(x) && !x.item.grupo && x.item.proposta ? i : -1)).filter((i) => i >= 0);
   // Marcar/desmarcar o grupo marca/desmarca todos os itens dele juntos.
   const marcarGrupo = (grupo: number, marcado: boolean) =>
     setLinhas((ls) =>
@@ -263,7 +336,7 @@ export function CadastroUmClique({
       .join("\n");
     if (
       !window.confirm(
-        `Cadastrar ${marcadas.length} item(ns) no Compras.gov.br?\n\n${resumo}\n\nTotal: ${formatarMoeda(total)}`,
+        `${alteradas.length && !novas.length ? "Alterar" : "Cadastrar"} ${marcadas.length} item(ns) no Compras.gov.br?\n\n${resumo}\n\nTotal: ${formatarMoeda(total)}`,
       )
     )
       return;
@@ -274,17 +347,23 @@ export function CadastroUmClique({
       if (!x.marcado) continue;
       mudar(i, { status: "enviando", erro: "" });
       try {
-        await enviarProposta(chave, x.item, dadosDe(x));
-        mudar(i, { status: "ok", marcado: false });
+        const d = dadosDe(x);
+        await enviarProposta(chave, x.item, d);
+        const item = { ...x.item, proposta: { valor: d.valor, quantidade: d.quantidade, marca: d.marca, modelo: d.modelo, pais: x.item.proposta?.pais ?? "BRA", margem: x.item.proposta?.margem ?? "0" } };
+        mudar(i, { status: "ok", marcado: false, item, origem: x.item.proposta ? "Alterada no Compras.gov.br" : "Cadastrada no Compras.gov.br", orig: assinatura(x) });
         ok++;
       } catch (e) {
         mudar(i, { status: "erro", erro: mensagemDeErro(e) });
       }
     }
     setEnviando(false);
+    setLinhas((ls) => {
+      sincronizar(ls.filter((y) => !y.item.grupo && y.item.proposta).length);
+      return ls;
+    });
     avisar(
       ok === marcadas.length
-        ? `${ok} item(ns) cadastrado(s) no Compras.gov.br.`
+        ? `${ok} item(ns) ${alteradas.length && !novas.length ? "alterado(s)" : "enviado(s)"} no Compras.gov.br.`
         : `${ok} de ${marcadas.length} cadastrado(s). Veja os erros na lista.`,
       ok === marcadas.length ? "sucesso" : "erro",
     );
@@ -308,8 +387,8 @@ export function CadastroUmClique({
 
   return (
     <Modal
-      titulo={`Cadastrar no Compras.gov.br · ${titulo}`}
-      aoFechar={aoFechar}
+      titulo={`${jaCadastrada ? "Alterar proposta no Compras.gov.br" : "Cadastrar no Compras.gov.br"} · ${titulo}`}
+      aoFechar={fechar}
       largo
     >
       <style>{".modal.largo:has(.um-clique){max-width:1180px}"}</style>
@@ -394,11 +473,13 @@ export function CadastroUmClique({
               <section className="itens-proposta">
                 <div className="lista-compras-topo">
                   <h3>
-                    <Zap size={16} /> Proposta montada pelo orçamento
+                    {jaCadastrada ? <Pencil size={16} /> : <Zap size={16} />}{" "}
+                    {jaCadastrada ? "Proposta cadastrada no Compras.gov.br" : "Proposta montada pelo orçamento"}
                   </h3>
                   <span className="texto-suave pequeno">
-                    Confira, ajuste se precisar e confirme. Itens com aviso
-                    ficam desmarcados.
+                    {jaCadastrada
+                      ? "Mude o valor, a marca ou o modelo e salve a alteração, ou retire itens da proposta."
+                      : "Confira, ajuste se precisar e confirme. Itens com aviso ficam desmarcados."}
                   </span>
                 </div>
                 <div className="tabela-um-clique">
@@ -418,11 +499,7 @@ export function CadastroUmClique({
                     <tbody>
                       {linhas.map((x, i) => {
                         const d = dadosDe(x);
-                        const bloqueado =
-                          x.item.grupo ||
-                          enviando ||
-                          encerrado ||
-                          x.status === "ok";
+                        const bloqueado = x.item.grupo || enviando || encerrado;
                         if (x.item.grupo)
                           return (
                             <tr
@@ -459,6 +536,22 @@ export function CadastroUmClique({
                               </td>
                               <td className="col-total">
                                 {formatarMoeda(totalGrupo(x.item.numero))}
+                                {linhas.some((y) => y.item.grupoDe === x.item.numero && y.item.proposta) && (
+                                  <button
+                                    className="botao-retirar"
+                                    disabled={enviando || encerrado}
+                                    onClick={() =>
+                                      retirar(
+                                        indicesCadastrados((y) => y.item.grupoDe === x.item.numero),
+                                        `Retirar o ${x.item.nomeGrupo} (todos os itens dele) da proposta no Compras.gov.br?`,
+                                      )
+                                    }
+                                    title="Retirar o grupo da proposta"
+                                    aria-label={`Retirar o ${x.item.nomeGrupo}`}
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                )}
                               </td>
                             </tr>
                           );
@@ -486,12 +579,8 @@ export function CadastroUmClique({
                               </strong>
                               <span className="pequeno texto-fraco">
                                 {x.origem}
-                                {x.status === "ok" && (
-                                  <span className="texto-verde">
-                                    {" "}
-                                    · Cadastrado
-                                  </span>
-                                )}
+                                {x.status === "ok" && <span className="texto-verde"> · Enviado agora</span>}
+                                {x.item.proposta && x.marcado && x.status !== "enviando" && <span className="texto-amarelo"> · alteração a salvar</span>}
                                 {x.status === "enviando" && " · Enviando…"}
                               </span>
                               {x.aviso && (
@@ -526,7 +615,7 @@ export function CadastroUmClique({
                                 <input
                                   value={x.valor}
                                   onChange={(e) =>
-                                    mudar(i, { valor: e.target.value })
+                                    editar(i, { valor: e.target.value })
                                   }
                                   inputMode="decimal"
                                   disabled={bloqueado}
@@ -539,7 +628,7 @@ export function CadastroUmClique({
                                 <input
                                   value={x.quantidade}
                                   onChange={(e) =>
-                                    mudar(i, { quantidade: e.target.value })
+                                    editar(i, { quantidade: e.target.value })
                                   }
                                   inputMode="decimal"
                                   disabled={bloqueado}
@@ -558,7 +647,7 @@ export function CadastroUmClique({
                                   <input
                                     value={x.marca}
                                     onChange={(e) =>
-                                      mudar(i, { marca: e.target.value })
+                                      editar(i, { marca: e.target.value })
                                     }
                                     disabled={bloqueado}
                                     aria-label={`Marca do item ${x.item.numero}`}
@@ -574,7 +663,7 @@ export function CadastroUmClique({
                                   <input
                                     value={x.modelo}
                                     onChange={(e) =>
-                                      mudar(i, { modelo: e.target.value })
+                                      editar(i, { modelo: e.target.value })
                                     }
                                     disabled={bloqueado}
                                     aria-label={`Modelo do item ${x.item.numero}`}
@@ -590,6 +679,17 @@ export function CadastroUmClique({
                                 : d.valor
                                   ? formatarMoeda(totalDe(x))
                                   : "—"}
+                              {x.item.proposta && x.item.grupoDe == null && (
+                                <button
+                                  className="botao-retirar"
+                                  disabled={enviando || encerrado}
+                                  onClick={() => retirar([i], `Retirar o item ${x.item.numero} da proposta no Compras.gov.br?`)}
+                                  title="Retirar este item da proposta"
+                                  aria-label={`Retirar o item ${x.item.numero}`}
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
                             </td>
                           </tr>
                         );
@@ -608,8 +708,21 @@ export function CadastroUmClique({
                     onClick={() => setVerCompleto(true)}
                   >
                     <ExternalLink size={14} /> Abrir o cadastro completo
-                    (anexos, declarações)
                   </button>
+                  {jaCadastrada && (
+                    <button
+                      className="botao secundario pequeno perigo"
+                      disabled={enviando || encerrado}
+                      onClick={() =>
+                        retirar(
+                          indicesCadastrados(() => true),
+                          `Retirar a proposta INTEIRA (${cadastradas.length} item(ns)) do Compras.gov.br?\n\nAs declarações continuam aceitas; dá para cadastrar de novo até o fim do prazo.`,
+                        )
+                      }
+                    >
+                      <Trash2 size={14} /> Retirar a proposta
+                    </button>
+                  )}
                   <div>
                     {problemas.length > 0 && (
                       <span className="texto-vermelho pequeno">
@@ -627,9 +740,7 @@ export function CadastroUmClique({
                         encerrado
                       }
                     >
-                      {enviando ? <Loader2 className="girando" /> : <Send />}{" "}
-                      Confirmar e cadastrar {marcadas.length || ""}{" "}
-                      {marcadas.length === 1 ? "item" : "itens"}
+                      {enviando ? <Loader2 className="girando" /> : alteradas.length && !novas.length ? <Save /> : <Send />} {textoBotao}
                     </button>
                   </div>
                 </div>
@@ -704,24 +815,29 @@ export function ehDoCompras(l: {
 export function BotaoUmClique({
   licitacaoId,
   compacto = false,
+  cadastrada = false,
+  aoFechar,
 }: {
   licitacaoId: number;
   compacto?: boolean;
+  /** Já há proposta no Compras.gov.br: o botão vira "Alterar". */
+  cadastrada?: boolean;
+  aoFechar?: () => void;
 }) {
   const [aberto, setAberto] = useState(false);
   return (
     <>
       <button
-        className={compacto ? "botao-um-clique" : "botao acento"}
+        className={`${compacto ? "botao-um-clique" : cadastrada ? "botao secundario" : "botao acento"} ${cadastrada ? "cadastrada" : ""}`}
         onClick={(e) => {
           e.stopPropagation();
           setAberto(true);
         }}
         onKeyDown={(e) => e.stopPropagation()}
-        title="Cadastrar a proposta no Compras.gov.br com os itens do orçamento"
+        title={cadastrada ? "Proposta já cadastrada no Compras.gov.br: alterar ou retirar" : "Cadastrar a proposta no Compras.gov.br com os itens do orçamento"}
       >
-        <Zap size={compacto ? 13 : 16} />{" "}
-        {compacto ? "Cadastrar" : "Cadastrar no Compras.gov.br"}
+        {cadastrada ? <Pencil size={compacto ? 13 : 16} /> : <Zap size={compacto ? 13 : 16} />}{" "}
+        {cadastrada ? (compacto ? "Alterar no Compras" : "Alterar proposta no Compras.gov.br") : compacto ? "Cadastrar" : "Cadastrar no Compras.gov.br"}
       </button>
       {aberto && (
         <span
@@ -730,7 +846,10 @@ export function BotaoUmClique({
         >
           <CadastroUmClique
             licitacaoId={licitacaoId}
-            aoFechar={() => setAberto(false)}
+            aoFechar={() => {
+              setAberto(false);
+              aoFechar?.();
+            }}
           />
         </span>
       )}

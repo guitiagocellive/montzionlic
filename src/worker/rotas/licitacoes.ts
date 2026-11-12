@@ -48,6 +48,8 @@ const ESQUEMA_LICITACAO: Esquema = {
   data_resultado: "data",
   motivo_perda: "texto",
   observacao_resultado: "textoLongo",
+  compras_cadastrado_em: "texto",
+  compras_itens: "inteiro",
 };
 
 const ESQUEMA_ITEM: Esquema = {
@@ -81,6 +83,7 @@ const ESQUEMA_COTACAO: Esquema = {
 interface Licitacao {
   id: number;
   etapa: string;
+  compras_cadastrado_em?: string | null;
   registro_preco: number;
   imposto_percentual: number;
   lucro_percentual: number;
@@ -188,6 +191,7 @@ rotasLicitacoes.get("/", async (c) => {
             (SELECT COUNT(*) FROM licitacao_itens i WHERE i.licitacao_id = l.id AND i.resultado = 'perdido') AS itens_perdidos,
             (SELECT COUNT(*) FROM licitacao_itens i WHERE i.licitacao_id = l.id AND i.resultado = 'acompanhando') AS itens_acompanhando,
             l.acompanhar, l.colocacao, l.data_reabertura, l.hora_reabertura, l.pncp_id,
+            l.link, l.compras_cadastrado_em, l.compras_itens,
             (SELECT COUNT(*) FROM arquivos a WHERE a.licitacao_id = l.id) AS total_arquivos,
             (SELECT COUNT(*) FROM cotacoes ct WHERE ct.licitacao_id = l.id) AS total_cotacoes
        FROM licitacoes l
@@ -327,8 +331,13 @@ rotasLicitacoes.patch("/:id", async (c) => {
   if (("lucro_percentual" in corpo && corpo.lucro_percentual !== atual.lucro_percentual) || ("imposto_percentual" in corpo && corpo.imposto_percentual !== atual.imposto_percentual)) {
     eventos.push(`ajustou margem/impostos para ${corpo.lucro_percentual ?? atual.lucro_percentual}% / ${corpo.imposto_percentual ?? atual.imposto_percentual}%`);
   }
+  if ("compras_itens" in corpo) {
+    const n = Number(corpo.compras_itens) || 0;
+    eventos.push(n > 0 ? `${atual.compras_cadastrado_em ? "alterou" : "cadastrou"} a proposta no Compras.gov.br (${n} item(ns))` : "retirou a proposta do Compras.gov.br");
+  }
   const outros = Object.keys(corpo).filter(
-    (k) => !["etapa", "posicao", "data_sessao", "motivo_perda", "observacao_resultado", "data_resultado", "lucro_percentual", "imposto_percentual", "responsavel_id"].includes(k),
+    (k) =>
+      !["etapa", "posicao", "data_sessao", "motivo_perda", "observacao_resultado", "data_resultado", "lucro_percentual", "imposto_percentual", "responsavel_id", "compras_cadastrado_em", "compras_itens", "link"].includes(k),
   );
   if (outros.length > 0) eventos.push("atualizou os dados da licitação");
   await c.env.DB.batch([comando, ...eventos.map((t) => comandoEvento(c.env.DB, { licitacao_id: id }, usuario.id, t))]);
