@@ -1,9 +1,9 @@
 {
-  "versao": "3.0.5",
+  "versao": "3.0.6",
   "data": "2026-11-11",
   "novidades": [
-    "Robô: funciona com a Área de Trabalho nova do Compras.gov.br (tela verde, login com certificado digital): pede a chave da sala com a sessão dela e entra direto, ou clica em \"Dispensas e Pregões\".",
-    "Robô: avisa quando o portal pede para escolher a empresa/perfil.",
+    "Robô: corrigido o travamento em \"Entrando na sala de disputa\" — o aviso do Sicaf que o portal abre depois do login tomava o lugar da página; agora o aviso é ignorado e o robô clica em \"Dispensas e Pregões\" sozinho.",
+    "Robô: funciona com a Área de Trabalho nova (tela verde) e avisa quando o portal pede para escolher a empresa.",
     "Página Disputas: botão \"Copiar diagnóstico\" para mandar ao suporte."
   ]
 }

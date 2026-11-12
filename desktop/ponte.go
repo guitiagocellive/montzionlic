@@ -67,7 +67,8 @@ type ponte struct {
 	tentouSala        map[string]time.Time // portal -> última vez que a ponte tentou abrir a sala de disputa
 	tentativas        map[string]int       // portal -> quantas vezes tentou (alterna entre os itens mais prováveis do menu)
 	portalPedeEscolha bool                 // a página do portal pede para escolher empresa/perfil
-	menuVisto         map[string]bool      // endereços do portal cujo menu já foi anotado no registro
+	voltouDoAviso     map[string]time.Time
+	menuVisto         map[string]bool // endereços do portal cujo menu já foi anotado no registro
 	// Janela própria do aplicativo: abre/foca a janela nativa do Compras.gov.br (nil = aba do navegador).
 	abrirCompras func() bool
 	// Esconde a janela do Compras.gov.br depois do login (nil = não dá para esconder).
@@ -82,7 +83,7 @@ var (
 )
 
 func novaPonte(cfg configPonte, cdp *clienteCDP) *ponte {
-	p := &ponte{cfg: cfg, cdp: cdp, alvos: map[string]*sessaoAlvo{}, ligando: map[string]bool{}, pedidos: map[string]bool{}, novaLista: make(chan struct{}, 1), tentouSala: map[string]time.Time{}, tentativas: map[string]int{}, menuVisto: map[string]bool{}}
+	p := &ponte{cfg: cfg, cdp: cdp, alvos: map[string]*sessaoAlvo{}, ligando: map[string]bool{}, pedidos: map[string]bool{}, novaLista: make(chan struct{}, 1), tentouSala: map[string]time.Time{}, tentativas: map[string]int{}, menuVisto: map[string]bool{}, voltouDoAviso: map[string]time.Time{}}
 	p.motor = novoMotor(p)
 	return p
 }
@@ -649,6 +650,9 @@ func (p *ponte) executar(tipo, compra string, item int, valor float64, fase stri
 
 var areaTrabalho = regexp.MustCompile(`/comprasnet-area-trabalho-web/`)
 
+// Pop-ups de aviso do portal (ex.: www.comprasnet.gov.br/popup/popup.asp, sobre o Sicaf).
+var popupDeAviso = regexp.MustCompile(`(?i)/popup/|popup\.asp`)
+
 // Na Área de Trabalho nova, o card "Dispensas e Pregões" pede ao servidor uma chave da sala (compras-id)
 // com a sessão da própria Área de Trabalho e abre a sala com ela. A ponte faz o mesmo pedido.
 const scriptChaveAreaTrabalho = `(async () => {
@@ -676,7 +680,12 @@ const scriptMenuPortal = `(() => {
     // A sala de disputa precisa receber a sessão do portal (às vezes por formulário). Abrir em janela nova
     // perde esses dados no aplicativo: tudo passa a abrir na própria janela.
     try {
-      w.open = (u) => { window.top.location.href = new URL(String(u || ""), w.location.href).href; return null; };
+      w.open = (u) => {
+        const alvo = new URL(String(u || ""), w.location.href).href;
+        if (!u || /\/popup\/|popup\.asp/i.test(alvo)) return null; // aviso do portal: ignora
+        window.top.location.href = alvo;
+        return null;
+      };
       for (const f of d.forms) f.target = "_top";
       for (const a of d.querySelectorAll("a[target]")) a.target = "_top";
     } catch (e) {}
@@ -775,6 +784,24 @@ func (p *ponte) abrirSalaPeloPortal() bool {
 			continue
 		}
 		logado = true
+		// A janela ficou num aviso do portal (pop-up aberto no lugar da Área de Trabalho): volta para o portal.
+		if popupDeAviso.MatchString(a.url) {
+			p.mu.Lock()
+			voltou := p.voltouDoAviso[a.alvo]
+			if time.Since(voltou) < 5*time.Second {
+				p.mu.Unlock()
+				continue
+			}
+			p.voltouDoAviso[a.alvo] = time.Now()
+			p.mu.Unlock()
+			destino := "/intro.htm"
+			if u, err := url.Parse(a.url); err == nil {
+				destino = u.Scheme + "://" + u.Host + "/intro.htm"
+			}
+			registrarLog("ponte: a janela ficou no aviso do portal; voltando para %s", semValores(destino))
+			_, _ = p.cdp.Chamar(a.sessao, "Page.navigate", mapa{"url": destino}, 10*time.Second)
+			continue
+		}
 		p.mu.Lock()
 		ultima, vezes := p.tentouSala[a.alvo], p.tentativas[a.alvo]
 		p.mu.Unlock()

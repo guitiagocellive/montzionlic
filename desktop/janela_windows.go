@@ -451,6 +451,13 @@ func (a *aplicativo) ligarWeb(j *janelaWeb) {
 				var p uintptr
 				metodo(args, 3, uintptr(unsafe.Pointer(&p))) // get_Uri
 				endereco := textoCOM(p)
+				// Pop-up de aviso do portal (ex.: /popup/popup.asp sobre o Sicaf): só descarta. Abrir na
+				// mesma janela trocaria a Área de Trabalho pelo aviso e o robô perderia o caminho até a sala.
+				if popupDeAviso.MatchString(endereco) || endereco == "" || strings.HasPrefix(endereco, "about:") {
+					metodo(args, 6, 1) // put_Handled(TRUE), sem abrir
+					registrarLog("janela do Compras: pop-up de aviso ignorado: %s", semValores(endereco))
+					return 0
+				}
 				if u, err := url.Parse(endereco); err == nil && (u.Scheme == "https" || u.Scheme == "http") &&
 					(strings.HasSuffix(u.Hostname(), ".gov.br") || mesmoSite(endereco, a.configura.Compras)) {
 					metodo(args, 6, 1)              // put_Handled(TRUE)
