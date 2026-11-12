@@ -30,30 +30,31 @@ var dllCarregador []byte
 var licencaCarregador []byte
 
 const (
-	classeJanela  = "MontzionJanela"
-	linkWebView2  = "https://go.microsoft.com/fwlink/p/?LinkId=2124703"
-	wmDestroy     = 0x0002
-	wmMove        = 0x0003
-	wmSize        = 0x0005
-	wmSetFocus    = 0x0007
-	wmClose       = 0x0010
-	wmGetMinMax   = 0x0024
-	wmApp         = 0x8000
-	wmAbrirCompra = wmApp + 1
-	wmEsconder    = wmApp + 2
-	wsOverlapped  = 0x00CF0000 // WS_OVERLAPPEDWINDOW
-	cwUseDefault  = 0x80000000
-	swHide        = 0
-	swMaximize    = 3
-	swShow        = 5
-	swRestore     = 9
-	idiApp        = 1 // ícone do grupo 1 (gerar_recursos.py)
-	imageIcon     = 1
-	lrDefaultSize = 0x40
-	lrShared      = 0x8000
-	smCySmIcon    = 50
-	smCxSmIcon    = 49
-	wmSetIcon     = 0x0080
+	classeJanela     = "MontzionJanela"
+	linkWebView2     = "https://go.microsoft.com/fwlink/p/?LinkId=2124703"
+	wmDestroy        = 0x0002
+	wmMove           = 0x0003
+	wmSize           = 0x0005
+	wmSetFocus       = 0x0007
+	wmClose          = 0x0010
+	wmGetMinMax      = 0x0024
+	wmApp            = 0x8000
+	wmAbrirCompra    = wmApp + 1
+	wmEsconder       = wmApp + 2
+	wmRecriarCompras = wmApp + 3
+	wsOverlapped     = 0x00CF0000 // WS_OVERLAPPEDWINDOW
+	cwUseDefault     = 0x80000000
+	swHide           = 0
+	swMaximize       = 3
+	swShow           = 5
+	swRestore        = 9
+	idiApp           = 1 // ícone do grupo 1 (gerar_recursos.py)
+	imageIcon        = 1
+	lrDefaultSize    = 0x40
+	lrShared         = 0x8000
+	smCySmIcon       = 50
+	smCxSmIcon       = 49
+	wmSetIcon        = 0x0080
 )
 
 var (
@@ -85,6 +86,7 @@ var (
 	procGetSystemMetrics    = user32.NewProc("GetSystemMetrics")
 	procFindWindow          = user32.NewProc("FindWindowW")
 	procIsIconic            = user32.NewProc("IsIconic")
+	procIsWindowVisible     = user32.NewProc("IsWindowVisible")
 	procSetForeground       = user32.NewProc("SetForegroundWindow")
 	procShellExecute        = shell32.NewProc("ShellExecuteW")
 	procGetDpiForWindow     = user32.NewProc("GetDpiForWindow")
@@ -273,13 +275,23 @@ func (a *aplicativo) procedimento(hwnd, msg, wParam, lParam uintptr) uintptr {
 		return 0
 	case wmEsconder:
 		if a.compras != nil {
-			procShowWindow.Call(a.compras.hwnd, swHide)
+			a.compras.esconder()
+		}
+		return 0
+	case wmRecriarCompras:
+		// O navegador da janela do Compras.gov.br caiu: fecha a janela morta e abre uma nova (se estava à vista).
+		if a.compras != nil && a.compras.hwnd == hwnd {
+			visivel, _, _ := procIsWindowVisible.Call(hwnd)
+			procDestroyWindow.Call(hwnd)
+			if visivel != 0 {
+				a.abrirCompras()
+			}
 		}
 		return 0
 	case wmClose:
 		if j != nil && j == a.compras {
 			// Fechar a janela do Compras.gov.br só a esconde: o login (que vale só nesta janela) continua.
-			procShowWindow.Call(hwnd, swHide)
+			j.esconder()
 			return 0
 		}
 		procDestroyWindow.Call(hwnd)
@@ -315,6 +327,40 @@ func (a *aplicativo) escala(hwnd uintptr, px int32) int32 {
 		return px
 	}
 	return int32(int64(px) * int64(dpi) / 96)
+}
+
+// esconder: some com a janela e avisa o WebView2 (sem isso, ao voltar ela pode aparecer toda preta).
+func (j *janelaWeb) esconder() {
+	if j.controle != 0 {
+		metodo(j.controle, 4, 0) // put_IsVisible(FALSE)
+	}
+	procShowWindow.Call(j.hwnd, swHide)
+}
+
+// mostrar: traz a janela de volta já redesenhando o conteúdo.
+func (j *janelaWeb) mostrar() {
+	procShowWindow.Call(j.hwnd, swShow)
+	if j.controle != 0 {
+		metodo(j.controle, 4, 1) // put_IsVisible(TRUE)
+		j.ajustar()
+		metodo(j.controle, 23) // NotifyParentWindowPositionChanged
+	}
+	focar(j.hwnd)
+}
+
+// viva: o navegador desta janela ainda responde (get_Source falha quando o processo dele morreu).
+func (j *janelaWeb) viva() bool {
+	if j.controle == 0 || j.web == 0 {
+		return false
+	}
+	var p uintptr
+	if falhou(metodo(j.web, 4, uintptr(unsafe.Pointer(&p)))) { // get_Source
+		return false
+	}
+	if p != 0 {
+		procCoTaskMemFree.Call(p)
+	}
+	return true
 }
 
 func (j *janelaWeb) ajustar() {
@@ -471,6 +517,20 @@ func (a *aplicativo) ligarWeb(j *janelaWeb) {
 				return 0
 			}), uintptr(unsafe.Pointer(&token)))
 		}
+		metodo(web, 25, novoManipulador(func(_, args uintptr) uintptr { // add_ProcessFailed
+			var tipo int32
+			metodo(args, 3, uintptr(unsafe.Pointer(&tipo))) // get_ProcessFailedKind
+			registrarLog("janela %s: o navegador falhou (tipo %d)", map[bool]string{true: "principal", false: "do Compras.gov.br"}[j.principal], tipo)
+			switch tipo {
+			case 1, 2: // a página travou ou caiu: recarrega
+				metodo(web, 31) // Reload
+			case 0: // o processo do navegador saiu: a janela fica preta; a do Compras é recriada
+				if !j.principal {
+					procPostMessage.Call(j.hwnd, wmRecriarCompras, 0, 0)
+				}
+			}
+			return 0
+		}), uintptr(unsafe.Pointer(&token)))
 		metodo(web, 59, novoManipulador(func(_, _ uintptr) uintptr { // add_WindowCloseRequested (window.close())
 			if !j.principal {
 				procPostMessage.Call(j.hwnd, wmClose, 0, 0)
@@ -501,9 +561,14 @@ func (a *aplicativo) ligarWeb(j *janelaWeb) {
 // Abre (ou traz para a frente) a janela do Compras.gov.br, onde a pessoa entra com o gov.br.
 func (a *aplicativo) abrirCompras() {
 	if a.compras != nil {
-		procShowWindow.Call(a.compras.hwnd, swShow)
-		focar(a.compras.hwnd)
-		return
+		if a.compras.controle != 0 && !a.compras.viva() {
+			// Janela sem navegador (aparece preta): descarta e abre outra.
+			registrarLog("janela do Compras.gov.br estava sem navegador; abrindo de novo")
+			procDestroyWindow.Call(a.compras.hwnd)
+		} else {
+			a.compras.mostrar()
+			return
+		}
 	}
 	if a.ambiente == 0 {
 		return

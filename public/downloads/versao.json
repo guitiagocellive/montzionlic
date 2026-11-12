@@ -1,9 +1,9 @@
 {
-  "versao": "3.1.12",
+  "versao": "3.1.13",
   "data": "2026-11-12",
   "novidades": [
-    "Login do gov.br: quando a página abre \"crua\" (sem cores, sem imagens e com o erro do hCaptcha FERL0010000), o aplicativo percebe, limpa o cache do navegador e recarrega sozinho.",
-    "Se continuar quebrada, o \"Copiar diagnóstico\" mostra quais arquivos do gov.br/hCaptcha não carregaram (sinal de antivírus, firewall ou instabilidade do gov.br).",
-    "Cadastro de proposta: valor de referência do órgão; sigiloso e não informado calculados pelo orçamento."
+    "Janela de login do gov.br não abre mais toda preta: ao esconder e mostrar de novo, o aplicativo avisa o navegador interno para redesenhar.",
+    "Se o navegador da janela de login travar ou cair, ela é recarregada (ou aberta de novo) sozinha.",
+    "Página de login \"crua\" (sem cores, com erro do hCaptcha) é recarregada com o cache limpo."
   ]
 }
