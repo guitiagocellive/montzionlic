@@ -19,11 +19,14 @@ export interface ConfigItemRobo {
   tipoDesconto?: "P" | "V";
   /** Cobrir na hora, sem esperar os 10 segundos finais (padrão: espera). */
   naoAguardar: boolean;
-  /** Lances com 4 casas decimais (senão, centavos). */
+  /** Lances com 4 casas decimais (senão, centavos). O robô também liga sozinho quando o edital ou os lances pedem. */
   quatroCasas: boolean;
+  /** Ganhar tempo (só pregão): ganhando, nos 10 s finais dá um lance do intervalo mínimo abaixo do próprio lance para
+   *  prorrogar o cronômetro e cansar os concorrentes; para no mínimo. */
+  ganharTempo?: boolean;
 }
 
-export const ITEM_ROBO_PADRAO: ConfigItemRobo = { ligado: false, minimo: null, desconto: 0, naoAguardar: false, quatroCasas: false };
+export const ITEM_ROBO_PADRAO: ConfigItemRobo = { ligado: false, minimo: null, desconto: 0, naoAguardar: false, quatroCasas: false, ganharTempo: false };
 
 /** Fases do item no Compras.gov.br (FaseItemEnum). */
 export const FASES: Record<string, string> = {
@@ -58,11 +61,19 @@ export interface EstadoItem {
   tipoVariacao: "V" | "P" | null;
   /** Melhor lance de cada concorrente (sem o nosso), pela classificação do item; null = ainda não lida. */
   concorrentes?: number[] | null;
+  /** Ganhar tempo liberado nesta rodada do cronômetro (pregão; um lance por rodada). */
+  podeGanharTempo?: boolean;
+}
+
+/** O edital ou os lances do item têm mais de 2 casas decimais: lances com 4 casas. */
+export function precisaQuatroCasas(estado: Pick<EstadoItem, "variacaoMinima" | "tipoVariacao" | "melhorLance" | "nossoLance">): boolean {
+  const mais = (v: number | null | undefined) => v != null && Math.abs(v * 100 - Math.round(v * 100)) > 1e-6;
+  return (estado.tipoVariacao !== "P" && mais(estado.variacaoMinima)) || mais(estado.melhorLance) || mais(estado.nossoLance);
 }
 
 export type TipoDecisao =
   | "desligado" | "sem-minimo" | "aguardando-fase" | "ganhando" | "aguardando-final" | "lance" | "colocacao"
-  | "melhor-possivel" | "precisa-classificacao" | "no-minimo" | "fechada" | "fechada-manual" | "sem-proposta";
+  | "melhor-possivel" | "precisa-classificacao" | "no-minimo" | "fechada" | "fechada-manual" | "sem-proposta" | "ganhar-tempo";
 
 export interface Decisao {
   acao: "aguardar" | "enviar";
@@ -111,7 +122,15 @@ export function decidir(estado: EstadoItem, item: ConfigItemRobo | undefined): D
     return { acao: "aguardar", tipo: "fechada-manual", motivo: `Etapa fechada: confira e envie o seu lance único (sugestão: ${reais(minimo, q)})` };
   }
 
-  if (estado.situacao === "G") return { acao: "aguardar", tipo: "ganhando", motivo: "Ganhando" };
+  if (estado.situacao === "G") {
+    // Ganhar tempo: lance do intervalo mínimo sobre o próprio lance nos 10 s finais (prorroga o cronômetro do pregão).
+    if (item.ganharTempo && estado.podeGanharTempo && estado.fase === "LA" && estado.restanteSeg != null && estado.restanteSeg <= SEGUNDOS_FINAIS) {
+      const alvo = arredondarAbaixo(estado.nossoLance - passoMinimo(estado.nossoLance, estado, q), q);
+      if (alvo >= minimo && alvo < estado.nossoLance)
+        return { acao: "enviar", tipo: "ganhar-tempo", valor: alvo, motivo: `Ganhando tempo: ${reais(alvo, q)} para prorrogar o cronômetro` };
+    }
+    return { acao: "aguardar", tipo: "ganhando", motivo: "Ganhando" };
+  }
 
   // Espera os 10 segundos finais (no encerramento aleatório não há cronômetro: qualquer segundo pode ser o último).
   if (!item.naoAguardar && estado.fase === "LA" && estado.restanteSeg != null && estado.restanteSeg > SEGUNDOS_FINAIS) {
@@ -194,6 +213,7 @@ export function normalizarItem(bruto: unknown): ConfigItemRobo {
     tipoDesconto,
     naoAguardar: b.naoAguardar === true,
     quatroCasas: b.quatroCasas === true,
+    ganharTempo: b.ganharTempo === true,
   };
 }
 

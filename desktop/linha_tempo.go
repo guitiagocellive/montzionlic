@@ -57,6 +57,9 @@ func marcarMudancasConfig(antes, depois map[string]configItem) {
 		if n.NaoAguardar != a.NaoAguardar {
 			marcarRobo("%s: \"não esperar os 10 s finais\" = %v (robô ligado: %v)%s", rotuloItem(k), n.NaoAguardar, n.Ligado, chegada)
 		}
+		if n.GanharTempo != a.GanharTempo {
+			marcarRobo("%s: \"ganhar tempo\" = %v (robô ligado: %v)%s", rotuloItem(k), n.GanharTempo, n.Ligado, chegada)
+		}
 		if n.QuatroCasas != a.QuatroCasas {
 			marcarRobo("%s: \"4 casas decimais\" = %v (robô ligado: %v)%s", rotuloItem(k), n.QuatroCasas, n.Ligado, chegada)
 		}

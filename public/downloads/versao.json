@@ -1,11 +1,8 @@
 {
-  "versao": "3.1.37",
+  "versao": "3.1.38",
   "data": "2026-11-13",
   "novidades": [
-    "Disputas: botão \"Testar o robô\" logo abaixo do \"Copiar diagnóstico\". Com a sua conta logada, mede cada parte do caminho do lance (página ↔ aplicativo, conexão, resposta do Compras.gov.br, captcha, classificação, relógio), procura erros na configuração dos itens ligados e sugere ajustes. Não envia lance; não roda com item na reta final.",
-    "Relógio: o robô mede a diferença entre o relógio do computador e o do Compras.gov.br e corrige sozinho os \"10 s finais\" (com o relógio do Windows atrasado, o robô entrava tarde).",
-    "Acompanhamento: ao abrir uma licitação, as propostas dos itens são lidas uma de cada vez, indo direto no endereço que funcionou naquela licitação (antes até 4 endereços por item, 2 itens ao mesmo tempo, o que provocava o \"429 – pedidos demais\").",
-    "Freio do 429: vários 429 no mesmo segundo contam como uma vez só (antes um clique levava o freio direto a 2 min). Longe do fim, o robô usa a classificação de até 3 min atrás em vez de travar em \"lendo a classificação\".",
-    "Captcha logo depois do login: a 1ª tentativa presa desiste em 2,5 s (antes 5 s)."
+    "Pregão: nova opção \"Ganhar tempo\". Com você em 1º lugar, nos 10 s finais o robô dá um lance só do intervalo mínimo abaixo do seu próprio lance (ex.: 500,00 → 499,99). O cronômetro do pregão é prorrogado e a disputa se estende, cansando os concorrentes. Um lance por rodada do cronômetro; para no seu mínimo, quando o pregoeiro encerra ou quando a disputa acaba. Não aparece na dispensa, onde o período de lances não é prorrogado.",
+    "Lances com 4 casas decimais agora são automáticos: o robô usa 4 casas sozinho quando o intervalo do edital ou os lances do item têm mais de 2 casas. A caixinha deu lugar ao \"Ganhar tempo\"."
   ]
 }

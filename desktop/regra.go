@@ -25,6 +25,9 @@ type configItem struct {
 	TipoDesconto string   `json:"tipoDesconto"` // "V" = desconto em R$; senão, em %
 	NaoAguardar  bool     `json:"naoAguardar"`  // cobrir na hora, sem esperar os 10 s finais
 	QuatroCasas  bool     `json:"quatroCasas"`
+	// Ganhar tempo (só pregão): ganhando, nos 10 s finais dá um lance do intervalo mínimo abaixo do próprio lance; o
+	// cronômetro é prorrogado e a disputa se estende, cansando os concorrentes. Para no mínimo.
+	GanharTempo bool `json:"ganharTempo"`
 }
 
 type estadoItem struct {
@@ -44,6 +47,9 @@ type estadoItem struct {
 	// O Compras.gov.br recusou um lance intermediário pelo intervalo mínimo: aplica o intervalo também sobre o
 	// lance do concorrente que vamos cobrir (e não só sobre o nosso).
 	PassoNoConcorrente bool
+	// Ganhar tempo liberado nesta rodada do cronômetro: é pregão e o cronômetro voltou a passar dos 10 s finais
+	// desde o último lance para ganhar tempo (um lance por rodada).
+	PodeGanharTempo bool
 }
 
 type decisao struct {
@@ -111,6 +117,19 @@ func passoMinimo(base float64, e estadoItem, quatro bool) float64 {
 	return math.Max(arredondarAcima(v, quatro), menor)
 }
 
+// precisaQuatroCasas: o edital ou os lances do item têm mais de 2 casas decimais (o robô passa a usar 4 casas
+// sozinho, sem depender da caixinha).
+func precisaQuatroCasas(e estadoItem) bool {
+	mais := func(v *float64) bool {
+		if v == nil {
+			return false
+		}
+		x := *v * 100
+		return math.Abs(x-math.Round(x)) > 1e-6
+	}
+	return (e.TipoVariacao != "P" && mais(e.Variacao)) || mais(e.Melhor) || mais(e.Nosso)
+}
+
 // valorDoDesconto: quanto baixar (R$) a partir de um lance, pelo desconto do item (% ou R$, como o edital).
 func valorDoDesconto(base float64, c *configItem) float64 {
 	d := math.Max(c.Desconto, 0)
@@ -146,6 +165,16 @@ func decidir(e estadoItem, c *configItem) decisao {
 		return decisao{Tipo: "fechada-manual", Motivo: "Etapa fechada: confira e envie o seu lance único (sugestão: " + reaisTexto(minimo, q) + ")"}
 	}
 	if e.Situacao == "G" {
+		if c.GanharTempo && e.Fase == "LA" && e.RestanteSeg != nil && *e.RestanteSeg <= segundosFinais {
+			alvo := arredondarAbaixo(nosso-passoMinimo(nosso, e, q), q)
+			switch {
+			case alvo < minimo || !(alvo < nosso):
+				return decisao{Tipo: "ganhando", Motivo: "Ganhando (no mínimo: sem lance para ganhar tempo)"}
+			case e.PodeGanharTempo:
+				return decisao{Enviar: true, Tipo: "ganhar-tempo", Valor: alvo, Posicao: 1,
+					Motivo: "Ganhando tempo: lance do intervalo mínimo sobre o próprio lance (" + reaisTexto(alvo, q) + ") para prorrogar o cronômetro"}
+			}
+		}
 		return decisao{Tipo: "ganhando", Motivo: "Ganhando"}
 	}
 	if !c.NaoAguardar && e.Fase == "LA" && e.RestanteSeg != nil && *e.RestanteSeg > segundosFinais {

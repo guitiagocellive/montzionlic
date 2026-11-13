@@ -346,12 +346,6 @@ func (m *motor) TestarRobo() any {
 				}
 			}
 		}
-		if !cfg.QuatroCasas && e.Variacao != nil && e.TipoVariacao != "P" && *e.Variacao > 0 && *e.Variacao < 0.01 {
-			problemas = append(problemas, "o intervalo do edital tem mais de 2 casas: marque \"Permitir lances com 4 casas decimais\"")
-			if estado == "ok" {
-				estado = "atencao"
-			}
-		}
 		if cfg.NaoAguardar && e.Fase == "LA" && e.RestanteSeg != nil && *e.RestanteSeg > 3600 {
 			problemas = append(problemas, fmt.Sprintf("\"Não esperar\" com %.0f h pela frente: o robô age a qualquer momento (é isso mesmo?)", *e.RestanteSeg/3600))
 			if estado == "ok" {

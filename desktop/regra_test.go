@@ -244,3 +244,54 @@ func TestReconheceOProprioLance(t *testing.T) {
 		t.Errorf("valor recusado (é do concorrente): deveria cobrir com 979,98, veio %+v", d)
 	}
 }
+
+func TestGanharTempo(t *testing.T) {
+	// Exemplo do usuário: intervalo de R$ 0,01, mínimo R$ 100, ganhando com R$ 500 → nos 10 s finais dá 499,99.
+	cfg := &configItem{Ligado: true, Minimo: f(100), GanharTempo: true}
+	e := estadoItem{Fase: "LA", RestanteSeg: f(9), Melhor: f(500), Nosso: f(500), Situacao: "G", Variacao: f(0.01), TipoVariacao: "V", PodeGanharTempo: true}
+	if d := decidir(e, cfg); !d.Enviar || d.Tipo != "ganhar-tempo" || d.Valor != 499.99 {
+		t.Errorf("deveria dar 499,99 para ganhar tempo, veio %+v", d)
+	}
+	e2 := e
+	e2.RestanteSeg = f(40)
+	if d := decidir(e2, cfg); d.Enviar {
+		t.Errorf("fora dos 10 s finais não dá lance para ganhar tempo: %+v", d)
+	}
+	e3 := e
+	e3.PodeGanharTempo = false
+	if d := decidir(e3, cfg); d.Enviar {
+		t.Errorf("já deu o lance desta rodada (o cronômetro ainda não reiniciou): não dá outro, veio %+v", d)
+	}
+	e4 := e
+	e4.Nosso, e4.Melhor = f(100), f(100)
+	if d := decidir(e4, cfg); d.Enviar {
+		t.Errorf("no mínimo: para de ganhar tempo, veio %+v", d)
+	}
+	sem := &configItem{Ligado: true, Minimo: f(100)}
+	if d := decidir(e, sem); d.Enviar || d.Tipo != "ganhando" {
+		t.Errorf("sem a opção: ganhando, sem lance, veio %+v", d)
+	}
+	e5 := e
+	e5.Fase = "AL"
+	if d := decidir(e5, cfg); d.Enviar {
+		t.Errorf("aleatório não tem cronômetro para prorrogar: %+v", d)
+	}
+	if !ehDispensa("17000706000392026") || ehDispensa("98765405000392026") {
+		t.Error("modalidade 06 na chave = dispensa (sem ganhar tempo); 05 = pregão")
+	}
+}
+
+func TestQuatroCasasSozinho(t *testing.T) {
+	if precisaQuatroCasas(estadoItem{Variacao: f(0.01), TipoVariacao: "V", Melhor: f(980), Nosso: f(1000)}) {
+		t.Error("tudo com 2 casas: não precisa de 4")
+	}
+	if !precisaQuatroCasas(estadoItem{Variacao: f(0.0001), TipoVariacao: "V"}) {
+		t.Error("intervalo de R$ 0,0001: precisa de 4 casas")
+	}
+	if !precisaQuatroCasas(estadoItem{Melhor: f(0.6831)}) {
+		t.Error("lance com 4 casas (0,6831): precisa de 4 casas")
+	}
+	if precisaQuatroCasas(estadoItem{Variacao: f(0.5), TipoVariacao: "P"}) {
+		t.Error("intervalo em % não conta como casas decimais do valor")
+	}
+}

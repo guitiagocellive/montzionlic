@@ -119,6 +119,8 @@ type motor struct {
 	// só o novo melhor lance, sem dizer de quem é: um melhor lance igual a um destes é NOSSO (o Compras não aceita
 	// dois lances de mesmo valor). Sem isso, com a resposta do Compras atrasada, o robô cobria o próprio lance.
 	meusValores map[string][]valorEnviado
+	// Ganhar tempo: liberado quando o cronômetro passa dos 10 s finais; gasto ao dar o lance (um por rodada).
+	tempoArmado map[string]bool
 }
 
 type valorEnviado struct {
@@ -130,7 +132,7 @@ func novoMotor(p *ponte) *motor {
 	m := &motor{
 		p: p, compras: map[string]*compraMotor{}, config: map[string]configItem{}, mensagens: map[string]mensagemItem{},
 		enviando: map[string]time.Time{}, fechadaOK: map[string]bool{}, inscricoes: map[string]string{}, ranking: map[string]*classificacaoItem{}, ultimos: map[string]registroLance{}, recentes: map[string][]registroLance{}, fimVisto: map[string]bool{}, passoConc: map[string]bool{},
-		enviandoDesde: map[string]time.Time{}, enviandoValor: map[string]float64{}, recusas: map[string]int{}, meusValores: map[string][]valorEnviado{},
+		enviandoDesde: map[string]time.Time{}, enviandoValor: map[string]float64{}, recusas: map[string]int{}, meusValores: map[string][]valorEnviado{}, tempoArmado: map[string]bool{},
 		fase: "sem-login", versaoSistema: "6.4.4", plataforma: "WEB",
 		// HTTP/2 (quando o Compras.gov.br aceita): o lance vai pela conexão já aberta, mesmo com outras leituras em
 		// andamento, sem esperar um aperto de mão TLS novo (100–300 ms a mais justamente nos segundos finais).
@@ -938,6 +940,9 @@ func ritmoClassificacao(e estadoItem, c *configItem) time.Duration {
 	}
 }
 
+// ehDispensa: a chave da compra tem a modalidade 06 (dispensa eletrônica: UASG 6 + modalidade 2 + número 5 + ano 4).
+func ehDispensa(chave string) bool { return len(chave) == 17 && chave[6:8] == "06" }
+
 // retaFinal: o item está nos segundos em que o robô dá lances (últimos 10 s + folga, aleatório, disputa final
 // ou "não esperar" com o cronômetro perto do fim).
 func retaFinal(e estadoItem, c *configItem) bool {
@@ -1225,6 +1230,16 @@ func (m *motor) avaliar(k string) {
 	}
 	e.PassoNoConcorrente = m.passoConc[k]
 	m.reconhecerMeuLance(k, &e, agora)
+	// 4 casas decimais sozinho quando o edital ou os lances pedem (a caixinha deu lugar ao "Ganhar tempo").
+	if !cfg.QuatroCasas && precisaQuatroCasas(e) {
+		cfg.QuatroCasas = true
+	}
+	// Ganhar tempo: só em pregão (na dispensa o período de lances não é prorrogado) e uma vez por rodada do
+	// cronômetro — libera de novo só depois de ver o cronômetro reiniciar (acima dos 10 s finais).
+	if e.Fase == "LA" && e.RestanteSeg != nil && *e.RestanteSeg > segundosFinais+3 {
+		m.tempoArmado[k] = true
+	}
+	e.PodeGanharTempo = m.tempoArmado[k] && !ehDispensa(compra)
 	d := decidir(e, &cfg)
 	marcarDecisao(k, d)
 	// Mantém a classificação em dia sempre que não dá para ser 1º acima do mínimo, já antes dos 10 s finais,
@@ -1258,6 +1273,9 @@ func (m *motor) avaliar(k string) {
 	}
 	m.enviando[k] = agora.Add(5 * time.Second)
 	m.enviandoDesde[k], m.enviandoValor[k] = agora, d.Valor
+	if d.Tipo == "ganhar-tempo" {
+		m.tempoArmado[k] = false
+	}
 	m.meusValores[k] = append(m.meusValores[k], valorEnviado{d.Valor, agora})
 	reacao := agora.Sub(it.atualizadoEm).Milliseconds()
 	m.mensagens[k] = mensagemItem{Texto: "Enviando " + reaisTexto(d.Valor, cfg.QuatroCasas) + "…"}
@@ -1349,6 +1367,9 @@ func (m *motor) enviarLance(compra string, numero int, k string, d decisao, fase
 		// tenta de novo logo, com o item relido. 150 ms, 300, 600… até 2 s se continuar recusando (não martela o
 		// Compras com o mesmo erro). Antes eram sempre 700 ms parado.
 		m.esquecerMeuValor(k, d.Valor) // recusado: esse valor não é nosso (pode ser de um concorrente)
+		if d.Tipo == "ganhar-tempo" {
+			m.tempoArmado[k] = true // não saiu: pode tentar de novo nesta rodada
+		}
 		m.recusas[k]++
 		espera := time.Duration(150<<min(m.recusas[k]-1, 4)) * time.Millisecond
 		if espera > 2*time.Second {

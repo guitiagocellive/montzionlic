@@ -1,7 +1,7 @@
 import { Check, ChevronDown, CircleX, ClipboardCopy, Download, Gauge, Info, ListOrdered, LogIn, Play, RefreshCw, Square, TriangleAlert, Volume2, VolumeX, Zap } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { podeEditar, podeVer } from "../../shared/permissoes";
-import { type CompraDisputa, type ConfigItemRobo, FASES, ITEM_ROBO_PADRAO, type ItemDisputa, lerCompra, lerItemDisputa, SEGUNDOS_FINAIS } from "../../shared/robo";
+import { type CompraDisputa, type ConfigItemRobo, FASES, ITEM_ROBO_PADRAO, type ItemDisputa, lerCompra, lerItemDisputa, precisaQuatroCasas, SEGUNDOS_FINAIS } from "../../shared/robo";
 import type { Usuario } from "../../shared/tipos";
 import { api, mensagemDeErro } from "../api";
 import { avisar, Modal, Vazio } from "../components/Ui";
@@ -415,6 +415,8 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
               .map((i) => {
                 const k = `${c.chave}:${i.numero}`;
                 const cfg = config[k] ?? ITEM_ROBO_PADRAO;
+                // 4 casas: a escolha salva ou, sozinho, quando o edital ou os lances têm mais de 2 casas.
+                const q4 = cfg.quatroCasas || precisaQuatroCasas(i);
                 const restante = i.restanteSeg == null ? null : i.restanteSeg - atraso;
                 const situacao = i.situacao === "G" ? "ganhando" : i.situacao === "E" ? "empatado" : i.situacao === "P" ? "perdendo" : "";
                 const nosso = i.melhorLance != null && i.nossoLance != null && i.melhorLance >= i.nossoLance;
@@ -483,12 +485,12 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
                       <div className={`valor-disputa melhor-lance ${tremendo.has(k) ? "tremer" : ""}`} key={tremendo.has(k) ? `t${tremendo.get(k)}` : "parado"}>
                         <span>Melhor lance</span>
                         <strong className={nosso ? "texto-verde" : "texto-perigo"}>
-                          {moeda(i.melhorLance, cfg.quatroCasas)} <em className={`selo-quem ${nosso ? "voce" : ""}`}>{nosso ? "VOCÊ" : "CONCORRENTE"}</em>
+                          {moeda(i.melhorLance, q4)} <em className={`selo-quem ${nosso ? "voce" : ""}`}>{nosso ? "VOCÊ" : "CONCORRENTE"}</em>
                         </strong>
                       </div>
                       <div className="valor-disputa">
                         <span>Meu lance</span>
-                        <strong className={nosso ? "texto-verde" : "texto-perigo"}>{moeda(i.nossoLance, cfg.quatroCasas)}</strong>
+                        <strong className={nosso ? "texto-verde" : "texto-perigo"}>{moeda(i.nossoLance, q4)}</strong>
                       </div>
                       <div className={`cronometro-disputa ${faixaTempo(i.fase, restante)}`} title="Tempo que falta para a etapa terminar">
                         <span>{i.fase === "AL" ? "aleatório" : restante != null ? relogio(restante) : "—"}</span>
@@ -509,9 +511,11 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
                       </button>
                     </div>
                     <div className="item-disputa-opcoes">
-                      <label>
-                        <input type="checkbox" checked={cfg.quatroCasas} onChange={(e) => mudarItem(k, { quatroCasas: e.target.checked })} /> Permitir lances com 4 casas decimais
-                      </label>
+                      {c.modalidade !== "dispensa" && (
+                        <label title="Ganhando, nos 10 segundos finais o robô dá um lance do intervalo mínimo abaixo do seu próprio lance: o cronômetro do pregão é prorrogado e a disputa se estende, cansando os concorrentes. Para no seu mínimo. (Lances com 4 casas decimais agora são automáticos quando o edital pede.)">
+                          <input type="checkbox" checked={!!cfg.ganharTempo} onChange={(e) => mudarItem(k, { ganharTempo: e.target.checked })} /> Ganhar tempo (lance do intervalo mínimo nos 10 s finais, mesmo ganhando)
+                        </label>
+                      )}
                       <label>
                         <input type="checkbox" checked={cfg.naoAguardar} onChange={(e) => mudarItem(k, { naoAguardar: e.target.checked })} /> Não esperar os últimos{" "}
                         {SEGUNDOS_FINAIS} segundos para cobrir
@@ -541,18 +545,18 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
                                 placeholder="0,00"
                               />
                             </span>
-                            <button className="botao acento" disabled={enviandoFechada === k} onClick={() => enviarFechada(k, c.chave, i, cfg.quatroCasas)}>
+                            <button className="botao acento" disabled={enviandoFechada === k} onClick={() => enviarFechada(k, c.chave, i, q4)}>
                               Enviar lance fechado
                             </button>
                           </div>
                         );
                       })()}
-                    {cfg.ligado && <p className="aviso-robo-travado">Robô ligado com mínimo de {moeda(cfg.minimo, cfg.quatroCasas)}. Para mudar o mínimo ou o desconto, pare o robô (■), altere e ligue de novo. As opções acima mudam na hora, sem parar.</p>}
+                    {cfg.ligado && <p className="aviso-robo-travado">Robô ligado com mínimo de {moeda(cfg.minimo, q4)}. Para mudar o mínimo ou o desconto, pare o robô (■), altere e ligue de novo. As opções acima mudam na hora, sem parar.</p>}
                     <div className="item-disputa-rodape">
                       <span className="texto-fraco pequeno">
                         {FASES[i.fase] ?? i.fase}
                         {i.variacaoMinima != null && i.variacaoMinima > 0 && (
-                          <> · intervalo mínimo entre lances (edital): {i.tipoVariacao === "P" ? `${textoNumero(i.variacaoMinima)}%` : moeda(i.variacaoMinima, cfg.quatroCasas)}</>
+                          <> · intervalo mínimo entre lances (edital): {i.tipoVariacao === "P" ? `${textoNumero(i.variacaoMinima)}%` : moeda(i.variacaoMinima, q4)}</>
                         )}
                       </span>
                       <span className={`mensagem-robo ${msg?.erro ? "erro" : ""}`}>{cfg.ligado ? (msg?.texto ?? "Robô ligado") : "Robô parado"}</span>
@@ -571,13 +575,15 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
                               ? `recusado pelo Compras.gov.br${l.mensagem ? `: ${l.mensagem}` : ""}`
                               : tipo === "fechada"
                                 ? "lance único da etapa fechada"
+                                : tipo === "ganhar-tempo"
+                                  ? "lance para ganhar tempo (prorrogar o cronômetro)"
                                 : p
                                   ? `lance para ficar em ${p}º lugar`
                                   : "aceito pelo Compras.gov.br";
                             return (
                               <li key={`${l.em}-${n}`} className={`${l.ok ? "ok" : "erro"} ${n === 0 ? "novo" : ""}`}>
                                 <span className="hora">{new Date(l.em).toLocaleTimeString("pt-BR")}</span>
-                                <b>{moeda(l.valor, cfg.quatroCasas)}</b>
+                                <b>{moeda(l.valor, q4)}</b>
                                 <span>{objetivo}</span>
                               </li>
                             );
