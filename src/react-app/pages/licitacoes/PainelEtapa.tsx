@@ -111,8 +111,7 @@ export function PainelEtapa({ licitacao: l, semCotacao, participando, execucoes,
         </span>
         <div className="proximo-passo-texto">
           <span className="sobretitulo">Próximo passo</span>
-          <strong>{titulo}</strong>
-          <span className="texto-suave pequeno">{texto}</span>
+          <strong title={texto}>{titulo}</strong>
         </div>
         <div className="linha-botoes proximo-passo-botoes">{botoes}</div>
       </div>

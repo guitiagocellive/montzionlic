@@ -100,12 +100,10 @@ export function AbaOrcamento({ licitacao, itens, cotacoes, aoMudar }: Props) {
       {/* Parâmetros numa linha só; os números do orçamento ficam no cartão Financeiro e no rodapé. */}
       <section className="cartao parametros parametros-compacto">
         <div className="parametros-linha">
-          <Calculator size={17} aria-hidden="true" />
           <span>
-            <strong>Orçamento</strong>
-            <span className="texto-fraco">
-              {" "}
-              · lucro {formatarNumero(licitacao.lucro_percentual)}% · impostos {formatarNumero(licitacao.imposto_percentual)}% · frete dividido pela quantidade
+            <strong className="titulo-orcamento">Orçamento</strong>
+            <span className="texto-fraco pequeno">
+              Impostos {formatarNumero(licitacao.imposto_percentual)}% · lucro {formatarNumero(licitacao.lucro_percentual)}% · frete dividido pela quantidade
             </span>
           </span>
           <span className="texto-fraco pequeno parametros-cotados">
@@ -258,12 +256,14 @@ function LinhaCotacao({
   return (
     <div className={`linha-cotacao ${naProposta ? "coroa" : ""} ${varias && !naProposta ? "alternativa" : ""}`}>
       <div className="cotacao-produto">
-        {naProposta && (
-          <span className="selo-coroa" title="A proposta usa a descrição, a marca e o preço deste produto">
-            <Crown size={13} /> {melhor ? "Mais vantajosa · vai na proposta" : "Escolhida para a proposta"}
-          </span>
-        )}
-        <strong>{c.produto || "Produto sem nome"}</strong>
+        <strong>
+          {naProposta && (
+            <span className="coroa-cotacao" title={melhor ? "Mais vantajosa: vai na proposta" : "Escolhida para a proposta"}>
+              <Crown size={15} aria-label={melhor ? "Mais vantajosa, vai na proposta" : "Escolhida para a proposta"} />
+            </span>
+          )}
+          {c.produto || "Produto sem nome"}
+        </strong>
         <span className="texto-fraco pequeno">
           {[c.marca, c.fornecedor_cadastrado || c.fornecedor_nome].filter(Boolean).join(" · ") || "Sem fornecedor"}
           {!naProposta && melhor && <span className="texto-verde"> · menor preço</span>}

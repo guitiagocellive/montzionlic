@@ -1,4 +1,4 @@
-import { ArrowLeft, Calculator, FileArchive, CalendarClock, Check, ExternalLink, FileText, FolderOpen, Landmark, ListChecks, MessageSquare, Pencil, Trash2, Trophy, UserRound, Wallet } from "lucide-react";
+import { ArrowLeft, Calculator, FileArchive, MoreHorizontal, CalendarClock, ExternalLink, FileText, FolderOpen, Landmark, ListChecks, MessageSquare, Pencil, Trash2, Trophy, UserRound, Wallet } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { cotacaoDaProposta, ETAPAS_EXECUCAO, ETAPAS_LICITACAO, nomeEtapa } from "../../../shared/negocio";
 import { podeEditar, podeVer } from "../../../shared/permissoes";
@@ -8,6 +8,7 @@ import { AbaArquivos } from "../../components/AbaArquivos";
 import { Avatar } from "../../components/Avatar";
 import { PainelAtividade } from "../../components/Atividade";
 import { avisar, Carregando, Modal } from "../../components/Ui";
+import { MenuContexto } from "../../components/MenuContexto";
 import { diasAte } from "../../../shared/negocio";
 import { formatarData, formatarMoeda, formatarNumero, hojeIso, textoPrazo } from "../../formato";
 import { link, navegar } from "../../rota";
@@ -38,6 +39,7 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
   const [ganhando, setGanhando] = useState(new URLSearchParams(location.search).get("ganhar") === "1");
   const [comentarios, setComentarios] = useState(0);
   const [pedidoHabilitacao, setPedidoHabilitacao] = useState(0);
+  const [menuMais, setMenuMais] = useState<{ x: number; y: number } | null>(null);
   const [equipe, setEquipe] = useState<{ id: number; nome: string; cor: string | null; foto: string | null }[]>([]);
 
   useEffect(() => {
@@ -156,18 +158,37 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
               </option>
             ))}
           </select>
-          <button className="botao secundario" onClick={() => setAtividadeAberta(true)}>
-            <MessageSquare /> Atividade{comentarios > 0 && <span className="chip destaque">{comentarios}</span>}
+          <button className="botao-icone com-contador" onClick={() => setAtividadeAberta(true)} aria-label="Atividade" title="Atividade">
+            <MessageSquare />
+            {comentarios > 0 && <span className="contador-icone">{comentarios}</span>}
           </button>
           {l.link && (
-            <a className="botao secundario" href={l.link} target="_blank" rel="noreferrer noopener">
-              <ExternalLink aria-hidden="true" /> Portal
+            <a className="botao-icone" href={l.link} target="_blank" rel="noreferrer noopener" aria-label="Abrir no portal" title="Abrir no portal">
+              <ExternalLink aria-hidden="true" />
             </a>
           )}
-          {usuario.papel === "admin" && (
-            <button className="botao-icone perigo" onClick={excluir} aria-label="Excluir licitação" title="Excluir">
-              <Trash2 />
-            </button>
+          <button
+            className="botao-icone"
+            aria-label="Mais ações"
+            title="Mais ações"
+            onClick={(e) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              setMenuMais({ x: r.right - 230, y: r.bottom + 6 });
+            }}
+          >
+            <MoreHorizontal />
+          </button>
+          {menuMais && (
+            <MenuContexto
+              x={menuMais.x}
+              y={menuMais.y}
+              aoFechar={() => setMenuMais(null)}
+              itens={[
+                ...(editar ? [{ rotulo: "Editar dados", icone: <Pencil size={15} />, aoClicar: () => setEditando(true) }] : []),
+                { rotulo: "Atividade e comentários", icone: <MessageSquare size={15} />, aoClicar: () => setAtividadeAberta(true) },
+                ...(usuario.papel === "admin" ? [{ separador: true }, { rotulo: "Excluir licitação", icone: <Trash2 size={15} />, perigo: true, aoClicar: excluir }] : []),
+              ]}
+            />
           )}
         </div>
       </div>
@@ -257,6 +278,7 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
             </dl>
           </section>
 
+          {(ficha.execucoes.length > 0 || l.etapa === "ganha") && (
           <section className="cartao resumo-itens">
             <h2>Itens</h2>
             <div className="contagem-itens">
@@ -288,6 +310,7 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
               </button>
             )}
           </section>
+          )}
         </aside>
 
         <div className="ficha-principal">
@@ -323,7 +346,7 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
               const Icone = a.icone;
               return (
                 <button key={a.chave} className={`aba-ficha ${aba === a.chave ? "ativa" : ""}`} onClick={() => escolherAba(a.chave)}>
-                  {a.completo ? <Check className="feito" /> : <Icone />}
+                  <Icone />
                   <span>{a.titulo}</span>
                   {a.info && <small>{a.info}</small>}
                 </button>
@@ -357,7 +380,7 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
         </div>
 
         <aside className="ficha-direita entrar">
-          {podeVer(usuario.permissoes, "orcamento") && <CartaoFinanceiro licitacao={l} itens={participando} cotacoes={cotacoes} aoIrPara={escolherAba} />}
+          {podeVer(usuario.permissoes, "orcamento") && <CartaoFinanceiro licitacao={l} itens={participando} cotacoes={cotacoes} />}
           <CartaoArquivos
             arquivos={arquivos}
             aoIrPara={escolherAba}
@@ -407,7 +430,7 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
 }
 
 /** Coluna da direita: o dinheiro da licitação (estimado, nossa proposta, custo, impostos e lucro). */
-function CartaoFinanceiro({ licitacao: l, itens, cotacoes, aoIrPara }: { licitacao: Licitacao; itens: ItemLicitacao[]; cotacoes: Cotacao[]; aoIrPara: (aba: string) => void }) {
+function CartaoFinanceiro({ licitacao: l, itens, cotacoes }: { licitacao: Licitacao; itens: ItemLicitacao[]; cotacoes: Cotacao[] }) {
   let venda = 0;
   let custo = 0;
   let lucro = 0;
@@ -429,9 +452,6 @@ function CartaoFinanceiro({ licitacao: l, itens, cotacoes, aoIrPara }: { licitac
         <h2>
           <Wallet size={17} /> Financeiro
         </h2>
-        <button className="botao-link sem-margem" onClick={() => aoIrPara("orcamento")}>
-          orçamento
-        </button>
       </div>
       <dl className="linhas-financeiro">
         <div>
@@ -459,12 +479,6 @@ function CartaoFinanceiro({ licitacao: l, itens, cotacoes, aoIrPara }: { licitac
         <div>
           <dt>Impostos ({formatarNumero(l.imposto_percentual)}%)</dt>
           <dd>{venda > 0 ? formatarMoeda(impostos) : "—"}</dd>
-        </div>
-        <div>
-          <dt>Itens orçados</dt>
-          <dd>
-            {cotados} de {itens.length}
-          </dd>
         </div>
       </dl>
       <div className="lucro-financeiro">

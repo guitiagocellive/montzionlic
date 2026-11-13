@@ -14574,10 +14574,7 @@ p.etapa-fechada {
 }
 
 /* Orçamento: a cotação da proposta ganha a coroa e fica em destaque; as outras ficam mais discretas. */
-.linha-cotacao.coroa {
-  border-color: color-mix(in srgb, #f59e0b 55%, transparent);
-  background: color-mix(in srgb, #fbbf24 9%, var(--superficie-2));
-}
+
 
 .selo-coroa {
   display: inline-flex;
@@ -14597,17 +14594,7 @@ p.etapa-fechada {
   color: #fcd34d;
 }
 
-.linha-cotacao.alternativa {
-  opacity: 0.82;
-}
 
-.linha-cotacao.alternativa:hover {
-  opacity: 1;
-}
-
-.linha-cotacao.alternativa .destaque-preco strong {
-  color: var(--texto);
-}
 
 /* Itens da licitação em cápsulas (como no PNCP), com o "Participar" ao lado. */
 .bolha-linha {
@@ -14923,4 +14910,58 @@ p.etapa-fechada {
   margin-left: 4px;
   font-variant-numeric: tabular-nums;
   color: var(--texto);
+}
+
+/* Coroa minimalista: só o ícone ao lado do nome da cotação que vai na proposta. */
+.coroa-cotacao {
+  display: inline-flex;
+  margin-right: 6px;
+  vertical-align: -2px;
+  color: #d97706;
+}
+
+[data-tema="escuro"] .coroa-cotacao {
+  color: #fbbf24;
+}
+
+.titulo-orcamento {
+  display: block;
+  font-size: 1rem;
+}
+
+.parametros-linha > span:first-of-type {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.botao-icone.com-contador {
+  position: relative;
+}
+
+.contador-icone {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--azul);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+}
+
+.ficha-acoes {
+  align-items: center;
+}
+
+.ficha-acoes .botao-icone {
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--borda);
+  background: var(--superficie);
 }
