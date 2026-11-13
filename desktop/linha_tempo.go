@@ -9,6 +9,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -73,11 +74,30 @@ var linhaTempo struct {
 	decisao  map[string]string    // último tipo de decisão por item (só registra quando muda)
 	ligadoEm map[string]time.Time // quando o robô foi ligado em cada item
 	melhor   map[string]float64   // último melhor lance visto por item
+	classif  map[string]string    // última classificação lida por item (para registrar só quando muda)
+}
+
+// mudouClassificacao: a classificação lida é diferente da anterior do item.
+func mudouClassificacao(k, resumo string) bool {
+	linhaTempo.mu.Lock()
+	defer linhaTempo.mu.Unlock()
+	if linhaTempo.classif == nil {
+		linhaTempo.classif = map[string]string{}
+	}
+	antes, ok := linhaTempo.classif[k]
+	linhaTempo.classif[k] = resumo
+	return !ok || antes != resumo
 }
 
 const maxEventosRobo = 300
 
+// MONTZION_LINHA_NO_REGISTRO=1 (só para testes): a linha do tempo também vai para o registro.
+var linhaNoRegistro = os.Getenv("MONTZION_LINHA_NO_REGISTRO") == "1"
+
 func marcarRobo(formato string, args ...any) {
+	if linhaNoRegistro {
+		registrarLog("linha: "+formato, args...)
+	}
 	linhaTempo.mu.Lock()
 	defer linhaTempo.mu.Unlock()
 	linhaTempo.eventos = append(linhaTempo.eventos, eventoRobo{time.Now(), fmt.Sprintf(formato, args...)})

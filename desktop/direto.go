@@ -94,7 +94,18 @@ func pegarCaptchaPronto() string {
 // cicloCaptchaPronto mantém 2 captchas prontos enquanto alguma disputa com robô está perto do fim.
 func (m *motor) cicloCaptchaPronto() {
 	for {
-		time.Sleep(700 * time.Millisecond)
+		// Na reta final a classificação é relida a cada ~0,7 s (um captcha cada): confere a cada 200 ms e deixa 3
+		// prontos; fora dela, 2 prontos e confere a cada 700 ms.
+		m.mu.Lock()
+		final := m.algumaRetaFinal(time.Now())
+		m.mu.Unlock()
+		quantos := 2
+		if final {
+			quantos = 3
+			time.Sleep(200 * time.Millisecond)
+		} else {
+			time.Sleep(700 * time.Millisecond)
+		}
 		if !m.precisaCaptchaPronto() {
 			continue
 		}
@@ -106,7 +117,7 @@ func (m *motor) cicloCaptchaPronto() {
 			}
 		}
 		captchaPool = vivos
-		falta := len(captchaPool) < 2
+		falta := len(captchaPool) < quantos
 		captchaPoolMu.Unlock()
 		if !falta {
 			continue
@@ -169,7 +180,11 @@ func (m *motor) gerarCaptcha() (string, error) {
 		codigo, err := m.p.avaliar(s.sessao, scriptCaptcha(limite), limite+8*time.Second)
 		if err == nil && codigo != "" && !strings.HasPrefix(codigo, "__") {
 			// Tempos do captcha (para achar demora): fila, sala de disputa aberta e o captcha em si.
-			marcarRobo("captcha pronto em %d ms (fila %d ms, sala %d ms, captcha %d ms, tentativa %d)", time.Since(pediu).Milliseconds(), esperou.Milliseconds(), sala.Milliseconds(), time.Since(inicio).Milliseconds(), tentativa+1)
+			// Na linha do tempo só os captchas demorados ou que precisaram de nova tentativa (os normais, de 0,2 s,
+			// enchiam o diagnóstico).
+			if time.Since(pediu) > time.Second || tentativa > 0 {
+				marcarRobo("captcha pronto em %d ms (fila %d ms, sala %d ms, captcha %d ms, tentativa %d)", time.Since(pediu).Milliseconds(), esperou.Milliseconds(), sala.Milliseconds(), time.Since(inicio).Milliseconds(), tentativa+1)
+			}
 			if total := time.Since(pediu); total > 2*time.Second {
 				registrarLog("captcha: %.1f s (fila %.1f s, sala %.1f s, captcha %.1f s, tentativa %d)", total.Seconds(), esperou.Seconds(), sala.Seconds(), time.Since(inicio).Seconds(), tentativa+1)
 			}

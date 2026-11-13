@@ -203,3 +203,44 @@ func TestFimDaContagem(t *testing.T) {
 		t.Fatalf("restante pela hora de término deveria ser ~90 s: %v", e.RestanteSeg)
 	}
 }
+
+func TestRitmoClassificacao(t *testing.T) {
+	cfg := &configItem{Ligado: true, Minimo: f(900)}
+	nao := &configItem{Ligado: true, Minimo: f(900), NaoAguardar: true}
+	casos := []struct {
+		nome string
+		e    estadoItem
+		c    *configItem
+		quer time.Duration
+	}{
+		{"últimos segundos: 0,7 s", estadoItem{Fase: "LA", RestanteSeg: f(8)}, cfg, 700 * time.Millisecond},
+		{"aleatório: 1 s", estadoItem{Fase: "AL"}, cfg, time.Second},
+		{"1,5 min do fim: 2 s", estadoItem{Fase: "LA", RestanteSeg: f(90)}, cfg, 2 * time.Second},
+		{"não esperar, 50 s do fim: 0,7 s", estadoItem{Fase: "LA", RestanteSeg: f(50)}, nao, 700 * time.Millisecond},
+		{"não esperar com 3,5 h pela frente: 15 s (antes 2 s)", estadoItem{Fase: "LA", RestanteSeg: f(12830)}, nao, 15 * time.Second},
+	}
+	for _, c := range casos {
+		if r := ritmoClassificacao(c.e, c.c); r != c.quer {
+			t.Errorf("%s: veio %v", c.nome, r)
+		}
+	}
+}
+
+func TestReconheceOProprioLance(t *testing.T) {
+	agora := time.Now()
+	m := &motor{meusValores: map[string][]valorEnviado{"c:1": {{979.99, agora.Add(-time.Second)}}}}
+	// O aviso do tempo real trouxe o melhor lance (o nosso, 979,99) mas ainda o nosso lance antigo (1.000).
+	e := estadoItem{Fase: "LA", RestanteSeg: f(5), Melhor: f(979.99), Nosso: f(1000), Situacao: "P"}
+	m.reconhecerMeuLance("c:1", &e, agora)
+	cfg := &configItem{Ligado: true, Minimo: f(900)}
+	if d := decidir(e, cfg); d.Enviar || e.Situacao != "G" || *e.Nosso != 979.99 {
+		t.Errorf("o melhor lance é o que acabamos de mandar: não pode cobrir a si mesmo (veio %+v, %+v)", d, e)
+	}
+	// Recusado: o valor deixa de ser nosso e o mesmo valor passa a ser de um concorrente.
+	m.esquecerMeuValor("c:1", 979.99)
+	e2 := estadoItem{Fase: "LA", RestanteSeg: f(5), Melhor: f(979.99), Nosso: f(1000), Situacao: "P"}
+	m.reconhecerMeuLance("c:1", &e2, agora)
+	if d := decidir(e2, cfg); !d.Enviar || d.Valor != 979.98 {
+		t.Errorf("valor recusado (é do concorrente): deveria cobrir com 979,98, veio %+v", d)
+	}
+}

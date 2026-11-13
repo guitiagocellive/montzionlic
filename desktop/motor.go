@@ -109,12 +109,27 @@ type motor struct {
 	enumsRodada map[string]string        // situacaoParticipacaoRodada: valor -> nome (CONVOCADO, PARTICIPANTE_NAO_CONVOCADO_FASE_FECHADA...)
 	passoConc   map[string]bool          // itens em que o Compras exigiu o intervalo também sobre o concorrente
 	ultimos     map[string]registroLance // último lance enviado por item (com a resposta do Compras.gov.br)
+	// Lance a caminho do Compras.gov.br em cada item (desde quando e com que valor) e lances recusados seguidos:
+	// na reta final o robô não fica parado esperando uma resposta lenta nem 700 ms depois de uma recusa.
+	enviandoDesde map[string]time.Time
+	enviandoValor map[string]float64
+	recusas       map[string]int
+	// Valores que o robô mandou nos últimos segundos em cada item (a caminho ou aceitos). O aviso do tempo real diz
+	// só o novo melhor lance, sem dizer de quem é: um melhor lance igual a um destes é NOSSO (o Compras não aceita
+	// dois lances de mesmo valor). Sem isso, com a resposta do Compras atrasada, o robô cobria o próprio lance.
+	meusValores map[string][]valorEnviado
+}
+
+type valorEnviado struct {
+	valor float64
+	em    time.Time
 }
 
 func novoMotor(p *ponte) *motor {
 	m := &motor{
 		p: p, compras: map[string]*compraMotor{}, config: map[string]configItem{}, mensagens: map[string]mensagemItem{},
 		enviando: map[string]time.Time{}, fechadaOK: map[string]bool{}, inscricoes: map[string]string{}, ranking: map[string]*classificacaoItem{}, ultimos: map[string]registroLance{}, recentes: map[string][]registroLance{}, fimVisto: map[string]bool{}, passoConc: map[string]bool{},
+		enviandoDesde: map[string]time.Time{}, enviandoValor: map[string]float64{}, recusas: map[string]int{}, meusValores: map[string][]valorEnviado{},
 		fase: "sem-login", versaoSistema: "6.4.4", plataforma: "WEB",
 		// HTTP/2 (quando o Compras.gov.br aceita): o lance vai pela conexão já aberta, mesmo com outras leituras em
 		// andamento, sem esperar um aperto de mão TLS novo (100–300 ms a mais justamente nos segundos finais).
@@ -745,6 +760,11 @@ func (m *motor) cicloLeitura() {
 				intervalo, pri = 3*time.Second, 2 // cronômetro zerou: confere se a disputa acabou
 			case perto && !tempoReal:
 				intervalo, pri = 500*time.Millisecond, 4
+			case perto:
+				// Segundos finais com o tempo real ligado: confere o item a cada 1 s mesmo assim (rede de segurança
+				// se um aviso atrasar ou se perder justo na hora dos lances cruzados). (A prioridade 3 é só da
+				// 1ª leitura de cada compra, que passa na frente de tudo.)
+				intervalo, pri = time.Second, 4
 			case robo && !tempoReal:
 				intervalo, pri = 2*time.Second, 2
 			case emDisputa && !tempoReal:
@@ -853,6 +873,101 @@ func (m *motor) pertoDoFim(c *compraMotor, agora time.Time) bool {
 		e := m.estadoAgora(it, agora)
 		if e.Fase == "AL" || e.Fase == "DF" || e.Fase == "LF" || (e.Fase == "LA" && e.RestanteSeg != nil && *e.RestanteSeg <= segundosFinais+5) {
 			return true
+		}
+	}
+	return false
+}
+
+// reconhecerMeuLance (com m.mu travado): se o melhor lance do item é um valor que o robô acabou de mandar, ele é
+// nosso — estamos ganhando, mesmo que o aviso do tempo real ainda mostre o nosso lance antigo.
+func (m *motor) reconhecerMeuLance(k string, e *estadoItem, agora time.Time) {
+	vivos := m.meusValores[k][:0]
+	for _, v := range m.meusValores[k] {
+		if agora.Sub(v.em) < 30*time.Second {
+			vivos = append(vivos, v)
+		}
+	}
+	m.meusValores[k] = vivos
+	if e.Melhor == nil {
+		return
+	}
+	for _, v := range vivos {
+		if math.Abs(v.valor-*e.Melhor) < 0.00005 {
+			if e.Nosso == nil || *e.Melhor < *e.Nosso {
+				x := *e.Melhor
+				e.Nosso = &x
+			}
+			e.Situacao = "G"
+			return
+		}
+	}
+}
+
+func (m *motor) esquecerMeuValor(k string, valor float64) {
+	l := m.meusValores[k][:0]
+	for _, v := range m.meusValores[k] {
+		if math.Abs(v.valor-valor) >= 0.00005 {
+			l = append(l, v)
+		}
+	}
+	m.meusValores[k] = l
+}
+
+// ritmoClassificacao: de quanto em quanto tempo reler a classificação (cada leitura gasta um captcha).
+//   - últimos 15 s da etapa aberta (ou 60 s com "não esperar"): 0,7 s — várias empresas dando lance ao mesmo tempo;
+//   - aleatório / disputa final (qualquer segundo pode ser o último, mas pode durar minutos): 1 s;
+//   - até 2 min do fim: 2 s;
+//   - mais longe (ex.: "não esperar" com horas pela frente): 15 s. Antes eram 2 s o tempo todo — milhares de
+//     leituras e captchas em poucas horas, disputando captcha com quem estava na reta final.
+func ritmoClassificacao(e estadoItem, c *configItem) time.Duration {
+	switch {
+	case e.Fase == "LA" && e.RestanteSeg != nil && retaFinal(e, c):
+		return 700 * time.Millisecond
+	case e.Fase != "LA" || e.RestanteSeg == nil:
+		return time.Second
+	case *e.RestanteSeg <= 120:
+		return 2 * time.Second
+	default:
+		return 15 * time.Second
+	}
+}
+
+// retaFinal: o item está nos segundos em que o robô dá lances (últimos 10 s + folga, aleatório, disputa final
+// ou "não esperar" com o cronômetro perto do fim).
+func retaFinal(e estadoItem, c *configItem) bool {
+	if !fasesDeLance[e.Fase] || e.Fase == "LF" {
+		return false
+	}
+	if e.Fase != "LA" || e.RestanteSeg == nil {
+		return true
+	}
+	limite := float64(segundosFinais + 5)
+	if c != nil && c.NaoAguardar {
+		limite = 60
+	}
+	return *e.RestanteSeg <= limite
+}
+
+// algumaRetaFinal (com m.mu travado): algum item com o robô ligado está na reta final.
+func (m *motor) algumaRetaFinal(agora time.Time) bool {
+	for k, cfg := range m.config {
+		if !cfg.Ligado {
+			continue
+		}
+		compra, numTxt, ok := strings.Cut(k, ":")
+		if !ok {
+			continue
+		}
+		c := m.compras[compra]
+		if c == nil {
+			continue
+		}
+		n, _ := strconv.Atoi(numTxt)
+		if it := c.itens[n]; it != nil {
+			cfg := cfg
+			if retaFinal(m.estadoAgora(it, agora), &cfg) {
+				return true
+			}
 		}
 	}
 	return false
@@ -1097,6 +1212,7 @@ func (m *motor) avaliar(k string) {
 		e.Concorrentes = append([]float64{}, r.concorrentes...)
 	}
 	e.PassoNoConcorrente = m.passoConc[k]
+	m.reconhecerMeuLance(k, &e, agora)
 	d := decidir(e, &cfg)
 	marcarDecisao(k, d)
 	// Mantém a classificação em dia sempre que não dá para ser 1º acima do mínimo, já antes dos 10 s finais,
@@ -1112,11 +1228,24 @@ func (m *motor) avaliar(k string) {
 		return
 	}
 	// Um lance por vez por item; na etapa fechada, um só.
-	if agora.Before(m.enviando[k]) || (d.Tipo == "fechada" && m.fechadaOK[k]) {
+	if d.Tipo == "fechada" && m.fechadaOK[k] {
 		m.mu.Unlock()
 		return
 	}
+	if agora.Before(m.enviando[k]) {
+		// Lance a caminho há mais de 0,6 s na reta final (o normal é ~0,1 s: o Compras.gov.br está demorando) e a regra
+		// já quer um valor MENOR: manda também. Lances só descem, então o mais baixo vale; se o outro chegar
+		// depois, o Compras só o recusa ("menor que o seu último lance"). Antes o robô ficava até 5 s parado.
+		desde, aCaminho := m.enviandoDesde[k]
+		if !aCaminho || !retaFinal(e, &cfg) || agora.Sub(desde) < 600*time.Millisecond || !(d.Valor < m.enviandoValor[k]-1e-9) {
+			m.mu.Unlock()
+			return
+		}
+		marcarRobo("%s: lance anterior sem resposta há %d ms; enviando o valor menor mesmo assim", rotuloItem(k), agora.Sub(desde).Milliseconds())
+	}
 	m.enviando[k] = agora.Add(5 * time.Second)
+	m.enviandoDesde[k], m.enviandoValor[k] = agora, d.Valor
+	m.meusValores[k] = append(m.meusValores[k], valorEnviado{d.Valor, agora})
 	reacao := agora.Sub(it.atualizadoEm).Milliseconds()
 	m.mensagens[k] = mensagemItem{Texto: "Enviando " + reaisTexto(d.Valor, cfg.QuatroCasas) + "…"}
 	m.mu.Unlock()
@@ -1188,6 +1317,14 @@ func (m *motor) enviarLance(compra string, numero int, k string, d decisao, fase
 		}
 		// Já contamos o lance aceito: o próximo só sai se alguém cobrir (sem esperar nada).
 		m.enviando[k] = time.Time{}
+		delete(m.enviandoDesde, k)
+		m.recusas[k] = 0
+		// Disputando colocação: relê a classificação logo depois do lance (a próxima decisão sai com ela fresca).
+		if d.Tipo == "colocacao" {
+			if r := m.ranking[k]; r != nil {
+				r.pedidaEm = time.Time{}
+			}
+		}
 	} else {
 		m.mensagens[k] = mensagemItem{Texto: "Lance recusado: " + msg, Erro: true}
 		// Recusado pelo intervalo mínimo ao cobrir um concorrente: daqui em diante aplica o intervalo também
@@ -1195,14 +1332,30 @@ func (m *motor) enviarLance(compra string, numero int, k string, d decisao, fase
 		if d.Tipo == "colocacao" && strings.Contains(strings.ToLower(msg), "interval") {
 			m.passoConc[k] = true
 		}
-		m.enviando[k] = agora.Add(700 * time.Millisecond)
-		if c := m.compras[compra]; c != nil {
-			c.lidaEm = time.Time{} // relê o item para corrigir o que o robô sabe
+		// Recusado (na reta final é comum: dois lances no mesmo instante, valor igual a outro, o melhor mudou):
+		// tenta de novo logo, com o item relido. 150 ms, 300, 600… até 2 s se continuar recusando (não martela o
+		// Compras com o mesmo erro). Antes eram sempre 700 ms parado.
+		m.esquecerMeuValor(k, d.Valor) // recusado: esse valor não é nosso (pode ser de um concorrente)
+		m.recusas[k]++
+		espera := time.Duration(150<<min(m.recusas[k]-1, 4)) * time.Millisecond
+		if espera > 2*time.Second {
+			espera = 2 * time.Second
 		}
+		m.enviando[k] = agora.Add(espera)
+		delete(m.enviandoDesde, k)
+		if c := m.compras[compra]; c != nil {
+			c.lidaEm = agora // a releitura vai já, abaixo (sem esperar a fila de leituras)
+		}
+		marcarRobo("%s: lance recusado (%d seguido(s)); relendo o item e tentando de novo em %d ms", rotuloItem(k), m.recusas[k], espera.Milliseconds())
 	}
 	m.mu.Unlock()
 	if ok {
 		m.avaliar(k)
+	} else {
+		go func() {
+			m.lerItens(compra)
+			m.avaliar(k)
+		}()
 	}
 }
 
@@ -1453,10 +1606,10 @@ func intervaloClassificacao(e estadoItem, c *configItem, d decisao, temLeitura b
 		return 0
 	}
 	if d.Tipo == "precisa-classificacao" {
-		if temLeitura {
-			return 1200 * time.Millisecond
+		if !temLeitura {
+			return 700 * time.Millisecond
 		}
-		return 800 * time.Millisecond
+		return min(ritmoClassificacao(e, c), 1200*time.Millisecond)
 	}
 	// Dá para ser 1º acima do mínimo? Então a classificação não muda a decisão.
 	q := c.QuatroCasas
@@ -1468,7 +1621,7 @@ func intervaloClassificacao(e estadoItem, c *configItem, d decisao, temLeitura b
 	if !perto {
 		return 0
 	}
-	return 2 * time.Second
+	return ritmoClassificacao(e, c)
 }
 
 // pedirClassificacao lê a classificação em segundo plano (no máximo uma vez a cada "intervalo" por item) e reavalia.
@@ -1490,9 +1643,14 @@ func (m *motor) pedirClassificacao(compra string, numero int, k string, interval
 			marcarRobo("%s: classificação falhou em %d ms (captchas prontos antes: %d): %v", rotuloItem(k), time.Since(inicio).Milliseconds(), prontos, err)
 		} else {
 			m.mu.Lock()
+			resumo := fmt.Sprint(ci.concorrentes)
 			n := len(ci.concorrentes)
 			m.mu.Unlock()
-			marcarRobo("%s: classificação lida em %d ms (captchas prontos antes: %d, %d concorrente(s))", rotuloItem(k), time.Since(inicio).Milliseconds(), prontos, n)
+			// Só registra quando a classificação mudou, demorou ou faltou captcha pronto (as leituras iguais, a cada
+			// segundo, enchiam o diagnóstico e escondiam o que importa).
+			if mudouClassificacao(k, resumo) || time.Since(inicio) > 400*time.Millisecond || prontos == 0 {
+				marcarRobo("%s: classificação lida em %d ms (captchas prontos antes: %d, %d concorrente(s))", rotuloItem(k), time.Since(inicio).Milliseconds(), prontos, n)
+			}
 		}
 		m.avaliar(k)
 	}()
