@@ -2,6 +2,7 @@ import {
   ArrowRightLeft,
   Calculator,
   CalendarClock,
+  CircleCheck,
   Copy,
   DownloadCloud,
   ExternalLink,
@@ -28,9 +29,9 @@ import { Kanban } from "../../components/Kanban";
 import { type ItemMenu, MenuContexto } from "../../components/MenuContexto";
 import { temPonte } from "../../robo/ponte";
 import { avisar, Carregando, CampoSelect, Modal } from "../../components/Ui";
-import { formatarDataCurta, formatarMoeda, hojeIso, textoPrazo } from "../../formato";
+import { formatarMoeda, hojeIso } from "../../formato";
 import { navegar } from "../../rota";
-import { BotaoUmClique, CadastroUmClique, ehDoCompras } from "./CadastroUmClique";
+import { CadastroUmClique, ehDoCompras } from "./CadastroUmClique";
 import { puxarESalvarResultado } from "./puxarResultado";
 
 export function QuadroLicitacoes({ usuario }: { usuario: Usuario }) {
@@ -232,7 +233,7 @@ export function QuadroLicitacoes({ usuario }: { usuario: Usuario }) {
               const total = cards.reduce((s, c) => s + (c.valor_estimado ?? 0), 0);
               return total > 0 ? <div className="coluna-rodape">{formatarMoeda(total)} estimados</div> : null;
             }}
-            renderCard={(l) => <CardLicitacao l={l} hoje={hoje} aoMudar={carregar} />}
+            renderCard={(l) => <CardLicitacao l={l} hoje={hoje} />}
             aoMenu={(l, x, y) => setMenu({ l, x, y })}
           />
         </div>
@@ -263,19 +264,31 @@ export function QuadroLicitacoes({ usuario }: { usuario: Usuario }) {
 const valorCurto = (v: number) =>
   v >= 1_000_000 ? `R$ ${(v / 1_000_000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mi` : v >= 1000 ? `R$ ${Math.round(v / 1000)} mil` : formatarMoeda(v);
 
-function CardLicitacao({ l, hoje, aoMudar }: { l: LicitacaoResumo; hoje: string; aoMudar: () => void }) {
+/** "Hoje, 08:00", "Amanhã, 08:00" ou "19/11, 09:30". */
+function quandoCurto(data: string, hora: string | null, dias: number | null) {
+  const dia = dias === 0 ? "Hoje" : dias === 1 ? "Amanhã" : dias === -1 ? "Ontem" : `${data.slice(8, 10)}/${data.slice(5, 7)}`;
+  return hora ? `${dia}, ${hora}` : dia;
+}
+
+/** Nome curto da modalidade para o card: "Pregão", "Dispensa", "Concorrência"... */
+const modalidadeCurta = (m: string | null) => (m ? m.replace(/\s+(eletrônic[oa]|presencial)$/i, "") : "");
+
+function CardLicitacao({ l, hoje }: { l: LicitacaoResumo; hoje: string }) {
   const ativa = !["perdida", "ganha"].includes(l.etapa);
   const reaberta = ativa && !!l.data_reabertura && l.data_reabertura >= hoje;
   const data = reaberta ? l.data_reabertura : l.data_sessao;
   const hora = reaberta ? l.hora_reabertura : l.horario;
   const dias = data ? diasAte(data, hoje) : null;
-  const classePrazo = dias == null ? "" : dias < 0 ? "passou" : dias <= 1 ? "urgente" : dias <= 5 ? "proximo" : "";
-  const temResultado = l.itens_ganhos + l.itens_perdidos + l.itens_acompanhando > 0;
+  const classePrazo = !ativa || dias == null ? "" : dias < 0 ? "passou" : dias === 0 ? "urgente" : dias === 1 ? "amanha" : "";
+  const meta = [modalidadeCurta(l.modalidade), l.registro_preco === 1 ? "SRP" : ""].filter(Boolean).join(" · ");
 
   return (
     <>
       <div className="card-topo">
-        <h4 className="card-titulo">{l.numero ? `Nº ${l.numero}` : "Sem número"}</h4>
+        <h4 className="card-titulo">
+          {l.numero ? `Nº ${l.numero}` : "Sem número"}
+          {l.uasg && <small className="card-uasg">UASG {l.uasg}</small>}
+        </h4>
         {l.responsavel_nome && (
           <span title={`Responsável: ${l.responsavel_nome}`}>
             <Avatar nome={l.responsavel_nome} cor={l.responsavel_cor} foto={l.responsavel_foto} pequeno />
@@ -283,53 +296,40 @@ function CardLicitacao({ l, hoje, aoMudar }: { l: LicitacaoResumo; hoje: string;
         )}
       </div>
       <p className="card-orgao">{l.orgao || "Órgão não informado"}</p>
-      <div className="card-etiquetas">
-        {l.modalidade && <span className="chip">{l.modalidade}</span>}
-        {l.uasg && <span className="chip">UASG {l.uasg}</span>}
-        {l.registro_preco === 1 && <span className="chip destaque">SRP</span>}
-        {l.etapa === "boa_colocacao" && l.colocacao && <span className="chip amarelo">{l.colocacao}º lugar</span>}
-        {l.etapa === "boa_colocacao" && !l.acompanhar && <span className="chip">Sem acompanhar</span>}
-      </div>
+      {meta && <p className="card-meta">{meta}</p>}
 
-      {data && (
-        <div className={`card-sessao ${ativa ? classePrazo : ""}`}>
-          <CalendarClock aria-hidden="true" />
-          <span>
-            {reaberta ? "Reabre " : ""}
-            {formatarDataCurta(data)}
-            {hora && ` · ${hora}`}
-          </span>
-          {ativa && dias != null && dias >= 0 && <strong>{textoPrazo(dias)}</strong>}
-        </div>
-      )}
-
-      {temResultado && (
-        <div className="card-resultado">
-          {l.itens_ganhos > 0 && <span className="verde">{l.itens_ganhos} ganho(s)</span>}
-          {l.itens_acompanhando > 0 && <span className="amarelo">{l.itens_acompanhando} acompanhando</span>}
-          {l.itens_perdidos > 0 && <span className="vermelho">{l.itens_perdidos} perdido(s)</span>}
-        </div>
-      )}
-
+      <div className="card-linha" />
       <div className="card-rodape">
-        <div className="card-contadores">
-          <span title="Itens em que vamos participar">
-            <ListChecks aria-hidden="true" /> {l.total_itens} itens
+        {data ? (
+          <span className={`card-quando ${classePrazo}`} title={reaberta ? "Reabertura da sessão" : "Sessão"}>
+            <CalendarClock aria-hidden="true" />
+            {reaberta ? "Reabre " : ""}
+            {quandoCurto(data, hora, dias)}
           </span>
-          {l.total_arquivos > 0 && (
-            <span title="Arquivos">
-              <FileText aria-hidden="true" /> {l.total_arquivos}
-            </span>
-          )}
-        </div>
+        ) : (
+          <span className="card-quando sem-data">Sem data</span>
+        )}
         {l.valor_estimado != null && l.valor_estimado > 0 && <span className="card-valor">{valorCurto(l.valor_estimado)}</span>}
       </div>
-      {ativa && (l.total_cotacoes > 0 || !!l.compras_cadastrado_em) && ehDoCompras(l) && (
-        <div className="card-um-clique">
-          {l.compras_cadastrado_em && <span className="chip verde pequeno">Proposta no Compras · {l.compras_itens ?? 0} item(ns)</span>}
-          <BotaoUmClique licitacaoId={l.id} compacto cadastrada={!!l.compras_cadastrado_em} aoFechar={aoMudar} />
-        </div>
-      )}
+      <div className="card-status">
+        <span title="Itens em que vamos participar">
+          <ListChecks aria-hidden="true" /> {l.total_itens} {l.total_itens === 1 ? "item" : "itens"}
+        </span>
+        {l.total_arquivos > 0 && (
+          <span title="Arquivos">
+            <FileText aria-hidden="true" /> {l.total_arquivos}
+          </span>
+        )}
+        {l.compras_cadastrado_em && (
+          <span className="verde" title={`Proposta cadastrada no Compras.gov.br (${l.compras_itens ?? 0} itens)`}>
+            <CircleCheck aria-hidden="true" /> No Compras
+          </span>
+        )}
+        {l.etapa === "boa_colocacao" && l.colocacao && <span className="amarelo">{l.colocacao}º lugar</span>}
+        {l.itens_ganhos > 0 && <span className="verde">{l.itens_ganhos} ganho(s)</span>}
+        {l.itens_acompanhando > 0 && <span className="amarelo">{l.itens_acompanhando} acompanhando</span>}
+        {l.itens_perdidos > 0 && <span className="vermelho">{l.itens_perdidos} perdido(s)</span>}
+      </div>
     </>
   );
 }

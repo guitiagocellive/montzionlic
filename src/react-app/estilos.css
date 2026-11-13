@@ -5014,7 +5014,7 @@ a.kpi:hover {
 }
 
 .card-topo + .card-orgao {
-  margin-bottom: 8px;
+  margin: 3px 0 0;
 }
 
 .card-resultado {
@@ -14410,4 +14410,104 @@ p.etapa-fechada {
   width: 9px;
   height: 9px;
   border-radius: 50%;
+}
+
+/* ---------- Card do quadro (modelo "limpo") ---------- */
+.card-titulo {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: 7px;
+}
+
+.card-uasg {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--texto-fraco);
+  white-space: nowrap;
+}
+
+.card-meta {
+  margin: 2px 0 0;
+  font-size: 0.74rem;
+  color: var(--texto-fraco);
+}
+
+.card-linha {
+  height: 1px;
+  margin: 10px 0 9px;
+  background: var(--borda);
+}
+
+.card-kanban .card-rodape {
+  margin-top: 0;
+}
+
+.card-quando {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.8rem;
+  color: var(--texto-suave);
+  white-space: nowrap;
+}
+
+.card-quando svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.card-quando.urgente {
+  color: var(--vermelho);
+  font-weight: 600;
+}
+
+.card-quando.amanha {
+  color: var(--amarelo);
+  font-weight: 600;
+}
+
+.card-quando.passou,
+.card-quando.sem-data {
+  color: var(--texto-fraco);
+}
+
+.card-kanban .card-valor {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--texto);
+}
+
+.card-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 7px;
+  font-size: 0.74rem;
+  color: var(--texto-fraco);
+}
+
+.card-status span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.card-status svg {
+  width: 13px;
+  height: 13px;
+}
+
+.card-status .verde {
+  color: var(--verde);
+}
+
+.card-status .amarelo {
+  color: var(--amarelo);
+}
+
+.card-status .vermelho {
+  color: var(--vermelho);
 }
