@@ -207,6 +207,8 @@ export interface ItemAcomp {
   valorEstimado: number | null;
   /** A sua proposta como veio na lista de itens (reserva quando a tela do item demora). */
   propostaBruta: unknown;
+  /** Se você tem proposta neste item (os outros itens da compra aparecem em "Todos os itens"). */
+  participa: boolean;
 }
 
 const PENDENCIAS: [string, Pendencia["tipo"], string][] = [
@@ -273,6 +275,7 @@ export function lerItemAcomp(bruto: unknown): ItemAcomp | null {
     etapa: texto(primeiro(x.descricaoSituacao, x.situacaoDescricao, x.detalheSituacao, x.descricaoFase, x.situacaoSelecao)) || fase,
     valorEstimado: valorDe(primeiro(x.valorEstimado, x.valorUnitarioEstimado, x.valorEstimadoUnitario)),
     propostaBruta: Object.keys(p).length ? p : null,
+    participa: true,
   };
   const { chance, explicacao } = calcularChance(item, situacaoItem, desclassificado);
   item.chance = chance;
@@ -335,6 +338,10 @@ export function lerMensagem(bruto: unknown): MensagemAcomp | null {
 export interface DetalheBruto {
   participacao?: unknown;
   itens?: unknown[];
+  /** De onde vieram os itens: "selecao" e "disputa" só trazem os seus; "itens" traz todos da compra. */
+  origemItens?: string;
+  /** Todos os itens da compra (com e sem proposta sua), quando lidos. */
+  todosItens?: unknown[];
   mensagens?: unknown[];
   erros?: string[];
   em: number;
@@ -374,6 +381,8 @@ export interface CompraAcomp extends Participacao {
   uf: string;
   /** A sua empresa nesta compra (CNPJ/CPF só com números), como o Compras.gov.br devolve na sua participação. */
   meuCnpj: string;
+  /** Itens da compra em que você não tem proposta (para ver tudo da licitação). */
+  outrosItens: ItemAcomp[];
 }
 
 export function montarCompras(lista: unknown[] | null, detalhes: Record<string, DetalheBruto> | null): CompraAcomp[] {
@@ -386,7 +395,16 @@ export function montarCompras(lista: unknown[] | null, detalhes: Record<string, 
     const d = detalhes?.[p.chave];
     // A leitura da compra completa (participação) pode trazer dados que faltam na lista.
     const extra = d?.participacao ? lerParticipacao({ chaveCompra: p.chave, ...obj(d.participacao), ...obj(obj(d.participacao).compra) }) : null;
-    const itens = (d?.itens ?? []).map(lerItemAcomp).filter((x): x is ItemAcomp => !!x);
+    const lidos = (d?.itens ?? []).map(lerItemAcomp).filter((x): x is ItemAcomp => !!x);
+    // "selecao" e "disputa" já vêm só com os itens em que você tem proposta; a lista geral ("itens") traz todos.
+    // Se a lista geral não disser em quais itens você tem proposta, mostra todos como antes.
+    const soMeus = d?.origemItens === "selecao" || d?.origemItens === "disputa" || !lidos.some((i) => !!i.propostaBruta);
+    const itens = soMeus ? lidos : lidos.filter((i) => !!i.propostaBruta);
+    const meus = new Set(itens.map((i) => i.numero));
+    const outrosItens = [...(soMeus ? (d?.todosItens ?? []).map(lerItemAcomp) : lidos.filter((i) => !i.propostaBruta))]
+      .filter((x): x is ItemAcomp => !!x && !meus.has(x.numero))
+      .map((i) => ({ ...i, participa: false, chance: "aguardando" as Chance, explicacao: "Você não tem proposta neste item." }))
+      .sort((a, b) => a.numero - b.numero);
     const mensagens = (d?.mensagens ?? [])
       .map(lerMensagem)
       .filter((x): x is MensagemAcomp => !!x)
@@ -403,6 +421,7 @@ export function montarCompras(lista: unknown[] | null, detalhes: Record<string, 
       erros: d?.erros ?? [],
       meEpp: d?.participacao && obj(d.participacao).declaracaoMeEpp != null ? obj(d.participacao).declaracaoMeEpp === true : null,
       uf: texto(primeiro(obj(obj(obj(d?.participacao).participante).endereco).uf, obj(obj(d?.participacao).participante).uf)),
+      outrosItens,
       meuCnpj: idEmpresa(primeiro(obj(obj(d?.participacao).participante).identificacao, obj(d?.participacao).identificacaoParticipante, obj(d?.participacao).identificacaoFornecedor)),
     });
   }

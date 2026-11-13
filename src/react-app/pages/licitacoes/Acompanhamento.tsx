@@ -713,6 +713,7 @@ function JanelaCompra({
 }) {
   const [aberto, setAberto] = useState<number | null>(null);
   const [filtro, setFiltro] = useState<FiltroItens>("todos");
+  const [modo, setModo] = useState<"meus" | "todos">("meus");
   const [, setLidas] = useState(0);
   const passo = passoDa(c);
   const lidos = !!c.lidaEm;
@@ -733,7 +734,8 @@ function JanelaCompra({
     if (c.itens.length === 1 && aberto == null) setAberto(c.itens[0].numero);
   }, [c.itens, aberto]);
 
-  const info = c.itens.map((it) => {
+  const todosOsItens = modo === "todos" ? [...c.itens, ...c.outrosItens].sort((a, b) => a.numero - b.numero) : c.itens;
+  const info = todosOsItens.map((it) => {
     const conversa = conversaDoItem(c.mensagens, it.numero, cnpj);
     const dados = jaLido<PropostasDoItem>(chavePropostas(c, it.numero));
     const estado = estadoDoItem(it, dados, cnpj);
@@ -827,24 +829,38 @@ function JanelaCompra({
               </button>
             </div>
 
+            {c.outrosItens.length > 0 && (
+              <div className="modo-itens" role="tablist" aria-label="Quais itens mostrar">
+                <button role="tab" aria-selected={modo === "meus"} className={modo === "meus" ? "ativo" : ""} onClick={() => setModo("meus")}>
+                  Itens que participo <b>{c.itens.length}</b>
+                </button>
+                <button role="tab" aria-selected={modo === "todos"} className={modo === "todos" ? "ativo" : ""} onClick={() => setModo("todos")}>
+                  Todos os itens da licitação <b>{c.itens.length + c.outrosItens.length}</b>
+                </button>
+              </div>
+            )}
             <ul className="cartoes-itens">
               {visiveis.map(({ it, conversa, analise, estado, minha, convocado }) => {
                 const expandido = aberto === it.numero;
                 return (
-                  <li key={it.numero} className={`cartao-item chance-${estado.chance} ${convocado ? "convocado" : ""} ${expandido ? "expandido" : ""}`}>
+                  <li key={it.numero} className={`cartao-item chance-${estado.chance} ${convocado ? "convocado" : ""} ${expandido ? "expandido" : ""} ${it.participa ? "" : "nao-participa"}`}>
                     <button className="topo-cartao-item" onClick={() => setAberto(expandido ? null : it.numero)} aria-expanded={expandido}>
                       <span className="colocacao-cartao">
-                        <strong>{ordinal(estado.colocacao)}</strong>
-                        <small>{estado.total ? `de ${estado.total}` : "colocação"}</small>
+                        <strong>{it.participa ? ordinal(estado.colocacao) : "—"}</strong>
+                        <small>{!it.participa ? "sem proposta" : estado.total ? `de ${estado.total}` : "colocação"}</small>
                       </span>
                       <span className="corpo-cartao-item">
                         <span className="nome-cartao-item">
                           <b>Item {it.numero}</b> {it.descricao}
                         </span>
                         <span className="etiquetas-item">
-                          <span className={`chip ${COR_CHANCE[estado.chance]}`} title={estado.explicacao}>
-                            {ROTULO_CHANCE[estado.chance]}
-                          </span>
+                          {it.participa ? (
+                            <span className={`chip ${COR_CHANCE[estado.chance]}`} title={estado.explicacao}>
+                              {ROTULO_CHANCE[estado.chance]}
+                            </span>
+                          ) : (
+                            <span className="chip cinza">Sem proposta sua</span>
+                          )}
                           {it.pendencias.map((p) => (
                             <span key={p.tipo} className="chip vermelho">
                               {p.rotulo}
@@ -855,11 +871,11 @@ function JanelaCompra({
                               <MessageSquare size={11} /> Pregoeiro falou com você
                             </span>
                           )}
-                          {estado.momento && !estado.momento.startsWith("Convocada") && <span className={`chip ${estado.chance === "ganhou" ? "verde" : estado.chance === "fora" ? "vermelho" : "cinza"}`}>{estado.momento}</span>}
+                          {it.participa && estado.momento && !estado.momento.startsWith("Convocada") && <span className={`chip ${estado.chance === "ganhou" ? "verde" : estado.chance === "fora" ? "vermelho" : "cinza"}`}>{estado.momento}</span>}
                         </span>
                         <span className="analise-cartao texto-suave">
                           {[
-                            it.etapa !== estado.momento ? it.etapa : "",
+                            !it.participa || it.etapa !== estado.momento ? it.etapa : "",
                             analise?.souPrimeira ? "Você é a 1ª válida" : analise && analise.aFrenteValidas > 0 ? `${analise.aFrenteValidas} válida${analise.aFrenteValidas > 1 ? "s" : ""} à sua frente` : "",
                             analise?.desclassificadas ? `${analise.desclassificadas} desclassificada${analise.desclassificadas > 1 ? "s" : ""}` : "",
                             analise?.aFrenteSemAnexos ? `${analise.aFrenteSemAnexos} à frente sem anexos` : "",
@@ -869,10 +885,18 @@ function JanelaCompra({
                         </span>
                       </span>
                       <span className="valores-cartao">
+                        {!it.participa && it.valorEstimado != null && (
+                          <span>
+                            <small>Valor estimado</small>
+                            <b>{formatarMoeda(it.valorEstimado)}</b>
+                          </span>
+                        )}
+                        {it.participa && (
                         <span>
                           <small>Sua proposta</small>
                           <b>{(minha ? (minha.valorNegociado ?? minha.valorOfertado ?? minha.valor) : it.meuValor) != null ? formatarMoeda((minha ? (minha.valorNegociado ?? minha.valorOfertado ?? minha.valor) : it.meuValor) as number) : "—"}</b>
                         </span>
+                        )}
                         {it.melhorValor != null && it.melhorValor !== it.meuValor && (
                           <span>
                             <small>Melhor valor</small>
@@ -887,7 +911,7 @@ function JanelaCompra({
                     </button>
                     {expandido && (
                       <div className="participacao-cartao">
-                        <ItemCompras compra={c} item={it} cnpj={cnpj} />
+                        <ItemCompras compra={c} item={it} cnpj={cnpj} participa={it.participa} />
                       </div>
                     )}
                   </li>

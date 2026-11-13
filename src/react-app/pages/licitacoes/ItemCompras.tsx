@@ -273,8 +273,21 @@ export function conversaDoItem(mensagens: MensagemAcomp[], numeroItem: number, c
 
 type Aba = "minha" | "todos" | "lances";
 
-export function ItemCompras({ compra, item, cnpj, abaInicial = "minha" }: { compra: CompraAcomp; item: ItemAcomp; cnpj: string; abaInicial?: Aba }) {
-  const [aba, setAba] = useState<Aba>(abaInicial);
+export function ItemCompras({
+  compra,
+  item,
+  cnpj,
+  abaInicial = "minha",
+  participa = true,
+}: {
+  compra: CompraAcomp;
+  item: ItemAcomp;
+  cnpj: string;
+  abaInicial?: Aba;
+  /** Item sem proposta sua: mostra só os participantes e os lances. */
+  participa?: boolean;
+}) {
+  const [aba, setAba] = useState<Aba>(participa ? abaInicial : "todos");
   const dados = useCarga(true, () => carregarPropostas(compra, item.numero, cnpj), chavePropostas(compra, item.numero));
   const nomes = useMemo(() => new Map((dados.dados?.todas ?? []).map((p) => [p.cnpj, p.empresa])), [dados.dados]);
   // Reserva: a sua proposta como veio na lista de itens (aparece na hora, antes da tela do item responder).
@@ -291,9 +304,11 @@ export function ItemCompras({ compra, item, cnpj, abaInicial = "minha" }: { comp
   return (
     <div className="item-compras">
       <div className="abas-compras" role="tablist">
-        <button role="tab" aria-selected={aba === "minha"} className={aba === "minha" ? "ativo" : ""} onClick={() => setAba("minha")}>
-          <UserRound size={15} /> Minha participação
-        </button>
+        {participa && (
+          <button role="tab" aria-selected={aba === "minha"} className={aba === "minha" ? "ativo" : ""} onClick={() => setAba("minha")}>
+            <UserRound size={15} /> Minha participação
+          </button>
+        )}
         <button role="tab" aria-selected={aba === "todos"} className={aba === "todos" ? "ativo" : ""} onClick={() => setAba("todos")}>
           <Users size={15} /> Todos os participantes{participantes ? ` (${participantes})` : ""}
         </button>

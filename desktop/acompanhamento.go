@@ -32,6 +32,7 @@ type detalheCompra struct {
 	Participacao json.RawMessage `json:"participacao,omitempty"`
 	Itens        json.RawMessage `json:"itens,omitempty"`
 	OrigemItens  string          `json:"origemItens,omitempty"`
+	TodosItens   json.RawMessage `json:"todosItens,omitempty"` // todos os itens da compra (com e sem proposta sua)
 	Mensagens    json.RawMessage `json:"mensagens,omitempty"`
 	Erros        []string        `json:"erros,omitempty"`
 	Em           int64           `json:"em"`
@@ -707,6 +708,10 @@ func (m *motor) detalharDireto(c compraAcomp) *detalheCompra {
 	r, err := m.lerAcomp(fe+"/v1/compras/"+k+"/itens/em-selecao-fornecedores", "filtro=2&pagina=0&tamanhoPagina=100", true)
 	if err == nil && okHTTP(r.Status) && len(listaQualquer(r.Corpo)) > 0 {
 		d.Itens, d.OrigemItens = juntarLista(listaQualquer(r.Corpo)), "selecao"
+		// Também todos os itens da compra (filtro "Todos os itens" da tela oficial), para ver os que você não disputa.
+		if todos := m.todosItensSelecao(k); len(todos) > 0 {
+			d.TodosItens = juntarLista(todos)
+		}
 	} else {
 		r2, err2 := m.lerAcomp(fe+"/v1/compras/"+k+"/itens", "situacoes=1,2,3,4,5,6,7,8,9,13,14&pagina=0&tamanhoPagina=100", true)
 		if err2 == nil && okHTTP(r2.Status) && len(listaQualquer(r2.Corpo)) > 0 {
@@ -873,4 +878,58 @@ func (m *motor) roboConfereDisputas() {
 	if falta && pronto {
 		m.atualizarLista()
 	}
+}
+
+var codigoTodosItens atomic.Value // código do filtro "TODOS_ITENS" (lido em /v1/enums)
+
+// filtroTodosItens: código oficial do filtro "Todos os itens" da seleção de fornecedores (1 se não der para ler).
+func (m *motor) filtroTodosItens() string {
+	if v, ok := codigoTodosItens.Load().(string); ok && v != "" {
+		return v
+	}
+	codigo := ""
+	if r, err := m.lerAcomp(fe+"/v1/enums", "", false); err == nil && okHTTP(r.Status) {
+		var lista []struct {
+			Name   string `json:"name"`
+			Values []struct {
+				Value    any    `json:"value"`
+				EnumName string `json:"enumName"`
+			} `json:"values"`
+		}
+		if json.Unmarshal(r.Corpo, &lista) == nil {
+			for _, e := range lista {
+				if e.Name != "FiltroItensParaSelecaoFornecedoresEnum" {
+					continue
+				}
+				for _, v := range e.Values {
+					if v.EnumName == "TODOS_ITENS" {
+						codigo = textoDe(numeroInteiro(v.Value))
+					}
+				}
+			}
+		}
+	}
+	if codigo == "" {
+		return "1"
+	}
+	codigoTodosItens.Store(codigo)
+	return codigo
+}
+
+// todosItensSelecao: todos os itens da compra na seleção de fornecedores (em páginas de 100, até 500 itens).
+func (m *motor) todosItensSelecao(chave string) []json.RawMessage {
+	filtro := m.filtroTodosItens()
+	var todos []json.RawMessage
+	for pagina := 0; pagina < 5; pagina++ {
+		r, err := m.lerAcomp(fe+"/v1/compras/"+chave+"/itens/em-selecao-fornecedores", fmt.Sprintf("filtro=%s&pagina=%d&tamanhoPagina=100", filtro, pagina), true)
+		if err != nil || !okHTTP(r.Status) {
+			break
+		}
+		l := listaQualquer(r.Corpo)
+		todos = append(todos, l...)
+		if len(l) < 100 {
+			break
+		}
+	}
+	return todos
 }

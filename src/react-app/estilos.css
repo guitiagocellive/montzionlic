@@ -13568,3 +13568,47 @@ p.etapa-fechada {
 .tabela-lances-compras td {
   white-space: nowrap;
 }
+
+.modo-itens {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  border: 1px solid var(--borda);
+  background: var(--superficie);
+  justify-self: start;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.modo-itens button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--texto-suave);
+  font: inherit;
+  font-size: 0.84rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.modo-itens button b {
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--superficie-2);
+  font-size: 0.74rem;
+}
+.modo-itens button.ativo {
+  background: var(--acento-suave);
+  color: var(--texto);
+  font-weight: 600;
+}
+.cartao-item.nao-participa:not(.expandido) {
+  background: var(--superficie);
+  border-style: dashed;
+}
+.cartao-item.nao-participa .colocacao-cartao strong {
+  color: var(--texto-fraco);
+}

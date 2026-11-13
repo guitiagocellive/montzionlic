@@ -1,11 +1,8 @@
 {
-  "versao": "3.1.22",
+  "versao": "3.1.23",
   "data": "2026-11-13",
   "novidades": [
-    "Acompanhamento: corrigido o reconhecimento da sua empresa (o Compras escreve o CNPJ de jeitos diferentes). Agora \"Minha participação\" mostra a sua proposta, a conversa com o pregoeiro e os anexos que você enviou, e as mensagens aparecem como \"Pregoeiro → você\".",
-    "Anexos das outras empresas abrem pelo mesmo caminho do site do Compras (acabou o erro \"No static resource\").",
-    "Lances refeitos como no Compras: melhor lance de cada participante (com o seu marcado) e todos os lances com data e hora, lances excluídos pelo pregoeiro riscados e os seus destacados.",
-    "Situação de cada item para você: adjudicada (e homologada), habilitada aguardando adjudicação, aceita aguardando habilitação, 1ª colocada aguardando o pregoeiro, convocada ou na fila — no cartão e na sua participação.",
-    "Conversa sem mensagens não aparece mais como erro 404."
+    "Acompanhamento: na licitação, escolha entre \"Itens que participo\" e \"Todos os itens da licitação\". Os itens sem proposta sua aparecem com a descrição, a situação, a quantidade e o valor estimado.",
+    "O \"+\" de um item sem proposta sua abre \"Todos os participantes\" (classificação, desclassificadas, conversas e anexos de cada empresa) e \"Lances\"."
   ]
 }
