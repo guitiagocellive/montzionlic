@@ -12,8 +12,11 @@ export interface ConfigItemRobo {
   ligado: boolean;
   /** Lance mínimo (valor do item na disputa). Abaixo disso o robô nunca vai. */
   minimo: number | null;
-  /** Quanto baixar do melhor lance a cada lance (%). O intervalo mínimo do edital sempre é respeitado. */
+  /** Quanto baixar do melhor lance a cada lance: % (tipoDesconto "P") ou R$ (tipoDesconto "V"), como o intervalo
+   *  mínimo do edital. O intervalo do edital sempre é respeitado. */
   desconto: number;
+  /** "P" = desconto em %, "V" = desconto em R$ (preenchido conforme o intervalo do edital). */
+  tipoDesconto?: "P" | "V";
   /** Cobrir na hora, sem esperar os 10 segundos finais (padrão: espera). */
   naoAguardar: boolean;
   /** Lances com 4 casas decimais (senão, centavos). */
@@ -119,7 +122,7 @@ export function decidir(estado: EstadoItem, item: ConfigItemRobo | undefined): D
 
   const melhor = estado.melhorLance ?? estado.nossoLance;
   // Cobrir o melhor: desconto escolhido, nunca menos que o intervalo do edital.
-  const desconto = arredondarAcima((melhor * Math.max(item.desconto || 0, 0)) / 100, q);
+  const desconto = arredondarAcima(valorDoDesconto(melhor, item), q);
   const alvo = arredondarAbaixo(melhor - Math.max(desconto, passoMinimo(melhor, estado, q)), q);
   if (alvo >= minimo && alvo < estado.nossoLance) {
     return { acao: "enviar", tipo: "lance", valor: alvo, motivo: `Cobrindo o melhor lance (${reais(melhor, q)}) com ${reais(alvo, q)}` };
@@ -170,16 +173,25 @@ function melhorColocacao(estado: EstadoItem, item: ConfigItemRobo, minimo: numbe
   return { acao: "enviar", tipo: "colocacao", valor: lance, motivo: `Melhor colocação possível (${posicao(lance)}º lugar): cobrindo ${reais(alvoConc, q)} com ${reais(lance, q)}` };
 }
 
+/** Quanto baixar (R$) a partir de um lance, pelo desconto do item (% ou R$). */
+export function valorDoDesconto(base: number, item: Pick<ConfigItemRobo, "desconto" | "tipoDesconto">): number {
+  const d = Math.max(item.desconto || 0, 0);
+  return item.tipoDesconto === "V" ? d : (base * d) / 100;
+}
+
 /** Lê a configuração salva de um item (completa com os padrões e descarta valores inválidos). */
 export function normalizarItem(bruto: unknown): ConfigItemRobo {
   const b = (bruto && typeof bruto === "object" ? bruto : {}) as Partial<ConfigItemRobo>;
   const num = (v: unknown) => (typeof v === "number" ? v : Number(v));
   const minimo = b.minimo == null || (b.minimo as unknown) === "" ? null : num(b.minimo);
   const desconto = num(b.desconto);
+  const tipoDesconto = b.tipoDesconto === "V" ? "V" : "P";
+  const descontoOk = Number.isFinite(desconto) && desconto >= 0 && (tipoDesconto === "V" ? desconto < 1e9 : desconto <= 50);
   return {
     ligado: b.ligado === true,
     minimo: minimo != null && Number.isFinite(minimo) && minimo > 0 ? minimo : null,
-    desconto: Number.isFinite(desconto) && desconto >= 0 && desconto <= 50 ? desconto : ITEM_ROBO_PADRAO.desconto,
+    desconto: descontoOk ? desconto : ITEM_ROBO_PADRAO.desconto,
+    tipoDesconto,
     naoAguardar: b.naoAguardar === true,
     quatroCasas: b.quatroCasas === true,
   };

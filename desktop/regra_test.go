@@ -40,6 +40,48 @@ func TestDecidir(t *testing.T) {
 	}
 }
 
+func TestDescontoEmReais(t *testing.T) {
+	// Edital com intervalo de R$ 0,01: o campo vem "desconto (R$) 0,01" e o robô cobre por 1 centavo.
+	cfg := &configItem{Ligado: true, Minimo: f(900), Desconto: 0.01, TipoDesconto: "V", NaoAguardar: true}
+	e := estadoItem{Fase: "LA", RestanteSeg: f(60), Melhor: f(980), Nosso: f(1000), Situacao: "P", Variacao: f(0.01), TipoVariacao: "V"}
+	if d := decidir(e, cfg); !d.Enviar || d.Valor != 979.99 {
+		t.Errorf("R$ 0,01: veio %+v", d)
+	}
+	// R$ 5 de desconto (acima do intervalo do edital).
+	cfg.Desconto = 5
+	if d := decidir(e, cfg); !d.Enviar || d.Valor != 975 {
+		t.Errorf("R$ 5: veio %+v", d)
+	}
+	// Em %: 1% de 980 = 9,80.
+	pct := &configItem{Ligado: true, Minimo: f(900), Desconto: 1, TipoDesconto: "P", NaoAguardar: true}
+	if d := decidir(e, pct); !d.Enviar || d.Valor != 970.20 {
+		t.Errorf("1%%: veio %+v", d)
+	}
+}
+
+func TestLancePertoDoFimDeixaCaptchaPronto(t *testing.T) {
+	agora := time.Now()
+	m := &motor{token: "x", compras: map[string]*compraMotor{}, config: map[string]configItem{}}
+	item := func(fase string, restante float64, situacao string) *itemMotor {
+		return &itemMotor{bruto: map[string]any{"numero": 1.0, "fase": fase, "tempoRestanteEmSegundos": restante,
+			"melhorValorGeral": map[string]any{"valorCalculado": 950.0}, "melhorValorFornecedor": map[string]any{"valorCalculado": 1000.0},
+			"situacaoParticipanteDisputa": situacao}, recebidoEm: agora}
+	}
+	m.compras["c"] = &compraMotor{itens: map[int]*itemMotor{1: item("LA", 600, "P")}}
+	if m.precisaCaptchaPronto() {
+		t.Error("10 min antes do fim e robô parado: não precisa de captcha pronto")
+	}
+	m.compras["c"].itens[1] = item("LA", 90, "P")
+	if !m.precisaCaptchaPronto() {
+		t.Error("1,5 min do fim, perdendo, robô parado: o captcha deveria ficar pronto para quando ligar o robô")
+	}
+	m.compras["c"].itens[1] = item("LA", 90, "G")
+	m.compras["c"].itens[1].bruto["melhorValorGeral"] = map[string]any{"valorCalculado": 1000.0}
+	if m.precisaCaptchaPronto() {
+		t.Error("ganhando: não precisa de captcha pronto")
+	}
+}
+
 func TestLerItemDeduzPerdendo(t *testing.T) {
 	e := lerItem(map[string]any{"numero": 1.0, "fase": "LA", "melhorValorGeral": map[string]any{"valorCalculado": 950.0}, "melhorValorFornecedor": map[string]any{"valorCalculado": 960.0}, "situacaoParticipanteDisputa": "G"})
 	if e.Situacao != "P" || e.Numero != 1 {

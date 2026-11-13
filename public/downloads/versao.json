@@ -1,10 +1,10 @@
 {
-  "versao": "3.1.30",
+  "versao": "3.1.31",
   "data": "2026-11-13",
   "novidades": [
-    "Acompanhamento: logo depois do login, a leitura do Acompanhamento vem antes da busca das disputas do robô (as duas usam o mesmo captcha, um por vez). Com o robô ligado em algum item, a sala de disputa continua tendo prioridade.",
-    "Diagnóstico com os tempos de cada captcha (fila, sala de disputa e o captcha em si) e de cada parte da leitura: se ainda demorar, o \"Copiar diagnóstico\" mostra exatamente onde.",
-    "Visual padronizado: a mesma paginação em todas as telas (busca, acompanhamento, mercado e empresas), com atalhos para a primeira e a última página; os botões de ícone do Acompanhamento seguem o padrão da plataforma.",
-    "Finalizadas: enquanto o total do Compras não chega, mostra \"10+\" em vez de parecer que só existem as já lidas."
+    "Disputas: com o robô ligado, dá para marcar ou desmarcar \"Não esperar os últimos 10 segundos para cobrir\" e \"Permitir lances com 4 casas decimais\" sem parar o robô. Vale na hora.",
+    "Disputas: o campo de desconto já vem preenchido com o intervalo mínimo entre lances do edital: em R$ quando o edital pede valor (ex.: desconto (R$) 0,01) e em % quando pede porcentagem. Dá para aumentar.",
+    "Robô mais rápido no 1º lance: perto do fim de uma disputa sua, o captcha e a conexão com o Compras.gov.br já ficam prontos mesmo com o robô parado. Ao ligar, o lance sai sem esperar.",
+    "Acompanhamento: o Compras.gov.br entrega no máximo 20 por página, e o aplicativo passa a ler de 20 em 20 (antes 10): metade dos pedidos. As páginas seguintes e as partes de uma licitação (participação, itens e mensagens) são pedidas ao mesmo tempo."
   ]
 }

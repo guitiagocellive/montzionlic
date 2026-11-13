@@ -232,7 +232,7 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
           const novo = { ...t };
           for (const [k, c] of Object.entries(r.itens)) {
             novo[`${k}:minimo`] ??= textoNumero(c.minimo);
-            novo[`${k}:desconto`] ??= textoNumero(c.desconto);
+            // O desconto não é copiado para o campo: ele mostra o salvo ou, sem ele, o intervalo mínimo do edital.
           }
           return novo;
         });
@@ -282,20 +282,38 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
     );
   }
 
+  // Desconto do item: em R$ ou em %, como o intervalo mínimo entre lances do edital. Sem nada digitado, o campo já
+  // vem com o intervalo do edital (ex.: R$ 0,01 ou 0,5%); a pessoa pode aumentar.
+  function descontoDoItem(k: string, i: ItemDisputa, cfg: ConfigItemRobo) {
+    const temEdital = i.variacaoMinima != null && i.variacaoMinima > 0;
+    const tipo: "P" | "V" = temEdital ? (i.tipoVariacao === "P" ? "P" : "V") : (cfg.tipoDesconto ?? "P");
+    const salvo = (cfg.tipoDesconto ?? "P") === tipo && cfg.desconto > 0 ? cfg.desconto : null;
+    const padrao = salvo ?? (temEdital ? (i.variacaoMinima as number) : 0);
+    const digitado = textos[`${k}:desconto`];
+    return { tipo, texto: digitado ?? (padrao ? textoNumero(padrao) : ""), valor: digitado != null ? (paraNumero(digitado) ?? 0) : padrao, temEdital };
+  }
+
+  function descontoInvalido(tipo: "P" | "V", n: number, item: ItemDisputa) {
+    if (!(n >= 0)) return "O desconto não pode ser negativo.";
+    if (tipo === "P" && n > 50) return "O desconto precisa ficar entre 0 e 50%.";
+    if (tipo === "V" && item.nossoLance != null && n >= item.nossoLance) return "O desconto em R$ precisa ser menor que o seu lance atual.";
+    return "";
+  }
+
   // Como no Siga Pregão: o mínimo e o desconto só mudam com o robô PARADO. Ao ligar, vale o que está digitado.
   // (Antes o robô usava o valor a cada tecla: digitando 290, no "2" ele já entendia mínimo 2 e dava lance.)
   function alternarRobo(k: string, item: ItemDisputa) {
     const cfg = config[k] ?? ITEM_ROBO_PADRAO;
     if (cfg.ligado) return mudarItem(k, { ligado: false });
     const minimo = paraNumero(textos[`${k}:minimo`] ?? "") ?? cfg.minimo;
-    const textoDesconto = textos[`${k}:desconto`];
-    const desconto = textoDesconto != null ? (paraNumero(textoDesconto) ?? 0) : cfg.desconto;
+    const { tipo: tipoDesconto, valor: desconto } = descontoDoItem(k, item, cfg);
     if (!(minimo && minimo > 0)) return avisar("Informe o lance mínimo antes de ligar o robô.", "erro");
-    if (!(desconto >= 0 && desconto <= 50)) return avisar("O desconto precisa ficar entre 0 e 50%.", "erro");
+    const invalido = descontoInvalido(tipoDesconto, desconto, item);
+    if (invalido) return avisar(invalido, "erro");
     if (item.nossoLance != null && minimo > item.nossoLance) avisar("O lance mínimo está acima do seu lance atual: o robô não vai baixar.", "erro");
     const ref = item.nossoLance ?? item.melhorLance;
     if (ref != null && minimo < ref * 0.6 && !window.confirm(`Confirma o lance mínimo de ${moeda(minimo, cfg.quatroCasas)}?\n\nEle está ${Math.round((1 - minimo / ref) * 100)}% abaixo de ${moeda(ref, cfg.quatroCasas)}.`)) return;
-    mudarItem(k, { minimo, desconto, ligado: true });
+    mudarItem(k, { minimo, desconto, tipoDesconto, ligado: true });
   }
 
   // Quanto tempo está em "Entrando na sala de disputa" (depois de 20 s aparecem as ajudas).
@@ -432,24 +450,35 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
                           />
                         </span>
                       </label>
-                      <label className="campo">
-                        <span>desconto (%)</span>
-                        <span className="entrada">
-                          <input
-                            inputMode="decimal"
-                            value={textos[`${k}:desconto`] ?? textoNumero(cfg.desconto)}
-                            onChange={(e) => setTextos((t) => ({ ...t, [`${k}:desconto`]: e.target.value }))}
-                            onBlur={(e) => {
-                              const n = paraNumero(e.target.value) ?? 0;
-                              if (!cfg.ligado && n >= 0 && n <= 50) mudarItem(k, { desconto: n });
-                            }}
-                            disabled={cfg.ligado}
-                            placeholder="0"
-                            title={cfg.ligado ? "Pare o robô para alterar" : "0 = cobre pelo menor valor permitido (mais lucro)"}
-                            aria-label={`Desconto do item ${i.numero}`}
-                          />
-                        </span>
-                      </label>
+                      {(() => {
+                        const desc = descontoDoItem(k, i, cfg);
+                        return (
+                          <label className="campo">
+                            <span>desconto ({desc.tipo === "V" ? "R$" : "%"})</span>
+                            <span className="entrada">
+                              <input
+                                inputMode="decimal"
+                                value={desc.texto}
+                                onChange={(e) => setTextos((t) => ({ ...t, [`${k}:desconto`]: e.target.value }))}
+                                onBlur={(e) => {
+                                  const n = paraNumero(e.target.value) ?? 0;
+                                  if (!cfg.ligado && !descontoInvalido(desc.tipo, n, i)) mudarItem(k, { desconto: n, tipoDesconto: desc.tipo });
+                                }}
+                                disabled={cfg.ligado}
+                                placeholder={desc.tipo === "V" ? "0,00" : "0"}
+                                title={
+                                  cfg.ligado
+                                    ? "Pare o robô para alterar"
+                                    : desc.temEdital
+                                      ? `Preenchido com o intervalo mínimo entre lances do edital (${desc.tipo === "V" ? "em R$" : "em %"}). Pode aumentar; menos que isso o Compras.gov.br não aceita.`
+                                      : "0 = cobre pelo menor valor permitido (mais lucro)"
+                                }
+                                aria-label={`Desconto do item ${i.numero} (${desc.tipo === "V" ? "em reais" : "em porcentagem"})`}
+                              />
+                            </span>
+                          </label>
+                        );
+                      })()}
                       <div className={`valor-disputa melhor-lance ${tremendo.has(k) ? "tremer" : ""}`} key={tremendo.has(k) ? `t${tremendo.get(k)}` : "parado"}>
                         <span>Melhor lance</span>
                         <strong className={nosso ? "texto-verde" : "texto-perigo"}>
@@ -480,10 +509,10 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
                     </div>
                     <div className="item-disputa-opcoes">
                       <label>
-                        <input type="checkbox" checked={cfg.quatroCasas} disabled={cfg.ligado} onChange={(e) => mudarItem(k, { quatroCasas: e.target.checked })} /> Permitir lances com 4 casas decimais
+                        <input type="checkbox" checked={cfg.quatroCasas} onChange={(e) => mudarItem(k, { quatroCasas: e.target.checked })} /> Permitir lances com 4 casas decimais
                       </label>
                       <label>
-                        <input type="checkbox" checked={cfg.naoAguardar} disabled={cfg.ligado} onChange={(e) => mudarItem(k, { naoAguardar: e.target.checked })} /> Não esperar os últimos{" "}
+                        <input type="checkbox" checked={cfg.naoAguardar} onChange={(e) => mudarItem(k, { naoAguardar: e.target.checked })} /> Não esperar os últimos{" "}
                         {SEGUNDOS_FINAIS} segundos para cobrir
                       </label>
                     </div>
@@ -517,7 +546,7 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
                           </div>
                         );
                       })()}
-                    {cfg.ligado && <p className="aviso-robo-travado">Robô ligado com mínimo de {moeda(cfg.minimo, cfg.quatroCasas)}. Para mudar o mínimo, pare o robô (■), altere e ligue de novo.</p>}
+                    {cfg.ligado && <p className="aviso-robo-travado">Robô ligado com mínimo de {moeda(cfg.minimo, cfg.quatroCasas)}. Para mudar o mínimo ou o desconto, pare o robô (■), altere e ligue de novo. As opções acima mudam na hora, sem parar.</p>}
                     <div className="item-disputa-rodape">
                       <span className="texto-fraco pequeno">
                         {FASES[i.fase] ?? i.fase}

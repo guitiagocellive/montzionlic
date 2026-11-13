@@ -19,7 +19,8 @@ import (
 var tamanhoPagina atomic.Int32
 
 func arquivoTamanhoPagina() string {
-	return filepath.Join(pastaInstalacao(), "pagina-acompanhamento.txt")
+	// v2: o Compras.gov.br devolve no máximo 20 por página (pedindo 25, 50 ou 100 vêm 20); quem guardou 10 testa de novo.
+	return filepath.Join(pastaInstalacao(), "pagina-acompanhamento-v2.txt")
 }
 
 // tamanhoPaginaAcomp: quantas participações pedir por página (10, como o site, até o teste mostrar que dá mais).
@@ -60,6 +61,7 @@ type medidaLeitura struct {
 	Paginas int    `json:"paginas"`
 	Kb      int    `json:"kb"`
 	Aceitou bool   `json:"aceitou"`
+	Limite  int    `json:"limite,omitempty"` // o Compras cortou a página neste tamanho
 	Erro    string `json:"erro,omitempty"`
 }
 
@@ -102,6 +104,10 @@ func (m *motor) TestarLeitura() any {
 			md.Total = md.Veio
 		}
 		md.Aceitou = md.Veio == min(tam, md.Total) && md.Veio > 0
+		// Veio menos que o pedido e menos que o total: é o limite do Compras por página (ex.: 20).
+		if md.Veio > 10 && md.Veio < min(tam, md.Total) {
+			md.Limite = md.Veio
+		}
 		if len(l) > 0 {
 			var x map[string]any
 			if json.Unmarshal(l[0], &x) == nil {
@@ -114,7 +120,7 @@ func (m *motor) TestarLeitura() any {
 		}
 		return md
 	}
-	for i, tam := range []int{10, 25, 50, 100} {
+	for i, tam := range []int{10, 20, 50, 100} {
 		if i > 0 {
 			time.Sleep(time.Second)
 		}
@@ -138,11 +144,22 @@ func (m *motor) TestarLeitura() any {
 		medidas = append(medidas, md)
 	}
 
-	// Conclusão: maior tamanho aceito (até 50) e estimativa para ler todas as finalizadas.
+	// Conclusão: maior tamanho aceito (até 50) ou o limite que o Compras impõe por página, e estimativa para ler
+	// todas as finalizadas.
 	base, melhor := medidas[0], medidas[0]
 	for _, md := range medidas[:4] {
-		if md.Aceitou && md.Tamanho <= 50 && md.Tamanho > melhor.Tamanho && md.Erro == "" {
+		if md.Erro != "" {
+			continue
+		}
+		efetivo := 0
+		if md.Aceitou && md.Tamanho <= 50 {
+			efetivo = md.Tamanho
+		} else if md.Limite > 0 && md.Limite <= 50 {
+			efetivo = md.Limite
+		}
+		if efetivo > melhor.Tamanho {
 			melhor = md
+			melhor.Tamanho = efetivo
 		}
 	}
 	total := base.Total
@@ -153,7 +170,7 @@ func (m *motor) TestarLeitura() any {
 	pb, tb := estimativa(base)
 	pm, tm := estimativa(melhor)
 	usar := 10
-	if base.Erro == "" && melhor.Aceitou {
+	if base.Erro == "" && melhor.Tamanho > 10 {
 		usar = melhor.Tamanho
 	}
 	guardarTamanhoPagina(usar)
@@ -191,7 +208,8 @@ func tamanhoPaginaTestado() bool {
 }
 
 // testarTamanhoPagina: uma vez só, pede a lista "em andamento" com 50 por página. Se o Compras devolver as 50 (ou
-// todas, quando há menos de 50 e mais de 10), passa a ler de 50 em 50 — menos páginas, menos captchas.
+// todas, quando há menos de 50 e mais de 10), passa a ler de 50 em 50; se cortar a página (hoje em 20), lê nesse
+// tamanho — menos páginas, menos captchas.
 func (m *motor) testarTamanhoPagina() int {
 	r, err := m.consultarDiretoOpc("GET", fe+"/v1/compras/participacoes", "filtro=2&pagina=0&tamanhoPagina=50", true, nil, "", true)
 	if err != nil || !okHTTP(r.Status) {
@@ -209,8 +227,11 @@ func (m *motor) testarTamanhoPagina() int {
 		return 10 // com até 10 não dá para saber: testa de novo quando houver mais
 	}
 	usar := 10
-	if veio == min(50, total) {
+	switch {
+	case veio == min(50, total):
 		usar = 50
+	case veio > 10 && veio < 50:
+		usar = veio // o Compras corta a página (hoje em 20): pede exatamente esse tamanho
 	}
 	guardarTamanhoPagina(usar)
 	registrarLog("acompanhamento: o Compras devolveu %d de %d com 50 por página; lendo de %d em %d", veio, total, usar, usar)

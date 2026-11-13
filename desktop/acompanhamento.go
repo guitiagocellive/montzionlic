@@ -605,44 +605,88 @@ func okHTTP(st int) bool { return st >= 200 && st < 300 }
 func (m *motor) lerAcompanhamentoDireto(lista, finalizadas bool, escolhidas []compraAcomp) error {
 	v := leituraAcomp{Detalhes: map[string]*detalheCompra{}}
 	tam := tamanhoPaginaAcomp()
+	var errosMu sync.Mutex
+	pagina := func(filtro string, n int) (respostaDireta, error) {
+		return m.consultarDiretoOpc("GET", fe+"/v1/compras/participacoes", fmt.Sprintf("filtro=%s&pagina=%d&tamanhoPagina=%d", filtro, n, tam), true, nil, "", n == 0)
+	}
 	participacoes := func(filtro string, maxPaginas int) (json.RawMessage, error) {
-		var todas []json.RawMessage
-		for pagina := 0; pagina < maxPaginas; pagina++ {
-			r, err := m.consultarDiretoOpc("GET", fe+"/v1/compras/participacoes", fmt.Sprintf("filtro=%s&pagina=%d&tamanhoPagina=%d", filtro, pagina, tam), true, nil, "", pagina == 0)
-			if err != nil {
-				return nil, err
+		r, err := pagina(filtro, 0)
+		if err != nil {
+			return nil, err
+		}
+		if !okHTTP(r.Status) {
+			v.Erros = append(v.Erros, fmt.Sprintf("participações (%s, página 1): %d %s", filtro, r.Status, mensagemErro(r.Corpo)))
+			return nil, nil
+		}
+		l := listaQualquer(r.Corpo)
+		v.Formatos = append(v.Formatos, fmt.Sprintf("direto filtro %s: %d na 1ª página, páginas=%s total=%s", filtro, len(l), r.Cab.Get("pages-count"), r.Cab.Get("register-count")))
+		total, paginas := 0, 0
+		fmt.Sscan(r.Cab.Get("register-count"), &total)
+		fmt.Sscan(r.Cab.Get("pages-count"), &paginas)
+		if total == 0 && paginas <= 1 {
+			total = len(l)
+		}
+		if filtro == "2" {
+			v.TotalAndamento = total
+		} else {
+			v.TotalFinalizadas = total
+		}
+		todas := append([]json.RawMessage{}, l...)
+		// Página cortada pelo Compras (veio menos que o pedido e há mais): esse é o limite por página (hoje 20).
+		// Passa a pedir nesse tamanho, para as próximas páginas baterem com o que já veio.
+		if len(l) >= 10 && len(l) < tam && total > len(l) {
+			registrarLog("acompanhamento: o Compras devolveu %d com %d por página (total %d); lendo de %d em %d", len(l), tam, total, len(l), len(l))
+			tam = len(l)
+			guardarTamanhoPagina(tam)
+			if paginas > 0 {
+				paginas = paginasPara(total, tam)
 			}
-			if !okHTTP(r.Status) {
-				v.Erros = append(v.Erros, fmt.Sprintf("participações (%s, página %d): %d %s", filtro, pagina+1, r.Status, mensagemErro(r.Corpo)))
-				if pagina == 0 {
-					return nil, nil
-				}
-				break
-			}
-			l := listaQualquer(r.Corpo)
-			if pagina == 0 {
-				v.Formatos = append(v.Formatos, fmt.Sprintf("direto filtro %s: %d na 1ª página, páginas=%s total=%s", filtro, len(l), r.Cab.Get("pages-count"), r.Cab.Get("register-count")))
-				total := 0
-				fmt.Sscan(r.Cab.Get("register-count"), &total)
-				if total == 0 {
-					paginasTot := 0
-					fmt.Sscan(r.Cab.Get("pages-count"), &paginasTot)
-					if paginasTot <= 1 {
-						total = len(l)
+		}
+		if len(l) < tam || maxPaginas <= 1 {
+			return juntarLista(todas), nil
+		}
+		// As outras páginas ao mesmo tempo: os captchas saem um por vez, mas cada página já é pedida assim que o
+		// seu captcha fica pronto (sem esperar a anterior chegar do Compras.gov.br).
+		faltam := maxPaginas - 1
+		if paginas == 0 && total > 0 {
+			paginas = paginasPara(total, tam)
+		}
+		if paginas > 0 {
+			faltam = min(faltam, paginas-1)
+		} else {
+			faltam = min(faltam, 1) // sem saber quantas: uma de cada vez
+		}
+		for faltam > 0 {
+			inicio := len(todas)/tam
+			res := make([][]json.RawMessage, faltam)
+			var wg sync.WaitGroup
+			for i := 0; i < faltam; i++ {
+				wg.Add(1)
+				go func(i int) {
+					defer wg.Done()
+					rr, e := pagina(filtro, inicio+i)
+					if e != nil || !okHTTP(rr.Status) {
+						errosMu.Lock()
+						v.Erros = append(v.Erros, fmt.Sprintf("participações (%s, página %d): %s", filtro, inicio+i+1, motivoLeitura(rr, e)))
+						errosMu.Unlock()
+						return
 					}
-				}
-				if filtro == "2" {
-					v.TotalAndamento = total
-				} else {
-					v.TotalFinalizadas = total
+					res[i] = listaQualquer(rr.Corpo)
+				}(i)
+			}
+			wg.Wait()
+			curta := false
+			for _, x := range res {
+				todas = append(todas, x...)
+				if len(x) < tam {
+					curta = true
+					break // página curta ou com erro: para aqui, sem buracos na lista
 				}
 			}
-			todas = append(todas, l...)
-			paginas := 0
-			fmt.Sscan(r.Cab.Get("pages-count"), &paginas)
-			if len(l) < tam || (paginas > 0 && pagina+1 >= paginas) {
+			if curta || paginas > 0 || len(todas)/tam >= maxPaginas {
 				break
 			}
+			faltam = 1
 		}
 		return juntarLista(todas), nil
 	}
@@ -760,41 +804,68 @@ func semDetalhe(d *detalheCompra) bool {
 func (m *motor) detalharDireto(c compraAcomp) *detalheCompra {
 	d := &detalheCompra{}
 	k := url.PathEscape(c.Chave)
-	if r, err := m.lerAcomp(fe+"/v1/compras/"+k+"/participacao", "", false); err == nil && okHTTP(r.Status) {
-		d.Participacao = r.Corpo
-	} else {
-		d.Erros = append(d.Erros, "participação: "+motivoLeitura(r, err))
+	// Participação, itens e mensagens ao mesmo tempo (antes, um depois do outro: ~1 s para abrir uma licitação).
+	var mu sync.Mutex
+	erro := func(t string) {
+		mu.Lock()
+		d.Erros = append(d.Erros, t)
+		mu.Unlock()
 	}
-	r, err := m.lerAcomp(fe+"/v1/compras/"+k+"/itens/em-selecao-fornecedores", "filtro=2&pagina=0&tamanhoPagina=100", true)
-	if err == nil && okHTTP(r.Status) && len(listaQualquer(r.Corpo)) > 0 {
-		d.Itens, d.OrigemItens = juntarLista(listaQualquer(r.Corpo)), "selecao"
-		// Também todos os itens da compra (filtro "Todos os itens" da tela oficial), para ver os que você não disputa.
-		if todos := m.todosItensSelecao(k); len(todos) > 0 {
-			d.TodosItens = juntarLista(todos)
+	var wg sync.WaitGroup
+	wg.Add(3)
+	go func() {
+		defer wg.Done()
+		if r, err := m.lerAcomp(fe+"/v1/compras/"+k+"/participacao", "", false); err == nil && okHTTP(r.Status) {
+			d.Participacao = r.Corpo
+		} else {
+			erro("participação: " + motivoLeitura(r, err))
 		}
-	} else {
+	}()
+	go func() {
+		defer wg.Done()
+		if r, err := m.lerAcomp("/comprasnet-mensagem/v2/chat/"+k, fmt.Sprintf("legadoAsp=%v&size=200&page=0", c.Legado), true); err == nil && okHTTP(r.Status) {
+			d.Mensagens = juntarLista(listaQualquer(r.Corpo))
+		} else if err == nil && r.Status == 404 {
+			d.Mensagens = juntarLista(nil) // compra sem mensagens
+		} else {
+			erro("mensagens: " + motivoLeitura(r, err))
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		var todos []json.RawMessage
+		var wgTodos sync.WaitGroup
+		wgTodos.Add(1)
+		// "Todos os itens" (filtro da tela oficial) já sai junto: só é usado se a compra tiver itens em seleção.
+		go func() {
+			defer wgTodos.Done()
+			todos = m.todosItensSelecao(k)
+		}()
+		r, err := m.lerAcomp(fe+"/v1/compras/"+k+"/itens/em-selecao-fornecedores", "filtro=2&pagina=0&tamanhoPagina=100", true)
+		if err == nil && okHTTP(r.Status) && len(listaQualquer(r.Corpo)) > 0 {
+			d.Itens, d.OrigemItens = juntarLista(listaQualquer(r.Corpo)), "selecao"
+			wgTodos.Wait()
+			if len(todos) > 0 {
+				d.TodosItens = juntarLista(todos)
+			}
+			return
+		}
 		r2, err2 := m.lerAcomp(fe+"/v1/compras/"+k+"/itens", "situacoes=1,2,3,4,5,6,7,8,9,13,14&pagina=0&tamanhoPagina=100", true)
 		if err2 == nil && okHTTP(r2.Status) && len(listaQualquer(r2.Corpo)) > 0 {
 			d.Itens, d.OrigemItens = juntarLista(listaQualquer(r2.Corpo)), "itens"
-		} else {
-			// Compra em disputa: os itens da sala de disputa (os mesmos que o robô usa).
-			status, dados, err3 := m.pedir("GET", "/comprasnet-disputa/v1/compras/"+k+"/itens/em-disputa", nil)
-			if err3 == nil && okHTTP(status) && len(listaQualquer(dados)) > 0 {
-				d.Itens, d.OrigemItens = juntarLista(listaQualquer(dados)), "disputa"
-			} else if leituraFalhou(r, err) || leituraFalhou(r2, err2) || leituraFalhou(respostaDireta{Status: status}, err3) {
-				d.Erros = append(d.Erros, "itens: seleção "+motivoLeitura(r, err)+" / todos "+motivoLeitura(r2, err2)+" / disputa "+motivoLeitura(respostaDireta{Status: status, Corpo: dados}, err3))
-			} else {
-				d.Itens, d.OrigemItens = juntarLista(nil), "itens" // a compra respondeu, só que sem itens
-			}
+			return
 		}
-	}
-	if r, err := m.lerAcomp("/comprasnet-mensagem/v2/chat/"+k, fmt.Sprintf("legadoAsp=%v&size=200&page=0", c.Legado), true); err == nil && okHTTP(r.Status) {
-		d.Mensagens = juntarLista(listaQualquer(r.Corpo))
-	} else if err == nil && r.Status == 404 {
-		d.Mensagens = juntarLista(nil) // compra sem mensagens
-	} else {
-		d.Erros = append(d.Erros, "mensagens: "+motivoLeitura(r, err))
-	}
+		// Compra em disputa: os itens da sala de disputa (os mesmos que o robô usa).
+		status, dados, err3 := m.pedir("GET", "/comprasnet-disputa/v1/compras/"+k+"/itens/em-disputa", nil)
+		if err3 == nil && okHTTP(status) && len(listaQualquer(dados)) > 0 {
+			d.Itens, d.OrigemItens = juntarLista(listaQualquer(dados)), "disputa"
+		} else if leituraFalhou(r, err) || leituraFalhou(r2, err2) || leituraFalhou(respostaDireta{Status: status}, err3) {
+			erro("itens: seleção " + motivoLeitura(r, err) + " / todos " + motivoLeitura(r2, err2) + " / disputa " + motivoLeitura(respostaDireta{Status: status, Corpo: dados}, err3))
+		} else {
+			d.Itens, d.OrigemItens = juntarLista(nil), "itens" // a compra respondeu, só que sem itens
+		}
+	}()
+	wg.Wait()
 	return d
 }
 
@@ -823,7 +894,7 @@ func (m *motor) detalharAberta(chave string) {
 	_ = m.aplicarLeitura(leituraAcomp{Detalhes: map[string]*detalheCompra{chave: d}}, false)
 }
 
-// lerMaisFinalizadasAcomp: "Carregar mais" das finalizadas (as próximas páginas, 10 por página).
+// lerMaisFinalizadasAcomp: as próximas páginas das finalizadas, quando a pessoa vai até elas.
 func (m *motor) lerMaisFinalizadasAcomp() {
 	a := &m.acomp
 	a.mu.Lock()
@@ -848,16 +919,32 @@ func (m *motor) lerMaisFinalizadasAcomp() {
 		b, _ := json.Marshal(x)
 		todas = append(todas, b)
 	}
-	// Continua da página onde parou (a 1ª página relida pode ter empurrado as outras: juntarSemRepetir tira as repetidas).
-	for pagina := len(ja) / tam; pagina < paginasPara(paginas*10, tam); pagina++ {
-		r, err := m.consultarDiretoOpc("GET", fe+"/v1/compras/participacoes", fmt.Sprintf("filtro=6&pagina=%d&tamanhoPagina=%d", pagina, tam), true, nil, "", true)
-		if err != nil || !okHTTP(r.Status) {
-			break
+	// Continua da página onde parou (a 1ª página relida pode ter empurrado as outras: juntarSemRepetir tira as
+	// repetidas). As páginas que faltam são pedidas ao mesmo tempo; para na primeira curta ou com erro.
+	de, ate := len(ja)/tam, paginasPara(paginas*10, tam)
+	if ate > de {
+		res := make([][]json.RawMessage, ate-de)
+		ok := make([]bool, ate-de)
+		var wg sync.WaitGroup
+		for i := range res {
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				r, err := m.consultarDiretoOpc("GET", fe+"/v1/compras/participacoes", fmt.Sprintf("filtro=6&pagina=%d&tamanhoPagina=%d", de+i, tam), true, nil, "", true)
+				if err == nil && okHTTP(r.Status) {
+					res[i], ok[i] = listaQualquer(r.Corpo), true
+				}
+			}(i)
 		}
-		l := listaQualquer(r.Corpo)
-		todas = append(todas, l...)
-		if len(l) < tam {
-			break
+		wg.Wait()
+		for i, l := range res {
+			if !ok[i] {
+				break
+			}
+			todas = append(todas, l...)
+			if len(l) < tam {
+				break
+			}
 		}
 	}
 	a.mu.Lock()

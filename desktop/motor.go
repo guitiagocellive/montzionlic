@@ -743,6 +743,10 @@ func (m *motor) cicloLeitura() {
 				intervalo, pri = 2*time.Second, 2
 			case emDisputa && !tempoReal:
 				intervalo, pri = 3*time.Second, 1
+			case m.lanceProximo(c, agora):
+				// Etapa de lances perto do fim, mesmo com o robô parado: lê a cada 10 s para a conexão com o
+				// Compras.gov.br ficar aberta (o 1º lance ao ligar o robô sai sem abrir conexão nova) e os dados frescos.
+				intervalo, pri = 10*time.Second, 1
 			case robo:
 				intervalo, pri = 15*time.Second, 1
 			case emDisputa:
@@ -818,6 +822,13 @@ func (m *motor) precisaCaptchaPronto() bool {
 			return true
 		}
 	}
+	// Mesmo com o robô parado: disputa nossa perto do fim. Ao ligar o robô, se ele precisar da classificação para
+	// achar a melhor colocação, o captcha já está pronto (antes eram 1 a 3 s esperando um captcha novo).
+	for _, c := range m.compras {
+		if m.lanceProximo(c, agora) {
+			return true
+		}
+	}
 	return false
 }
 
@@ -835,6 +846,22 @@ func (m *motor) pertoDoFim(c *compraMotor, agora time.Time) bool {
 	for _, it := range c.itens {
 		e := m.estadoAgora(it, agora)
 		if e.Fase == "AL" || e.Fase == "DF" || e.Fase == "LF" || (e.Fase == "LA" && e.RestanteSeg != nil && *e.RestanteSeg <= segundosFinais+5) {
+			return true
+		}
+	}
+	return false
+}
+
+// lanceProximo (com m.mu travado): item nosso em etapa de lances que ainda não estamos ganhando, perto do fim
+// (≤ 2,5 min) ou em etapa sem cronômetro fixo (aleatório, disputa final). É quando a pessoa pode ligar o robô a
+// qualquer momento: deixa captcha e conexão prontos para o 1º lance sair na hora.
+func (m *motor) lanceProximo(c *compraMotor, agora time.Time) bool {
+	for _, it := range c.itens {
+		e := m.estadoAgora(it, agora)
+		if !fasesDeLance[e.Fase] || e.Fase == "LF" || e.Situacao == "G" || e.Nosso == nil {
+			continue
+		}
+		if e.Fase != "LA" || e.RestanteSeg == nil || *e.RestanteSeg <= 150 {
 			return true
 		}
 	}

@@ -19,11 +19,12 @@ import (
 const segundosFinais = 10
 
 type configItem struct {
-	Ligado      bool     `json:"ligado"`
-	Minimo      *float64 `json:"minimo"`
-	Desconto    float64  `json:"desconto"`
-	NaoAguardar bool     `json:"naoAguardar"` // cobrir na hora, sem esperar os 10 s finais
-	QuatroCasas bool     `json:"quatroCasas"`
+	Ligado       bool     `json:"ligado"`
+	Minimo       *float64 `json:"minimo"`
+	Desconto     float64  `json:"desconto"`
+	TipoDesconto string   `json:"tipoDesconto"` // "V" = desconto em R$; senão, em %
+	NaoAguardar  bool     `json:"naoAguardar"`  // cobrir na hora, sem esperar os 10 s finais
+	QuatroCasas  bool     `json:"quatroCasas"`
 }
 
 type estadoItem struct {
@@ -110,6 +111,15 @@ func passoMinimo(base float64, e estadoItem, quatro bool) float64 {
 	return math.Max(arredondarAcima(v, quatro), menor)
 }
 
+// valorDoDesconto: quanto baixar (R$) a partir de um lance, pelo desconto do item (% ou R$, como o edital).
+func valorDoDesconto(base float64, c *configItem) float64 {
+	d := math.Max(c.Desconto, 0)
+	if c.TipoDesconto == "V" {
+		return d
+	}
+	return base * d / 100
+}
+
 func decidir(e estadoItem, c *configItem) decisao {
 	if c == nil || !c.Ligado {
 		return decisao{Tipo: "desligado", Motivo: "Robô parado neste item"}
@@ -148,7 +158,7 @@ func decidir(e estadoItem, c *configItem) decisao {
 	if e.Melhor != nil {
 		melhor = *e.Melhor
 	}
-	desconto := arredondarAcima(melhor*math.Max(c.Desconto, 0)/100, q)
+	desconto := arredondarAcima(valorDoDesconto(melhor, c), q)
 	alvo := arredondarAbaixo(melhor-math.Max(desconto, passoMinimo(melhor, e, q)), q)
 	if alvo >= minimo && alvo < nosso {
 		return decisao{Enviar: true, Tipo: "lance", Valor: alvo, Posicao: 1, Motivo: "Cobrindo o melhor lance (" + reaisTexto(melhor, q) + ") com " + reaisTexto(alvo, q)}
