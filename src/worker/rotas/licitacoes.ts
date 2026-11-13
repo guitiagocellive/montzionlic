@@ -193,7 +193,9 @@ rotasLicitacoes.get("/", async (c) => {
             l.acompanhar, l.colocacao, l.data_reabertura, l.hora_reabertura, l.pncp_id,
             l.link, l.compras_cadastrado_em, l.compras_itens,
             (SELECT COUNT(*) FROM arquivos a WHERE a.licitacao_id = l.id) AS total_arquivos,
-            (SELECT COUNT(*) FROM cotacoes ct WHERE ct.licitacao_id = l.id) AS total_cotacoes
+            (SELECT COUNT(*) FROM cotacoes ct WHERE ct.licitacao_id = l.id) AS total_cotacoes,
+            (SELECT COUNT(*) FROM licitacao_itens i WHERE i.licitacao_id = l.id AND i.participar = 1
+                AND EXISTS (SELECT 1 FROM cotacoes ct WHERE ct.item_id = i.id AND ct.custo_unitario > 0)) AS itens_orcados
        FROM licitacoes l
        LEFT JOIN usuarios u ON u.id = l.responsavel_id
       ORDER BY l.posicao`,

@@ -246,6 +246,8 @@ export interface LicitacaoResumo {
   total_itens: number;
   total_arquivos: number;
   total_cotacoes: number;
+  /** Itens em que vamos participar que já têm produto cotado (com custo). */
+  itens_orcados?: number;
   itens_ganhos: number;
   itens_perdidos: number;
   itens_acompanhando: number;

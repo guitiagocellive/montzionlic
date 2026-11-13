@@ -811,6 +811,51 @@ export function ehDoCompras(l: {
   return !!(l.uasg && l.numero);
 }
 
+export interface SituacaoCadastro {
+  /** Mostrar a ação (cadastrar ou alterar) para esta licitação. */
+  mostrar: boolean;
+  /** Já dá para fazer (com orçamento pronto, ou para alterar o que já foi cadastrado). */
+  pode: boolean;
+  alterar: boolean;
+  /** Por que ainda não dá, ou um lembrete (ex.: só os itens orçados vão). */
+  aviso: string;
+  orcados: number;
+  total: number;
+}
+
+/**
+ * Quando oferecer o cadastro no Compras.gov.br: só na etapa Orçamento (é quando o preço está pronto) e só se há
+ * item orçado. Depois de cadastrada, "Alterar" fica disponível até a sessão. Depois da sessão, nada de cadastro.
+ */
+export function situacaoCadastro(
+  l: {
+    etapa: string;
+    portal: string | null;
+    uasg: string | null;
+    numero: string | null;
+    link?: string | null;
+    data_sessao: string | null;
+    data_reabertura?: string | null;
+    compras_cadastrado_em?: string | null;
+  },
+  orcados: number,
+  total: number,
+  hoje: string,
+): SituacaoCadastro {
+  const base = { orcados, total, aviso: "" };
+  const nada = { ...base, mostrar: false, pode: false, alterar: false };
+  if (!ehDoCompras(l) || ["boa_colocacao", "ganha", "perdida"].includes(l.etapa)) return nada;
+  const data = l.data_reabertura && l.data_reabertura >= hoje ? l.data_reabertura : l.data_sessao;
+  if (data && data < hoje) return nada; // a sessão já aconteceu
+  if (l.compras_cadastrado_em) return { ...base, mostrar: true, pode: true, alterar: true };
+  if (l.etapa !== "orcamento") return nada;
+  if (total === 0) return { ...base, mostrar: true, pode: false, alterar: false, aviso: "Marque na aba Itens em quais itens vamos participar." };
+  if (orcados === 0) return { ...base, mostrar: true, pode: false, alterar: false, aviso: `Nenhum dos ${total} itens tem produto cotado ainda. Faça o orçamento primeiro.` };
+  if (orcados < total)
+    return { ...base, mostrar: true, pode: true, alterar: false, aviso: `${orcados} de ${total} itens orçados: o cadastro leva só os orçados.` };
+  return { ...base, mostrar: true, pode: true, alterar: false };
+}
+
 /** Botão do card do quadro e da ficha. */
 export function BotaoUmClique({
   licitacaoId,

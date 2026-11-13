@@ -16,7 +16,7 @@ import { AbaDados } from "./AbaDados";
 import { AbaItens } from "./AbaItens";
 import { AbaOrcamento } from "./AbaOrcamento";
 import { AbaProposta } from "./AbaProposta";
-import { BotaoUmClique, ehDoCompras } from "./CadastroUmClique";
+import { BotaoUmClique, situacaoCadastro } from "./CadastroUmClique";
 import { AbaResultado } from "./AbaResultado";
 import { ModalGanhamos } from "./ModalGanhamos";
 import { PainelEtapa } from "./PainelEtapa";
@@ -123,6 +123,9 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
   ].filter((p) => !["orcamento", "proposta"].includes(p.chave) || podeVer(usuario.permissoes, "orcamento"));
 
   const hoje = hojeIso();
+  // Cadastro no Compras: só na etapa Orçamento e com item orçado (ou "Alterar" se já cadastrada).
+  const orcados = participando.filter((i) => cotacoes.some((c) => c.item_id === i.id && (c.custo_unitario ?? 0) > 0)).length;
+  const cadastro = situacaoCadastro(l, orcados, participando.length, hoje);
   const reaberta = !!l.data_reabertura && l.data_reabertura >= hoje;
   const dataSessao = reaberta ? l.data_reabertura : l.data_sessao;
   const horaSessao = reaberta ? l.hora_reabertura : l.horario;
@@ -281,19 +284,30 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
         </aside>
 
         <div className="ficha-principal">
-          {ehDoCompras(l) && !["perdida", "ganha"].includes(l.etapa) && (
-            <div className="faixa-um-clique">
-              {l.compras_cadastrado_em ? (
+          {cadastro.mostrar && (
+            <div className={`faixa-um-clique ${cadastro.pode ? "" : "pendente"}`}>
+              {cadastro.alterar ? (
                 <span>
-                  <strong className="texto-verde">Proposta cadastrada no Compras.gov.br</strong> · {l.compras_itens ?? 0} item(ns), em{" "}
-                  {new Date(l.compras_cadastrado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}. Dá para alterar valores ou retirar itens por aqui.
+                  <strong className="texto-verde">Proposta cadastrada no Compras.gov.br</strong> · {l.compras_itens ?? 0} item(ns)
+                  {l.compras_cadastrado_em && `, em ${new Date(l.compras_cadastrado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}`}. Dá para
+                  alterar valores ou retirar itens por aqui.
+                </span>
+              ) : cadastro.pode ? (
+                <span>
+                  <strong>Pronta para cadastrar no Compras.gov.br</strong> · {cadastro.aviso || `os ${cadastro.total} itens estão orçados; a plataforma monta a proposta com eles.`}
                 </span>
               ) : (
                 <span>
-                  <strong>Cadastro com um clique</strong> · a plataforma acha esta compra no Compras.gov.br e monta a proposta com os itens do orçamento.
+                  <strong>Cadastro no Compras.gov.br</strong> · {cadastro.aviso}
                 </span>
               )}
-              <BotaoUmClique licitacaoId={l.id} cadastrada={!!l.compras_cadastrado_em} aoFechar={carregar} />
+              {cadastro.pode ? (
+                <BotaoUmClique licitacaoId={l.id} cadastrada={cadastro.alterar} aoFechar={carregar} />
+              ) : (
+                <button className="botao secundario" onClick={() => escolherAba(cadastro.total ? "orcamento" : "itens")}>
+                  {cadastro.total ? "Ir para o Orçamento" : "Ir para os Itens"}
+                </button>
+              )}
             </div>
           )}
           <PainelEtapa

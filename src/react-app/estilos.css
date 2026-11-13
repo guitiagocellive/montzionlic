@@ -15171,3 +15171,9 @@ p.etapa-fechada {
 .card-sugestao:hover {
   background: var(--hover);
 }
+
+/* Faixa do cadastro quando ainda falta orçamento: neutra, sem chamar para o botão azul. */
+.faixa-um-clique.pendente {
+  background: var(--superficie);
+  border-color: var(--borda);
+}

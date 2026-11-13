@@ -34,7 +34,7 @@ import { diaDeHoje, elegivelParaSinc, lerMudouHoje, lerUltimaSinc, sincronizarQu
 import { avisar, Carregando, CampoSelect, Modal } from "../../components/Ui";
 import { formatarMoeda, hojeIso } from "../../formato";
 import { navegar } from "../../rota";
-import { CadastroUmClique, ehDoCompras } from "./CadastroUmClique";
+import { CadastroUmClique, ehDoCompras, situacaoCadastro } from "./CadastroUmClique";
 import { puxarESalvarResultado } from "./puxarResultado";
 
 export function QuadroLicitacoes({ usuario }: { usuario: Usuario }) {
@@ -191,6 +191,7 @@ export function QuadroLicitacoes({ usuario }: { usuario: Usuario }) {
     ];
     if (doCompras && editar) {
       itens.push({ separador: true }, { titulo: "Compras.gov.br" });
+      const cad = situacaoCadastro(l, l.itens_orcados ?? 0, l.total_itens, hoje);
       if (jaAconteceu) {
         itens.push({
           rotulo: "Puxar resultado da disputa",
@@ -199,10 +200,22 @@ export function QuadroLicitacoes({ usuario }: { usuario: Usuario }) {
           motivo: "Abra a plataforma pelo aplicativo Montzion",
           aoClicar: () => puxarResultado(l),
         });
-      } else if (l.compras_cadastrado_em) {
+      } else if (cad.mostrar && cad.alterar) {
         itens.push({ rotulo: "Alterar proposta", icone: <Pencil size={15} />, dica: `${l.compras_itens ?? 0} itens`, aoClicar: () => setCadastrando(l.id) });
+      } else if (cad.mostrar) {
+        itens.push({
+          rotulo: "Cadastrar proposta",
+          icone: <Zap size={15} />,
+          dica: cad.pode ? `${cad.orcados}/${cad.total} orçados` : undefined,
+          desativado: !cad.pode,
+          motivo: cad.aviso,
+          aoClicar: () => setCadastrando(l.id),
+        });
+        if (!cad.pode) itens.push({ rotulo: "Fazer o orçamento", icone: <Calculator size={15} />, aoClicar: () => abrir("orcamento") });
       } else {
-        itens.push({ rotulo: "Cadastrar proposta", icone: <Zap size={15} />, aoClicar: () => setCadastrando(l.id) });
+        // Antes do Orçamento não há o que cadastrar: tira o título "Compras.gov.br" e o separador.
+        itens.pop();
+        itens.pop();
       }
     }
     itens.push({ separador: true });
