@@ -15068,3 +15068,58 @@ p.etapa-fechada {
   background: var(--hover);
   text-decoration: none;
 }
+
+/* Indicador pequeno de sincronização do resultado com o Compras.gov.br. */
+.chip-sinc {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--verde) 35%, var(--borda));
+  background: var(--verde-fundo);
+  color: var(--verde);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.chip-sinc:hover:not(:disabled) {
+  filter: brightness(0.97);
+}
+
+.chip-sinc.desconectado {
+  border-color: color-mix(in srgb, var(--azul) 35%, var(--borda));
+  background: var(--azul-fundo);
+  color: var(--azul);
+}
+
+.chip-sinc.fora,
+.chip-sinc:disabled {
+  border-color: var(--borda);
+  background: var(--superficie-3);
+  color: var(--texto-fraco);
+  cursor: default;
+}
+
+.painel-resultado-numeros {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+
+.painel-resultado-numeros span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.painel-resultado-numeros {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (min-width: 1760px) {
+  .painel-resultado-numeros {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}

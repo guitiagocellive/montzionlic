@@ -100,23 +100,40 @@ const AUTO = "Puxado do Compras.gov.br";
  * principal e uma observação com o que veio de cada item). Não apaga o que a pessoa escreveu: a data e o motivo só
  * são preenchidos se estiverem vazios, e a observação só é trocada se estiver vazia ou tiver sido puxada antes.
  */
-export async function puxarESalvarResultado(l: Licitacao, itens: ItemLicitacao[]): Promise<{ preenchidos: number; semDados: string[]; situacoes: Record<number, string> }> {
+export async function puxarESalvarResultado(
+  l: Licitacao,
+  itens: ItemLicitacao[],
+  opcoes: { automatico?: boolean } = {},
+): Promise<{ preenchidos: number; alterados: number; semDados: string[]; situacoes: Record<number, string> }> {
   const { porItem, semDados } = await puxarDadosDaLicitacao(l, itens);
   const ids = Object.keys(porItem).map(Number);
-  if (!ids.length) return { preenchidos: 0, semDados, situacoes: {} };
+  if (!ids.length) return { preenchidos: 0, alterados: 0, semDados, situacoes: {} };
+  let alterados = 0;
   for (const id of ids) {
     const d = porItem[id];
-    await api(`/licitacoes/itens/${id}`, {
-      metodo: "PATCH",
-      corpo: {
-        resultado: d.resultado,
-        colocacao: d.colocacao,
-        nosso_lance: d.nosso_lance,
-        vencedor: d.resultado === "perdido" ? d.vencedor || null : null,
-        valor_vencedor: d.resultado === "perdido" ? d.valor_vencedor : null,
-        motivo_perda: d.resultado === "perdido" ? d.motivo_perda || null : null,
-      },
-    });
+    const atual = itens.find((i) => i.id === id);
+    // Na atualização automática, um resultado já fechado (ganho, perdido, cancelado) não volta para "acompanhando".
+    if (opcoes.automatico && atual?.resultado && atual.resultado !== "acompanhando" && d.resultado === "acompanhando") d.resultado = atual.resultado as typeof d.resultado;
+    const corpo = {
+      resultado: d.resultado,
+      colocacao: d.colocacao,
+      nosso_lance: d.nosso_lance,
+      vencedor: d.resultado === "perdido" ? d.vencedor || null : null,
+      valor_vencedor: d.resultado === "perdido" ? d.valor_vencedor : null,
+      motivo_perda: d.resultado === "perdido" ? d.motivo_perda || null : null,
+    };
+    // Só grava o que mudou.
+    const igual =
+      atual &&
+      (atual.resultado ?? null) === corpo.resultado &&
+      (atual.colocacao ?? null) === corpo.colocacao &&
+      (atual.nosso_lance ?? null) === corpo.nosso_lance &&
+      (atual.vencedor ?? null) === corpo.vencedor &&
+      (atual.valor_vencedor ?? null) === corpo.valor_vencedor &&
+      (atual.motivo_perda ?? null) === corpo.motivo_perda;
+    if (igual) continue;
+    alterados++;
+    await api(`/licitacoes/itens/${id}`, { metodo: "PATCH", corpo });
   }
   const lista = ids.map((id) => ({ item: itens.find((i) => i.id === id)!, d: porItem[id] }));
   const definidos = lista.filter((x) => x.d.resultado !== "acompanhando");
@@ -137,7 +154,7 @@ export async function puxarESalvarResultado(l: Licitacao, itens: ItemLicitacao[]
       return partes.join(" · ");
     });
   const geral: Record<string, unknown> = {};
-  if (!l.observacao_resultado || l.observacao_resultado.startsWith(AUTO)) {
+  if ((alterados > 0 && l.observacao_resultado?.startsWith(AUTO)) || !l.observacao_resultado) {
     geral.observacao_resultado = `${AUTO} em ${hojeTexto}${semDados.length ? ` (sem dados nos itens ${semDados.join(", ")})` : ""}:\n${linhas.join("\n")}`;
   }
   const todosDefinidos = definidos.length === itens.filter((i) => i.participar).length;
@@ -146,5 +163,5 @@ export async function puxarESalvarResultado(l: Licitacao, itens: ItemLicitacao[]
   }
   if (!l.motivo_perda && todosDefinidos && motivo && perdidos.length === lista.length) geral.motivo_perda = motivo;
   if (Object.keys(geral).length) await api(`/licitacoes/${l.id}`, { metodo: "PATCH", corpo: geral });
-  return { preenchidos: ids.length, semDados, situacoes: Object.fromEntries(ids.map((id) => [id, porItem[id].situacao])) };
+  return { preenchidos: ids.length, alterados, semDados, situacoes: Object.fromEntries(ids.map((id) => [id, porItem[id].situacao])) };
 }

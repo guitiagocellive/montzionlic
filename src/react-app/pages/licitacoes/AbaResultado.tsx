@@ -1,5 +1,5 @@
-import { DownloadCloud, Loader2, Save, Trophy } from "lucide-react";
-import { useEffect, useState } from "react";
+import { RefreshCw, Save, Trophy } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { ETAPAS_EXECUCAO, MOTIVOS_PERDA, nomeEtapa, RESULTADOS_ITEM } from "../../../shared/negocio";
 import type { ItemLicitacao, Licitacao } from "../../../shared/tipos";
 import { api, mensagemDeErro } from "../../api";
@@ -8,6 +8,7 @@ import { avisar, CampoArea, CampoSelect, Vazio } from "../../components/Ui";
 import { formatarMoeda, formatarNumero, paraNumero } from "../../formato";
 import { link } from "../../rota";
 import { temPonte } from "../../robo/ponte";
+import { abrirPopupGovBr, useConexaoGovBr } from "../../robo/ConexaoGovBr";
 import { puxarESalvarResultado } from "./puxarResultado";
 
 type Linha = {
@@ -51,6 +52,25 @@ export function AbaResultado({
   const [salvando, setSalvando] = useState(false);
   const [puxando, setPuxando] = useState(false);
   const [puxados, setPuxados] = useState<Record<number, string>>({});
+  const conexao = useConexaoGovBr(temPonte(), false);
+  const chaveSinc = `montzion:sinc-resultado:${licitacao.id}`;
+  const [sincronizadoEm, setSincronizadoEm] = useState<number | null>(() => {
+    try {
+      return Number(localStorage.getItem(chaveSinc)) || null;
+    } catch {
+      return null;
+    }
+  });
+  const [agora, setAgora] = useState(Date.now());
+  const marcarSinc = () => {
+    const t = Date.now();
+    setSincronizadoEm(t);
+    try {
+      localStorage.setItem(chaveSinc, String(t));
+    } catch {
+      /* sem armazenamento: só nesta tela */
+    }
+  };
 
   // Lê no Compras.gov.br (pelo aplicativo) a colocação, o seu valor e a situação de cada item e já salva, junto com o
   // resumo da disputa (data, motivo e observação). Nada para preencher na mão.
@@ -61,6 +81,7 @@ export function AbaResultado({
     setPuxando(true);
     try {
       const { preenchidos, semDados, situacoes } = await puxarESalvarResultado(licitacao, itens);
+      marcarSinc();
       if (!preenchidos) avisar(`O Compras.gov.br ainda não mostra a sua proposta nos itens${semDados.length ? ` ${semDados.join(", ")}` : ""}.`, "erro");
       else {
         await aoMudar();
@@ -73,6 +94,53 @@ export function AbaResultado({
       setPuxando(false);
     }
   }
+
+  // Com o gov.br conectado, mantém o resultado em dia sozinho: lê do Compras.gov.br ao abrir e a cada 10 minutos
+  // (só depois da sessão, e nunca por cima do que você está editando). Avisa só quando algo muda.
+  const hojeIso = new Date().toISOString().slice(0, 10);
+  const depoisDaSessao = ["boa_colocacao", "ganha", "perdida"].includes(licitacao.etapa) || (!!licitacao.data_sessao && licitacao.data_sessao <= hojeIso);
+  const podeSincronizar = podeEditar && participando.length > 0 && temPonte() && depoisDaSessao;
+  const conectado = conexao.estado === "conectado";
+  const ultimo = useRef({ licitacao, itens, pendente: false, aoMudar });
+  ultimo.current = { licitacao, itens, pendente: false, aoMudar };
+  const pendenteRef = useRef(false);
+  useEffect(() => {
+    if (!podeSincronizar || !conectado) return;
+    let vivo = true;
+    const sincronizar = async () => {
+      if (!vivo || pendenteRef.current) return;
+      setPuxando(true);
+      try {
+        const { licitacao: l, itens: its, aoMudar: mudou } = ultimo.current;
+        const r = await puxarESalvarResultado(l, its, { automatico: true });
+        if (!vivo) return;
+        marcarSinc();
+        setPuxados(r.situacoes);
+        if (r.alterados > 0) {
+          avisar(`Resultado atualizado do Compras.gov.br: ${r.alterados} item(ns) mudaram.`);
+          await mudou();
+        }
+      } catch {
+        /* sem a compra no Compras ou fora do ar: tenta na próxima volta */
+      } finally {
+        if (vivo) setPuxando(false);
+      }
+    };
+    const desde = Date.now() - (sincronizadoEm ?? 0);
+    const primeiro = window.setTimeout(sincronizar, desde > 10 * 60_000 ? 800 : 10 * 60_000 - desde);
+    const volta = window.setInterval(sincronizar, 10 * 60_000);
+    return () => {
+      vivo = false;
+      clearTimeout(primeiro);
+      clearInterval(volta);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [podeSincronizar, conectado, licitacao.id]);
+
+  useEffect(() => {
+    const t = setInterval(() => setAgora(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     setLinhas(Object.fromEntries(participando.map((i) => [i.id, paraLinha(i)])));
@@ -91,6 +159,8 @@ export function AbaResultado({
     geral.data_resultado !== (licitacao.data_resultado ?? "") ||
     geral.motivo_perda !== (licitacao.motivo_perda ?? "") ||
     geral.observacao_resultado !== (licitacao.observacao_resultado ?? "");
+
+  pendenteRef.current = alteradas.length > 0 || geralMudou;
 
   async function salvar() {
     setSalvando(true);
@@ -186,12 +256,30 @@ export function AbaResultado({
           </h2>
           {participando.length > 0 && podeEditar && (
             <button
-              className="botao secundario pequeno"
-              onClick={puxar}
+              type="button"
+              className={`chip-sinc ${!temPonte() ? "fora" : !conectado ? "desconectado" : ""}`}
+              onClick={() => (temPonte() && !conectado && conexao.estado !== "conectando" ? abrirPopupGovBr() : puxar())}
               disabled={puxando || !temPonte()}
-              title={temPonte() ? "Lê no Compras.gov.br a sua colocação, o seu valor e a situação de cada item" : "Abra a plataforma pelo aplicativo Montzion para puxar do Compras.gov.br"}
+              title={
+                !temPonte()
+                  ? "Abra a plataforma pelo aplicativo Montzion para atualizar do Compras.gov.br"
+                  : !conectado
+                    ? "Conecte a conta gov.br para manter o resultado atualizado"
+                    : "Atualiza sozinho a cada 10 minutos com o gov.br conectado. Clique para atualizar agora."
+              }
             >
-              {puxando ? <Loader2 className="girando" size={15} /> : <DownloadCloud size={15} />} {puxando ? "Puxando do Compras.gov.br…" : "Puxar dados da licitação"}
+              <RefreshCw size={13} className={puxando ? "girando" : ""} />
+              {!temPonte()
+                ? "Atualiza pelo aplicativo"
+                : puxando
+                  ? "Atualizando do Compras…"
+                  : !conectado
+                    ? "Conectar gov.br para atualizar"
+                    : sincronizadoEm
+                      ? `Compras.gov.br · ${quandoFoi(sincronizadoEm, agora)}`
+                      : depoisDaSessao
+                        ? "Atualizar do Compras.gov.br"
+                        : "Atualiza depois da sessão"}
             </button>
           )}
         </div>
@@ -275,4 +363,12 @@ export function AbaResultado({
       )}
     </>
   );
+}
+
+function quandoFoi(t: number, agora: number) {
+  const min = Math.round((agora - t) / 60_000);
+  if (min < 1) return "atualizado agora";
+  if (min < 60) return `atualizado há ${min} min`;
+  const h = Math.round(min / 60);
+  return h < 24 ? `atualizado há ${h} h` : `atualizado há ${Math.round(h / 24)} dia(s)`;
 }
