@@ -20,7 +20,6 @@ import (
 	"strings"
 	"sync"
 	"syscall"
-	"time"
 	"unsafe"
 )
 
@@ -44,6 +43,7 @@ const (
 	wmEsconder          = wmApp + 2
 	wmRecriarCompras    = wmApp + 3
 	wmRecarregarCompras = wmApp + 4
+	wmPaginaErroCompras = wmApp + 5
 	wsOverlapped        = 0x00CF0000 // WS_OVERLAPPEDWINDOW
 	cwUseDefault        = 0x80000000
 	swHide              = 0
@@ -278,6 +278,13 @@ func (a *aplicativo) procedimento(hwnd, msg, wParam, lParam uintptr) uintptr {
 	case wmEsconder:
 		if a.compras != nil {
 			a.compras.esconder()
+		}
+		return 0
+	case wmPaginaErroCompras:
+		if a.compras != nil && a.compras.controle != 0 {
+			if html := lerPaginaErro(); html != "" {
+				metodo(a.compras.web, 6, utf16(html)) // NavigateToString
+			}
 		}
 		return 0
 	case wmRecarregarCompras:
@@ -546,19 +553,22 @@ func (a *aplicativo) ligarWeb(j *janelaWeb) {
 				metodo(args, 3, uintptr(unsafe.Pointer(&ok)))     // get_IsSuccess
 				metodo(args, 4, uintptr(unsafe.Pointer(&status))) // get_WebErrorStatus
 				if ok != 0 {
+					if f := j.fonte(); strings.HasPrefix(f, "http") {
+						falhasCompras.Store(0) // carregou uma página de verdade: zera as tentativas
+					}
 					return 0
 				}
 				switch status {
 				case 6, 7, 9, 10, 11, 12, 13, 16: // sem resposta, tempo esgotado, conexão caiu/recusada, DNS, inesperado
-					if tentarDeNovoCompras() {
-						registrarLog("janela do Compras.gov.br: página não carregou (erro %d); tentando de novo em 4 s", status)
-						go func() {
-							time.Sleep(4 * time.Second)
-							procPostMessage.Call(j.hwnd, wmRecarregarCompras, 0, 0)
-						}()
-					} else {
-						registrarLog("janela do Compras.gov.br: página não carregou (erro %d) depois de 3 tentativas; o gov.br pode estar fora do ar", status)
-					}
+					// Em vez da página de erro do Edge (cujo "Atualizar" reabre o link vencido do gov.br), mostra a
+					// página do Montzion, que tenta de novo sozinha pela página de login, com espera crescente.
+					n := falhasCompras.Add(1)
+					registrarLog("janela do Compras.gov.br: página não carregou (erro %d, tentativa %d)", status, n)
+					go func() {
+						diag := testarGovBr()
+						guardarPaginaErro(paginaGovForaDoAr(int(n), status, diag, j.inicial))
+						procPostMessage.Call(j.hwnd, wmPaginaErroCompras, 0, 0)
+					}()
 				}
 				return 0
 			}), uintptr(unsafe.Pointer(&token)))

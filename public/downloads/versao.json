@@ -1,11 +1,9 @@
 {
-  "versao": "3.1.20",
-  "data": "2026-11-12",
+  "versao": "3.1.21",
+  "data": "2026-11-13",
   "novidades": [
-    "Acompanhamento: a licitação abre com tudo dela — itens em cartões com a sua colocação, chance, convocações e \"Pregoeiro falou com você\", e um resumo com filtros (convocados, chance boa, pregoeiro, desclassificados).",
-    "O \"+\" de cada item abre a sua participação: conversa com o pregoeiro, anexos que você enviou, diligências (com os arquivos do pregoeiro) e a proposta com valor inicial, ofertado, negociado e totais, marca e modelo.",
-    "Abas \"Todos os participantes\" (ordem de classificação, desclassificadas com o motivo, quantos anexos cada empresa mandou, conversa de cada uma) e \"Lances\".",
-    "Análise rápida em cada item: quantas empresas válidas estão à sua frente, quantas sem anexos, a diferença para a 1ª e se o pregoeiro falou com você.",
-    "Corrigido: anexos enviados que não apareciam e valores da proposta que vinham vazios (o Compras manda esses dados num formato que agora é lido certo)."
+    "Janela do gov.br: quando o gov.br não responde (\"demorou muito tempo para responder\"), no lugar da página de erro do Edge aparece uma página do Montzion que tenta de novo sozinha, pela página de login, sem limite de tentativas (5 s, 10 s, 20 s, 40 s e depois de minuto em minuto).",
+    "Essa página também testa a conexão com o gov.br pelo próprio aplicativo e diz se o problema é do gov.br/da internet ou só uma demora momentânea.",
+    "Botões \"Tentar agora\" e \"Fechar a janela\" na própria página; com a janela fechada, ele para de tentar e recomeça do login quando você abrir de novo."
   ]
 }

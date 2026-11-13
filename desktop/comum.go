@@ -4,14 +4,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sync"
 	"sync/atomic"
 	"time"
 )
 
 const (
 	nomeApp = "Montzion"
-	versao  = "3.1.20"
+	versao  = "3.1.21"
 )
 
 func pastaInstalacao() string {
@@ -39,8 +38,6 @@ func registrarLog(formato string, args ...any) {
 var (
 	recarregarComprasForcado   atomic.Bool // "Recarregar a janela do gov.br" (botão da plataforma)
 	recarregarComprasSeFechada atomic.Bool // "Entrar com gov.br" sem login: se a janela estava fechada/parada, recarrega
-	tentativasCompras          []time.Time
-	tentativasComprasMu        sync.Mutex
 )
 
 func marcarRecarregarCompras(forcar bool) {
@@ -49,22 +46,4 @@ func marcarRecarregarCompras(forcar bool) {
 	} else {
 		recarregarComprasSeFechada.Store(true)
 	}
-}
-
-// tentarDeNovoCompras: no máximo 3 novas tentativas automáticas a cada 2 minutos.
-func tentarDeNovoCompras() bool {
-	tentativasComprasMu.Lock()
-	defer tentativasComprasMu.Unlock()
-	recentes := tentativasCompras[:0]
-	for _, t := range tentativasCompras {
-		if time.Since(t) < 2*time.Minute {
-			recentes = append(recentes, t)
-		}
-	}
-	tentativasCompras = recentes
-	if len(recentes) >= 3 {
-		return false
-	}
-	tentativasCompras = append(tentativasCompras, time.Now())
-	return true
 }
