@@ -14,6 +14,18 @@ const numero = (v: unknown): number | null => {
 };
 const primeiro = (...v: unknown[]) => v.find((x) => x != null && x !== "");
 
+/**
+ * CNPJ/CPF só com números (com os zeros à esquerda). O Compras.gov.br escreve a mesma empresa de jeitos diferentes
+ * (com pontuação, como número...), então toda comparação "é a minha empresa?" passa por aqui.
+ */
+export function idEmpresa(v: unknown): string {
+  const d = texto(typeof v === "number" ? v.toFixed(0) : v).replace(/\D/g, "");
+  if (!d) return "";
+  if (d.length > 11 && d.length < 14) return d.padStart(14, "0");
+  if (d.length < 11) return d.padStart(11, "0");
+  return d;
+}
+
 export const FASES_COMPRA: Record<string, string> = {
   "1": "Aguardando abertura",
   "2": "Análise de propostas",
@@ -315,8 +327,8 @@ export function lerMensagem(bruto: unknown): MensagemAcomp | null {
     texto: t,
     dataHora,
     item: numero(primeiro(x.identificadorItem, x.numeroItem, x.item)),
-    remetente: texto(x.identificadorRemetente),
-    destinatario: texto(x.identificadorDestinatario),
+    remetente: idEmpresa(x.identificadorRemetente),
+    destinatario: idEmpresa(x.identificadorDestinatario),
   };
 }
 
@@ -360,6 +372,8 @@ export interface CompraAcomp extends Participacao {
   /** Da sua participação na compra. */
   meEpp: boolean | null;
   uf: string;
+  /** A sua empresa nesta compra (CNPJ/CPF só com números), como o Compras.gov.br devolve na sua participação. */
+  meuCnpj: string;
 }
 
 export function montarCompras(lista: unknown[] | null, detalhes: Record<string, DetalheBruto> | null): CompraAcomp[] {
@@ -389,6 +403,7 @@ export function montarCompras(lista: unknown[] | null, detalhes: Record<string, 
       erros: d?.erros ?? [],
       meEpp: d?.participacao && obj(d.participacao).declaracaoMeEpp != null ? obj(d.participacao).declaracaoMeEpp === true : null,
       uf: texto(primeiro(obj(obj(obj(d?.participacao).participante).endereco).uf, obj(obj(d?.participacao).participante).uf)),
+      meuCnpj: idEmpresa(primeiro(obj(obj(d?.participacao).participante).identificacao, obj(d?.participacao).identificacaoParticipante, obj(d?.participacao).identificacaoFornecedor)),
     });
   }
   return saida;
@@ -494,6 +509,8 @@ export interface PropostaEmpresa {
   chatAberto: boolean;
   pendencias: Pendencia[];
   dataLimite: string;
+  /** Código da situação da proposta no Compras.gov.br (3 aceita, 4 habilitada, 6 adjudicada...). */
+  codigo: string;
 }
 
 export function lerProposta(bruto: unknown): PropostaEmpresa {
@@ -502,7 +519,7 @@ export function lerProposta(bruto: unknown): PropostaEmpresa {
   const valores = obj(p.valores);
   const sit = texto(p.situacao);
   return {
-    cnpj: texto(primeiro(part.identificacao, p.identificacaoParticipante, p.identificacao)),
+    cnpj: idEmpresa(primeiro(part.identificacao, p.identificacaoParticipante, p.identificacao)),
     empresa: texto(primeiro(part.nome, p.nomeParticipante, p.razaoSocial)) || "Empresa",
     colocacao: numero(primeiro(p.classificacao, p.posicao)),
     valor: valorDe(primeiro(valores.valorNegociado, valores.valorPropostaInicialOuLances, valores.valorPropostaInicial, p.valor)),
@@ -527,11 +544,13 @@ export function lerProposta(bruto: unknown): PropostaEmpresa {
     chatAberto: p.canalChatAberto === true,
     pendencias: PENDENCIAS.filter(([campo]) => texto(p[campo]) === "S").map(([, tipo, rotulo]) => ({ tipo, rotulo })),
     dataLimite: texto(primeiro(p.dataHoraLimiteAtendimento, p.dataHoraLimiteEnvioAnexos)),
+    codigo: sit,
   };
 }
 
 /** Resposta de "item com as propostas": a sua proposta (propostaItem) e as de todas (propostasItem). */
-export function lerItemComPropostas(dados: unknown, meuCnpj: string) {
+export function lerItemComPropostas(dados: unknown, meuCnpjBruto: string) {
+  const meuCnpj = idEmpresa(meuCnpjBruto);
   // Na fase de seleção a resposta é uma lista com o item (e as propostas dentro dele).
   const d = Array.isArray(dados) && dados.length && obj(dados[0]).propostasItem ? obj(dados[0]) : obj(dados);
   if (Array.isArray(dados) && dados.length && obj(dados[0]).propostasItem) dados = d;
@@ -604,7 +623,7 @@ export function lerLances(dados: unknown, meuCnpj = ""): LanceCompras[] {
     .map((b) => {
       const l = obj(b);
       const part = obj(l.participante);
-      const cnpj = texto(primeiro(part.identificacao, l.identificacaoParticipante, l.identificacaoFornecedor));
+      const cnpj = idEmpresa(primeiro(part.identificacao, l.identificacaoParticipante, l.identificacaoFornecedor, l.identificacao));
       return {
         valor: valorDe(primeiro(l.valor, l.valorInformado, l.valorCalculado, l.valorLance)),
         dataHora: texto(primeiro(l.dataHora, l.dataHoraLance, l.dataHoraEnvio)),
@@ -669,7 +688,7 @@ export function lerFaseRecursal(dados: unknown): FaseRecursal | null {
       const recurso = obj(p.recurso);
       const contras = Array.isArray(primeiro(p.contrarrazoes, recurso.contrarrazoes)) ? (primeiro(p.contrarrazoes, recurso.contrarrazoes) as unknown[]) : [];
       return {
-        cnpj: texto(primeiro(p.identificacaoParticipante, obj(p.participante).identificacao)),
+        cnpj: idEmpresa(primeiro(p.identificacaoParticipante, obj(p.participante).identificacao)),
         empresa: texto(primeiro(p.nomeParticipante, p.razaoSocial, obj(p.participante).nome)),
         intencao: texto(primeiro(intencao.motivacao, intencao.texto, p.motivacao)),
         etapa: ETAPAS[texto(primeiro(intencao.etapaSelecaoFornecedores, p.etapaSelecaoFornecedores))] ?? "",
@@ -680,7 +699,7 @@ export function lerFaseRecursal(dados: unknown): FaseRecursal | null {
         contrarrazoes: contras.map((c) => {
           const x = obj(c);
           return {
-            cnpj: texto(primeiro(x.identificacaoParticipante, obj(x.participante).identificacao)),
+            cnpj: idEmpresa(primeiro(x.identificacaoParticipante, obj(x.participante).identificacao)),
             empresa: texto(primeiro(x.nomeParticipante, obj(x.participante).nome)),
             situacao: SITUACAO_RECURSO[texto(x.situacao)] ?? texto(x.situacao),
             dataHora: texto(x.dataHora),

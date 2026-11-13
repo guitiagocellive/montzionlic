@@ -1,12 +1,12 @@
 import { Bell, BellRing, Gauge, Minus, Plus, ClipboardCopy, FilePlus2, Download, ExternalLink, LogIn, MessageSquare, Pencil, RefreshCw, Search, Send, Star, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { type AvisoAcomp, avisosDe, type CompraAcomp, dataDe, montarCompras, type PainelAcompanhamento, ROTULO_CHANCE } from "../../../shared/acompanhamento";
+import { type AvisoAcomp, avisosDe, idEmpresa, type CompraAcomp, dataDe, montarCompras, type PainelAcompanhamento, ROTULO_CHANCE } from "../../../shared/acompanhamento";
 import { api, mensagemDeErro } from "../../api";
 import { avisar, Modal } from "../../components/Ui";
 import { formatarMoeda } from "../../formato";
 import { link } from "../../rota";
 import { CadastroProposta, NovaProposta } from "./CadastroProposta";
-import { analisarPropostas, chavePropostas, conversaDoItem, COR_CHANCE, ItemCompras, jaLido, preCarregarPropostas, type PropostasDoItem } from "./ItemCompras";
+import { chavePropostas, conversaDoItem, COR_CHANCE, estadoDoItem, ItemCompras, jaLido, preCarregarPropostas, type PropostasDoItem } from "./ItemCompras";
 import { noAplicativo, ponte, type ResultadoTesteLeitura, temPonte } from "../../robo/ponte";
 import { BotaoRecarregarGovBr } from "../../robo/ErroCompras";
 
@@ -407,7 +407,7 @@ export function Acompanhamento() {
             />
           )}
           {cadastro && <CadastroProposta chave={cadastro} cnpj={painel.cnpj ?? ""} aoFechar={() => setCadastro(null)} />}
-          {compraAberta && !cadastro && <JanelaCompra compra={compraAberta} cnpj={painel.cnpj ?? ""} conectado={!!painel.conectado} agora={agora} aoFechar={() => abrir(null)} aoCadastrar={() => setCadastro(compraAberta.chave)} />}
+          {compraAberta && !cadastro && <JanelaCompra compra={compraAberta} cnpj={compraAberta.meuCnpj || idEmpresa(painel.cnpj)} conectado={!!painel.conectado} agora={agora} aoFechar={() => abrir(null)} aoCadastrar={() => setCadastro(compraAberta.chave)} />}
           <p className="texto-fraco pequeno nota-acomp">
             O aplicativo relê a lista a cada 3 minutos e a compra que você abre na hora. A chance é uma estimativa pela colocação: o pregoeiro analisa a 1ª colocada e,
             se ela for recusada ou inabilitada, chama a próxima. Algo diferente do Compras.gov.br?{" "}
@@ -634,7 +634,7 @@ function LinhaCompra({
   aoFavoritar: () => void;
   aoApelidar: () => void;
 }) {
-  const { melhor, convocado, falou, doPregoeiro } = etiquetas(c, cnpj);
+  const { melhor, convocado, falou, doPregoeiro } = etiquetas(c, c.meuCnpj || idEmpresa(cnpj));
   const chamado = convocado || c.diligencia || c.convocacaoRemanescentes;
   const parar = (e: React.MouseEvent | React.KeyboardEvent, f: () => void) => {
     e.stopPropagation();
@@ -735,8 +735,12 @@ function JanelaCompra({
 
   const info = c.itens.map((it) => {
     const conversa = conversaDoItem(c.mensagens, it.numero, cnpj);
-    const analise = analisarPropostas(jaLido<PropostasDoItem>(chavePropostas(c, it.numero)), cnpj);
-    return { it, conversa, analise, convocado: it.pendencias.length > 0 || it.chatAberto, boa: ["ganhou", "alta"].includes(it.chance), fora: it.chance === "fora" };
+    const dados = jaLido<PropostasDoItem>(chavePropostas(c, it.numero));
+    const estado = estadoDoItem(it, dados, cnpj);
+    const analise = estado.analise;
+    const minha = dados?.minha ?? null;
+    const convocado = it.pendencias.length > 0 || it.chatAberto || !!minha?.pendencias.length;
+    return { it, conversa, analise, estado, minha, convocado, boa: ["ganhou", "alta"].includes(estado.chance), fora: estado.chance === "fora" };
   });
   const contagem = {
     convocados: info.filter((x) => x.convocado).length,
@@ -824,22 +828,22 @@ function JanelaCompra({
             </div>
 
             <ul className="cartoes-itens">
-              {visiveis.map(({ it, conversa, analise, convocado }) => {
+              {visiveis.map(({ it, conversa, analise, estado, minha, convocado }) => {
                 const expandido = aberto === it.numero;
                 return (
-                  <li key={it.numero} className={`cartao-item chance-${it.chance} ${convocado ? "convocado" : ""} ${expandido ? "expandido" : ""}`}>
+                  <li key={it.numero} className={`cartao-item chance-${estado.chance} ${convocado ? "convocado" : ""} ${expandido ? "expandido" : ""}`}>
                     <button className="topo-cartao-item" onClick={() => setAberto(expandido ? null : it.numero)} aria-expanded={expandido}>
                       <span className="colocacao-cartao">
-                        <strong>{ordinal(analise?.minhaColocacao ?? it.colocacao)}</strong>
-                        <small>{(analise?.minhaColocacao != null ? analise.total : it.participantes) ? `de ${analise?.minhaColocacao != null ? analise.total : it.participantes}` : "colocação"}</small>
+                        <strong>{ordinal(estado.colocacao)}</strong>
+                        <small>{estado.total ? `de ${estado.total}` : "colocação"}</small>
                       </span>
                       <span className="corpo-cartao-item">
                         <span className="nome-cartao-item">
                           <b>Item {it.numero}</b> {it.descricao}
                         </span>
                         <span className="etiquetas-item">
-                          <span className={`chip ${COR_CHANCE[it.chance]}`} title={it.explicacao}>
-                            {ROTULO_CHANCE[it.chance]}
+                          <span className={`chip ${COR_CHANCE[estado.chance]}`} title={estado.explicacao}>
+                            {ROTULO_CHANCE[estado.chance]}
                           </span>
                           {it.pendencias.map((p) => (
                             <span key={p.tipo} className="chip vermelho">
@@ -851,11 +855,11 @@ function JanelaCompra({
                               <MessageSquare size={11} /> Pregoeiro falou com você
                             </span>
                           )}
-                          {it.situacao && it.chance !== "fora" && <span className="chip cinza">{it.situacao}</span>}
+                          {estado.momento && !estado.momento.startsWith("Convocada") && <span className={`chip ${estado.chance === "ganhou" ? "verde" : estado.chance === "fora" ? "vermelho" : "cinza"}`}>{estado.momento}</span>}
                         </span>
                         <span className="analise-cartao texto-suave">
                           {[
-                            it.etapa,
+                            it.etapa !== estado.momento ? it.etapa : "",
                             analise?.souPrimeira ? "Você é a 1ª válida" : analise && analise.aFrenteValidas > 0 ? `${analise.aFrenteValidas} válida${analise.aFrenteValidas > 1 ? "s" : ""} à sua frente` : "",
                             analise?.desclassificadas ? `${analise.desclassificadas} desclassificada${analise.desclassificadas > 1 ? "s" : ""}` : "",
                             analise?.aFrenteSemAnexos ? `${analise.aFrenteSemAnexos} à frente sem anexos` : "",
@@ -867,7 +871,7 @@ function JanelaCompra({
                       <span className="valores-cartao">
                         <span>
                           <small>Sua proposta</small>
-                          <b>{it.meuValor != null ? formatarMoeda(it.meuValor) : "—"}</b>
+                          <b>{(minha ? (minha.valorNegociado ?? minha.valorOfertado ?? minha.valor) : it.meuValor) != null ? formatarMoeda((minha ? (minha.valorNegociado ?? minha.valorOfertado ?? minha.valor) : it.meuValor) as number) : "—"}</b>
                         </span>
                         {it.melhorValor != null && it.melhorValor !== it.meuValor && (
                           <span>

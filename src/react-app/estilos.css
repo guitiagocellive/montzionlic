@@ -13551,3 +13551,20 @@ p.etapa-fechada {
     grid-template-columns: 1fr 1fr;
   }
 }
+.rolagem-lances {
+  max-height: 380px;
+  overflow-y: auto;
+}
+.tabela-lances-compras tr.excluido td {
+  text-decoration: line-through;
+  color: var(--texto-fraco);
+}
+.tabela-todos-lances td:last-child,
+.tabela-todos-lances th:last-child {
+  text-align: left;
+  font-size: 0.76rem;
+  color: var(--texto-suave);
+}
+.tabela-lances-compras td {
+  white-space: nowrap;
+}

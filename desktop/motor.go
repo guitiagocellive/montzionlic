@@ -184,7 +184,33 @@ func lerJWT(token string) (cnpj string, exp time.Time) {
 	if v.Exp > 0 {
 		exp = time.Unix(int64(v.Exp), 0)
 	}
-	return textoDe(v.Fornecedor), exp
+	return identificacaoFornecedor(v.Fornecedor), exp
+}
+
+var formatoIdentLogado sync.Once
+
+// identificacaoFornecedor: CNPJ/CPF só com números, como o Compras.gov.br usa nas propostas e nos endereços.
+// No token ele pode vir com pontuação ("12.345.678/0001-99") ou como número (que perde os zeros à esquerda).
+func identificacaoFornecedor(v any) string {
+	bruto := ""
+	switch x := v.(type) {
+	case float64:
+		bruto = strconv.FormatFloat(x, 'f', 0, 64)
+	case json.Number:
+		bruto = x.String()
+	default:
+		bruto = textoDe(v)
+	}
+	d := soDigitos(bruto)
+	if l := len(d); l > 11 && l < 14 {
+		d = strings.Repeat("0", 14-l) + d // CNPJ que veio como número
+	} else if l > 0 && l < 11 {
+		d = strings.Repeat("0", 11-l) + d // CPF que veio como número
+	}
+	formatoIdentLogado.Do(func() {
+		registrarLog("identificação do fornecedor no login: tipo %T, %d caracteres, %d dígitos", v, len(bruto), len(d))
+	})
+	return d
 }
 
 func (m *motor) definirFase(fase, aviso string) {

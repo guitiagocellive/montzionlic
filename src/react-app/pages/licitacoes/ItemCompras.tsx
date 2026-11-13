@@ -2,22 +2,22 @@ import { ErroCompras } from "../../robo/ErroCompras";
 import { BellRing, ChevronDown, Download, FileText, FileUp, Gavel, Loader2, MessageSquare, Paperclip, Send, ShieldQuestion, Trash2, UserRound, Users } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  idEmpresa,
   type AnexoCompras,
   cnpjFormatadoAcomp,
   type CompraAcomp,
   dataDe,
   type FaseRecursal,
   type ItemAcomp,
-  type LanceCompras,
   lerAnexos,
   lerFaseRecursal,
   lerItemComPropostas,
-  lerLances,
   lerMensagem,
   lerProposta,
   type MensagemAcomp,
   type PropostaEmpresa,
   propostasDoItem,
+  calcularChance,
   ROTULO_CHANCE,
 } from "../../../shared/acompanhamento";
 import { mensagemDeErro } from "../../api";
@@ -49,8 +49,8 @@ async function consultar(caminhoV: string, opcoes: { captcha?: boolean; query?: 
   try {
     return (await pedir({ caminho: `${FE}${caminhoV}`, captcha, query })).dados;
   } catch (e) {
-    if (!/40[34]|não encontr|not found/i.test(mensagemDeErro(e))) throw e;
-    return (await pedir({ caminho: `${FE}/public${caminhoV}`, captcha, query })).dados;
+    if (!/40[34]|não encontr|not found|no static resource/i.test(mensagemDeErro(e))) throw e;
+    return (await pedir({ caminho: `${FE}/public${caminhoV}`, captcha: true, query })).dados;
   }
 }
 
@@ -232,6 +232,37 @@ export function analisarPropostas(dados: PropostasDoItem | null, cnpj: string) {
   };
 }
 
+/**
+ * Situação do item para você, pela sua proposta (quando as propostas já foram lidas) ou pela lista de itens:
+ * chance, explicação e um texto curto do momento (adjudicada, aguardando o pregoeiro...).
+ */
+export function estadoDoItem(item: ItemAcomp, dados: PropostasDoItem | null, cnpj: string) {
+  const analise = analisarPropostas(dados, cnpj);
+  const minha = dados?.minha ?? null;
+  const situacaoItem = dados?.situacaoItem ?? "";
+  if (!minha) {
+    return { chance: item.chance, explicacao: item.explicacao, momento: item.situacao || item.etapa || "", colocacao: item.colocacao, total: item.participantes, analise };
+  }
+  const pendencias = minha.pendencias.length ? minha.pendencias : item.pendencias;
+  const { chance, explicacao } = calcularChance(
+    { colocacao: analise?.posicaoValida ?? minha.colocacao, codigoSituacao: minha.codigo, pendencias, chatAberto: minha.chatAberto || item.chatAberto, participantes: analise?.total ?? null },
+    "",
+    minha.desclassificada,
+  );
+  const homologado = /homolog/i.test(situacaoItem) || /homolog/i.test(item.etapa);
+  let momento = "";
+  if (minha.codigo === "6") momento = homologado ? "Adjudicada e homologada para você" : "Adjudicada para você — aguardando homologação";
+  else if (minha.desclassificada) momento = minha.situacao || "Proposta desclassificada";
+  else if (minha.codigo === "5") momento = "Inabilitada";
+  else if (pendencias.length) momento = `Convocada: ${pendencias.map((p) => p.rotulo.toLowerCase()).join(", ")}`;
+  else if (minha.codigo === "4") momento = "Habilitada — aguardando adjudicação";
+  else if (minha.codigo === "3") momento = "Proposta aceita — aguardando habilitação";
+  else if (analise?.souPrimeira) momento = "1ª colocada — aguardando o pregoeiro analisar a sua proposta";
+  else if (analise?.posicaoValida) momento = `Na fila: ${analise.posicaoValida}ª entre as propostas válidas`;
+  else momento = minha.situacao || situacaoItem || item.etapa || "";
+  return { chance, explicacao, momento, colocacao: analise?.minhaColocacao ?? minha.colocacao, total: analise?.total ?? item.participantes, analise };
+}
+
 /** Mensagens da compra sobre este item: se o pregoeiro falou com você e qual foi a última. */
 export function conversaDoItem(mensagens: MensagemAcomp[], numeroItem: number, cnpj: string) {
   const doItem = mensagens.filter((m) => m.item === numeroItem);
@@ -249,8 +280,9 @@ export function ItemCompras({ compra, item, cnpj, abaInicial = "minha" }: { comp
   // Reserva: a sua proposta como veio na lista de itens (aparece na hora, antes da tela do item responder).
   const minha = dados.dados?.minha ?? (item.propostaBruta ? lerProposta(item.propostaBruta) : null);
   const participantes = dados.dados?.participantes ?? item.participantes;
-  const colocacao = minha?.colocacao ?? item.colocacao;
-  const analise = analisarPropostas(dados.dados, cnpj);
+  const estado = estadoDoItem(item, dados.dados, cnpj);
+  const colocacao = estado.colocacao ?? minha?.colocacao ?? item.colocacao;
+  const analise = estado.analise;
   const conversa = conversaDoItem(compra.mensagens, item.numero, cnpj);
   const pendencias = item.pendencias.length ? item.pendencias : (minha?.pendencias ?? []);
   const convocadoAnexos = pendencias.some((p) => p.tipo === "anexos");
@@ -289,12 +321,13 @@ export function ItemCompras({ compra, item, cnpj, abaInicial = "minha" }: { comp
             </div>
             <div>
               <span>Chance</span>
-              <span className={`chip ${COR_CHANCE[item.chance]}`}>{ROTULO_CHANCE[item.chance]}</span>
-              <small>{item.explicacao}</small>
+              <span className={`chip ${COR_CHANCE[estado.chance]}`}>{ROTULO_CHANCE[estado.chance]}</span>
+              <small>{estado.explicacao}</small>
             </div>
             <div>
               <span>Situação</span>
-              <strong className={minha?.desclassificada ? "texto-vermelho" : ""}>{minha?.situacao || item.situacao || item.etapa || "—"}</strong>
+              <strong className={minha?.desclassificada ? "texto-vermelho" : estado.chance === "ganhou" ? "texto-verde" : ""}>{estado.momento || "—"}</strong>
+              {dados.dados?.situacaoItem && <small>Item: {dados.dados.situacaoItem}</small>}
               {minha?.motivo && <small className="texto-vermelho">Motivo: {minha.motivo}</small>}
             </div>
             <div>
@@ -444,7 +477,11 @@ function Chat({
     true,
     async () => {
       const query = `size=300&page=0&legadoAsp=false${de ? `&identificadorParticipante=${de}` : ""}`;
-      const r = await pedir({ caminho: `/comprasnet-mensagem/v2/chat/${compra.chave}/itens/${item.numero}`, query, captcha: true });
+      // O Compras.gov.br responde 404 quando não há mensagens com essa empresa no item.
+      const r = await pedir({ caminho: `/comprasnet-mensagem/v2/chat/${compra.chave}/itens/${item.numero}`, query, captcha: true }).catch((e) => {
+        if (/404|não encontr|not found/i.test(mensagemDeErro(e))) return { dados: [] };
+        throw e;
+      });
       const lista = Array.isArray(r.dados) ? r.dados : [];
       return lista
         .map(lerMensagem)
@@ -598,11 +635,27 @@ function EnviarArquivo({ rotulo, desativado, confirmar, enviar }: { rotulo: stri
   );
 }
 
+/** Anexos de uma empresa no item, como o site logado lista ("participacao/{cnpj}/anexos", em páginas); a tela pública é a reserva. */
+async function anexosDaEmpresa(compra: CompraAcomp, numeroItem: number, cnpjEmpresa: string) {
+  try {
+    const todos: AnexoCompras[] = [];
+    for (let pagina = 0; pagina < 10; pagina++) {
+      const lidos = lerAnexos((await pedir({ caminho: `${FE}/v1/compras/${compra.chave}/itens/${numeroItem}/participacao/${cnpjEmpresa}/anexos`, captcha: false, query: `pagina=${pagina}&tamanhoPagina=20` })).dados);
+      todos.push(...lidos);
+      if (lidos.length < 20) break;
+    }
+    return todos;
+  } catch {
+    return lerAnexos((await pedir({ caminho: `${FE}/public/v1/compras/${compra.chave}/itens/${numeroItem}/participacoes/${cnpjEmpresa}/anexos`, captcha: true })).dados);
+  }
+}
+
 const baixarAnexo = async (compra: CompraAcomp, item: ItemAcomp, cnpjEmpresa: string, a: AnexoCompras, minha: boolean) => {
   if (a.url) return salvarArquivo(await pedir({ url: a.url }), a.nome);
-  const trecho = minha ? `participacao/${cnpjEmpresa}` : `participacoes/${cnpjEmpresa}`;
+  void minha;
   const id = encodeURIComponent(a.id);
-  const r = await pedir({ caminho: `${FE}/v2/compras/${compra.chave}/itens/${item.numero}/${trecho}/anexos/${id}`, captcha: !minha, baixar: true }).catch(() =>
+  // O site logado baixa o anexo de qualquer empresa por "participacao/{cnpj}"; a tela pública (com captcha) é a reserva.
+  const r = await pedir({ caminho: `${FE}/v2/compras/${compra.chave}/itens/${item.numero}/participacao/${cnpjEmpresa}/anexos/${id}`, captcha: false, baixar: true }).catch(() =>
     pedir({ caminho: `${FE}/public/v2/compras/${compra.chave}/itens/${item.numero}/participacoes/${cnpjEmpresa}/anexos/${id}`, captcha: true, baixar: true }),
   );
   salvarArquivo(r, a.nome);
@@ -675,7 +728,7 @@ function MeusAnexos({ compra, item, cnpj, convocado }: { compra: CompraAcomp; it
 
 function AnexosEmpresa({ compra, item, empresa, aoContar }: { compra: CompraAcomp; item: ItemAcomp; empresa: PropostaEmpresa; aoContar?: (n: number) => void }) {
   const caminho = `/v1/compras/${compra.chave}/itens/${item.numero}/participacoes/${empresa.cnpj}/anexos`;
-  const carga = useCarga(true, async () => lerAnexos(await consultar(caminho)), caminho);
+  const carga = useCarga(true, () => anexosDaEmpresa(compra, item.numero, empresa.cnpj), caminho);
   useEffect(() => {
     if (carga.dados) aoContar?.(carga.dados.length);
   }, [carga.dados, aoContar]);
@@ -824,7 +877,7 @@ function TodasPropostas({
     for (const p of semContagem) {
       setAnexos((a) => ({ ...a, [p.cnpj]: "lendo" }));
       try {
-        const lidos = lerAnexos(await consultar(`/v1/compras/${compra.chave}/itens/${item.numero}/participacoes/${p.cnpj}/anexos`));
+        const lidos = await anexosDaEmpresa(compra, item.numero, p.cnpj);
         setAnexos((a) => ({ ...a, [p.cnpj]: lidos.length }));
       } catch {
         setAnexos((a) => ({ ...a, [p.cnpj]: "erro" }));
@@ -961,45 +1014,120 @@ function TodasPropostas({
 
 // ---------- Lances ----------
 
+interface LanceItem {
+  valor: number | null;
+  dataHora: string;
+  cnpj: string;
+  excluido: boolean;
+  melhorDoParticipante: boolean;
+}
+
+/** Lances do item como a tela "Lances" do Compras.gov.br (em páginas; o fornecedor consulta com captcha). */
+async function lerLancesDoItem(caminho: string, paginas = 5): Promise<LanceItem[]> {
+  const todos: LanceItem[] = [];
+  for (let pagina = 0; pagina < paginas; pagina++) {
+    const query = `pagina=${pagina}&tamanhoPagina=100`;
+    const r = await pedir({ caminho, query, captcha: true }).catch(() => pedir({ caminho, query, captcha: false }));
+    const lista = Array.isArray(r.dados) ? (r.dados as Record<string, unknown>[]) : [];
+    for (const l of lista) {
+      const v = l.valor && typeof l.valor === "object" ? (l.valor as Record<string, unknown>) : null;
+      const num = (x: unknown) => (typeof x === "number" ? x : typeof x === "string" && x.trim() !== "" && !Number.isNaN(Number(x)) ? Number(x) : null);
+      const part = l.participante && typeof l.participante === "object" ? (l.participante as Record<string, unknown>) : {};
+      todos.push({
+        valor: v ? (num(v.valorCalculado) ?? num((v.valorCalculado as Record<string, unknown> | undefined)?.valorUnitario) ?? num(v.valorInformado)) : num(l.valor ?? l.valorInformado ?? l.valorCalculado),
+        dataHora: String(l.dataHoraInclusao ?? l.dataHora ?? l.dataHoraLance ?? l.dataHoraEnvio ?? ""),
+        cnpj: idEmpresa(l.identificacaoParticipante ?? l.identificacao ?? part.identificacao),
+        excluido: l.excluido === true,
+        melhorDoParticipante: l.melhorDoParticipante === true,
+      });
+    }
+    if (lista.length < 100) break;
+  }
+  return todos;
+}
+
 function Lances({ compra, item, cnpj, nomes }: { compra: CompraAcomp; item: ItemAcomp; cnpj: string; nomes: Map<string, string> }) {
-  const carga = useCarga(
-    true,
-    async () => {
-      const caminho = `/comprasnet-disputa/v1/compras/${compra.chave}/itens/${item.numero}/lances`;
-      const query = "pagina=0&tamanhoPagina=500";
-      const r = await pedir({ caminho, query, captcha: false }).catch(() => pedir({ caminho, query, captcha: true }));
-      return lerLances(r.dados, cnpj);
-    },
-    `${compra.chave}:${item.numero}`,
-  );
-  const lances: LanceCompras[] = carga.dados ?? [];
+  const base = `/comprasnet-disputa/v1/compras/${compra.chave}/itens/${item.numero}/lances`;
+  const melhores = useCarga(true, () => lerLancesDoItem(`${base}/por-participante`, 2), `lances-melhores:${base}`);
+  const todos = useCarga(true, () => lerLancesDoItem(base), `lances-todos:${base}`);
+  const propostas = jaLido<PropostasDoItem>(chavePropostas(compra, item.numero));
+  const minha = propostas?.minha ?? null;
+  const meuValor = minha ? (minha.valorOfertado ?? minha.valor) : item.meuValor;
+  // A lista de lances não diz de quem é cada lance; o seu é reconhecido pela empresa (quando vem) ou pelo seu valor.
+  const eMeu = (l: LanceItem) => (l.cnpj ? l.cnpj === cnpj : meuValor != null && l.valor != null && Math.abs(l.valor - meuValor) < 0.00005);
+  const ranking = (melhores.dados ?? []).filter((l) => !l.excluido && l.valor != null).sort((a, b) => (a.valor ?? 0) - (b.valor ?? 0));
+  const lista = [...(todos.dados ?? [])].sort((a, b) => dataDe(b.dataHora) - dataDe(a.dataHora));
+  const meus = lista.filter((l) => !l.excluido && eMeu(l)).length;
   return (
-    <Estado carregando={carga.carregando} erro={carga.erro} recarregar={carga.recarregar}>
-      {lances.length === 0 ? (
-        <p className="texto-fraco pequeno">Nenhum lance registrado neste item.</p>
-      ) : (
-        <table className="tabela-lances-compras">
-          <thead>
-            <tr>
-              <th>Quando</th>
-              <th>Empresa</th>
-              <th>Valor</th>
-            </tr>
-          </thead>
-          <tbody>
-            {lances.map((l, i) => (
-              <tr key={i} className={l.meu ? "meu" : ""}>
-                <td>{dataHora(l.dataHora)}</td>
-                <td>{l.meu ? "Você" : l.empresa || nomes.get(l.cnpj) || (l.cnpj ? cnpjFormatadoAcomp(l.cnpj) : "Fornecedor")}</td>
-                <td>{formatarMoeda(l.valor)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </Estado>
+    <div className="painel-compras">
+      <section className="cartao-secao-compras">
+        <h4>
+          <Gavel size={15} /> Melhor lance de cada participante
+        </h4>
+        <Estado carregando={melhores.carregando} erro={melhores.erro} recarregar={melhores.recarregar}>
+          {ranking.length === 0 ? (
+            <p className="texto-fraco pequeno">O Compras.gov.br não mostra lances neste item (pode não ter tido disputa, ou ela ainda não começou).</p>
+          ) : (
+            <table className="tabela-lances-compras">
+              <thead>
+                <tr>
+                  <th>Posição</th>
+                  <th>Participante</th>
+                  <th>Valor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ranking.map((l, i) => (
+                  <tr key={i} className={eMeu(l) ? "meu" : ""}>
+                    <td>{i + 1}º</td>
+                    <td>{eMeu(l) ? "Você" : l.cnpj ? nomes.get(l.cnpj) || cnpjFormatadoAcomp(l.cnpj) : "Fornecedor"}</td>
+                    <td>{moeda4(l.valor)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Estado>
+      </section>
+      <section className="cartao-secao-compras">
+        <h4>
+          <Gavel size={15} /> Todos os lances {lista.length ? `(${lista.length}${meus ? ` · ${meus} seus` : ""})` : ""}
+        </h4>
+        <Estado carregando={todos.carregando} erro={todos.erro} recarregar={todos.recarregar}>
+          {lista.length === 0 ? (
+            <p className="texto-fraco pequeno">Nenhum lance registrado neste item.</p>
+          ) : (
+            <div className="rolagem-lances">
+              <table className="tabela-lances-compras tabela-todos-lances">
+                <thead>
+                  <tr>
+                    <th>Data/hora</th>
+                    <th>Valor</th>
+                    <th>Observação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lista.map((l, i) => (
+                    <tr key={i} className={`${eMeu(l) ? "meu" : ""} ${l.excluido ? "excluido" : ""}`}>
+                      <td>{dataHoraSeg(l.dataHora)}</td>
+                      <td>{moeda4(l.valor)}</td>
+                      <td>{[l.excluido && "Excluído pelo pregoeiro", eMeu(l) && "Seu lance", l.melhorDoParticipante && "Melhor do participante"].filter(Boolean).join(" · ")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Estado>
+      </section>
+    </div>
   );
 }
+
+const dataHoraSeg = (s: string) => {
+  const t = dataDe(s);
+  return t ? new Date(t).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—";
+};
 
 // ---------- Recursos ----------
 
