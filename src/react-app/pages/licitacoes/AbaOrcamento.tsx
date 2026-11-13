@@ -279,7 +279,7 @@ function LinhaCotacao({
         )}
         {!naProposta && (
           <button type="button" className="botao-link sem-margem trocar-coroa" onClick={aoUsarNaProposta}>
-            <Crown size={12} /> Usar esta na proposta
+            Usar esta na proposta
           </button>
         )}
       </div>
@@ -306,7 +306,7 @@ function LinhaCotacao({
         </div>
       </div>
       {acimaReferencia && (
-        <span className="selo amarelo" title="O preço de venda passa do valor de referência do edital">
+        <span className="selo vermelho" title="O preço de venda passa do valor de referência do edital">
           <TriangleAlert size={13} /> Acima da referência
         </span>
       )}

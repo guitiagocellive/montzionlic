@@ -1,6 +1,6 @@
-import { ArrowLeft, Calculator, FileArchive, MoreHorizontal, CalendarClock, ExternalLink, FileText, FolderOpen, Landmark, ListChecks, MessageSquare, Pencil, Trash2, Trophy, UserRound, Wallet } from "lucide-react";
+import { ArrowLeft, Calculator, MoreHorizontal, CalendarClock, ExternalLink, FileText, FolderOpen, Landmark, ListChecks, MessageSquare, Pencil, Trash2, Trophy, UserRound, Wallet } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { cotacaoDaProposta, ETAPAS_EXECUCAO, ETAPAS_LICITACAO, nomeEtapa } from "../../../shared/negocio";
+import { cotacaoDaProposta, ETAPAS_LICITACAO, nomeEtapa } from "../../../shared/negocio";
 import { podeEditar, podeVer } from "../../../shared/permissoes";
 import type { Arquivo, Cotacao, ItemLicitacao, Licitacao, Usuario } from "../../../shared/tipos";
 import { api, mensagemDeErro } from "../../api";
@@ -107,7 +107,6 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
   const { licitacao: l, itens, cotacoes, arquivos } = ficha;
 
   const participando = itens.filter((i) => i.participar);
-  const conta = (r: string) => participando.filter((i) => i.resultado === r).length;
   // Na ordem do trabalho: olhar os itens, orçar, fazer a proposta e, por último, o resultado. Arquivos no fim.
   const abas = [
     { chave: "itens", titulo: "Itens", icone: ListChecks, info: `${participando.length}`, completo: participando.length > 0 },
@@ -278,39 +277,7 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
             </dl>
           </section>
 
-          {(ficha.execucoes.length > 0 || l.etapa === "ganha") && (
-          <section className="cartao resumo-itens">
-            <h2>Itens</h2>
-            <div className="contagem-itens">
-              <span>
-                <strong>{participando.length}</strong> participando
-              </span>
-              <span className="verde">
-                <strong>{conta("ganho")}</strong> ganhos
-              </span>
-              <span className="amarelo">
-                <strong>{conta("acompanhando")}</strong> acompanhando
-              </span>
-              <span className="vermelho">
-                <strong>{conta("perdido")}</strong> perdidos
-              </span>
-              <span className="fraco">
-                <strong>{participando.filter((i) => !i.resultado).length}</strong> sem resultado
-              </span>
-            </div>
-            {ficha.execucoes.length > 0 &&
-              ficha.execucoes.map((e) => (
-                <a key={e.id} className="link-empenho" {...link(`/pos-ganho/${e.id}`)}>
-                  <Trophy size={14} /> {e.numero_empenho ? `Empenho ${e.numero_empenho}` : "Empenho no Pós-ganho"} · {nomeEtapa(ETAPAS_EXECUCAO, e.etapa)}
-                </a>
-              ))}
-            {l.etapa === "ganha" && podeEditar(usuario.permissoes, "posganho") && (
-              <button className="botao link pequeno" style={{ marginTop: 8 }} onClick={novoEmpenho}>
-                + Registrar outro empenho desta licitação
-              </button>
-            )}
-          </section>
-          )}
+
         </aside>
 
         <div className="ficha-principal">
@@ -374,21 +341,20 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
               <AbaProposta licitacao={l} itens={itens} cotacoes={cotacoes} arquivos={arquivos} usuario={usuario} aoMudar={carregar} aoEditarDados={() => setEditando(true)} />
             )}
             {aba === "resultado" && (
-              <AbaResultado licitacao={l} itens={itens} podeEditar={podeEditar(usuario.permissoes, "licitacoes")} aoMudar={carregar} />
+              <AbaResultado
+                licitacao={l}
+                itens={itens}
+                podeEditar={podeEditar(usuario.permissoes, "licitacoes")}
+                aoMudar={carregar}
+                execucoes={ficha.execucoes}
+                aoNovoEmpenho={l.etapa === "ganha" && podeEditar(usuario.permissoes, "posganho") ? novoEmpenho : undefined}
+              />
             )}
           </div>
         </div>
 
         <aside className="ficha-direita entrar">
           {podeVer(usuario.permissoes, "orcamento") && <CartaoFinanceiro licitacao={l} itens={participando} cotacoes={cotacoes} />}
-          <CartaoArquivos
-            arquivos={arquivos}
-            aoIrPara={escolherAba}
-            aoHabilitacao={() => {
-              escolherAba("arquivos");
-              setPedidoHabilitacao((n) => n + 1);
-            }}
-          />
         </aside>
       </div>
 
@@ -487,47 +453,6 @@ function CartaoFinanceiro({ licitacao: l, itens, cotacoes }: { licitacao: Licita
           {venda > 0 ? formatarMoeda(lucro) : "—"} {venda > 0 && <small>{formatarNumero(l.lucro_percentual)}%</small>}
         </strong>
       </div>
-    </section>
-  );
-}
-
-/** Coluna da direita: os arquivos da licitação a um clique. */
-function CartaoArquivos({ arquivos, aoIrPara, aoHabilitacao }: { arquivos: Arquivo[]; aoIrPara: (aba: string) => void; aoHabilitacao: () => void }) {
-  return (
-    <section className="cartao cartao-arquivos-ficha">
-      <div className="cartao-titulo">
-        <h2>
-          <FolderOpen size={17} /> Arquivos ({arquivos.length})
-        </h2>
-        <button className="botao-link sem-margem" onClick={() => aoIrPara("arquivos")}>
-          + enviar
-        </button>
-      </div>
-      {arquivos.length === 0 ? (
-        <p className="texto-fraco pequeno" style={{ margin: 0 }}>
-          Nenhum arquivo ainda. Envie o edital, o termo de referência e os anexos.
-        </p>
-      ) : (
-        <ul className="lista-arquivos-ficha">
-          {arquivos.slice(0, 6).map((a) => (
-            <li key={a.id}>
-              <a href={`/api/arquivos/${a.id}`} target="_blank" rel="noreferrer noopener" title={a.nome}>
-                <FileText size={15} />
-                <span>{a.nome}</span>
-              </a>
-              {a.categoria && <span className="chip">{a.categoria}</span>}
-            </li>
-          ))}
-        </ul>
-      )}
-      {arquivos.length > 6 && (
-        <button className="botao-link sem-margem" onClick={() => aoIrPara("arquivos")}>
-          ver todos os {arquivos.length}
-        </button>
-      )}
-      <button className="botao secundario pequeno botao-largo" onClick={aoHabilitacao} title="Junta os documentos da aba Documentação num .zip, salva no computador e anexa aqui">
-        <FileArchive size={14} /> Documentos de habilitação
-      </button>
     </section>
   );
 }

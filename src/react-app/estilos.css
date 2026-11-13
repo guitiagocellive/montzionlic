@@ -2749,7 +2749,6 @@ a.kpi:hover {
 .cotacao-produto svg {
   width: 14px;
   height: 14px;
-  color: var(--amarelo);
 }
 
 .cotacao-numeros {
@@ -14964,4 +14963,87 @@ p.etapa-fechada {
   height: 40px;
   border: 1px solid var(--borda);
   background: var(--superficie);
+}
+
+/* Resultado: mini painel (itens por situação, valor ganho, empenhos). */
+.painel-resultado-numeros {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) minmax(0, 1.4fr);
+  gap: 10px;
+}
+
+.painel-resultado-numeros > div {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--superficie-2);
+  border: 1px solid var(--borda);
+}
+
+.painel-resultado-numeros span {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--texto-fraco);
+}
+
+.painel-resultado-numeros strong {
+  font-size: 1.35rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.painel-resultado-numeros .valor strong {
+  font-size: 1.15rem;
+}
+
+.barra-resultado {
+  display: flex;
+  gap: 3px;
+  height: 8px;
+  margin-top: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.barra-resultado i {
+  display: block;
+}
+
+.barra-resultado .verde {
+  background: var(--verde);
+}
+
+.barra-resultado .amarelo {
+  background: var(--amarelo);
+}
+
+.barra-resultado .vermelho {
+  background: var(--vermelho);
+}
+
+.barra-resultado .cinza {
+  background: var(--superficie-3);
+}
+
+.empenhos-resultado {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 14px;
+}
+
+.empenhos-resultado .link-empenho {
+  margin: 0;
+}
+
+.texto-amarelo {
+  color: var(--amarelo);
+}
+
+@media (max-width: 860px) {
+  .painel-resultado-numeros {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }

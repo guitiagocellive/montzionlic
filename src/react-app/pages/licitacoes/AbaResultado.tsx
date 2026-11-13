@@ -1,11 +1,12 @@
 import { DownloadCloud, Loader2, Save, Trophy } from "lucide-react";
 import { useEffect, useState } from "react";
-import { MOTIVOS_PERDA, RESULTADOS_ITEM } from "../../../shared/negocio";
+import { ETAPAS_EXECUCAO, MOTIVOS_PERDA, nomeEtapa, RESULTADOS_ITEM } from "../../../shared/negocio";
 import type { ItemLicitacao, Licitacao } from "../../../shared/tipos";
 import { api, mensagemDeErro } from "../../api";
 import { Campo } from "../../components/Formulario";
 import { avisar, CampoArea, CampoSelect, Vazio } from "../../components/Ui";
 import { formatarMoeda, formatarNumero, paraNumero } from "../../formato";
+import { link } from "../../rota";
 import { temPonte } from "../../robo/ponte";
 import { puxarESalvarResultado } from "./puxarResultado";
 
@@ -32,11 +33,17 @@ export function AbaResultado({
   itens,
   podeEditar,
   aoMudar,
+  execucoes = [],
+  aoNovoEmpenho,
 }: {
   licitacao: Licitacao;
   itens: ItemLicitacao[];
   podeEditar: boolean;
   aoMudar: () => Promise<void> | void;
+  /** Empenhos desta licitação no Pós-ganho. */
+  execucoes?: { id: number; etapa: string; numero_empenho: string | null }[];
+  /** Licitação ganha: registrar mais um empenho. */
+  aoNovoEmpenho?: () => void;
 }) {
   const participando = itens.filter((i) => i.participar);
   const [linhas, setLinhas] = useState<Record<number, Linha>>({});
@@ -114,28 +121,63 @@ export function AbaResultado({
 
   const ganhos = participando.filter((i) => linhas[i.id]?.resultado === "ganho");
   const perdidos = participando.filter((i) => linhas[i.id]?.resultado === "perdido");
+  const acompanhando = participando.filter((i) => linhas[i.id]?.resultado === "acompanhando");
+  const semResultado = participando.filter((i) => !linhas[i.id]?.resultado);
   const valorGanho = ganhos.reduce((s, i) => s + (paraNumero(linhas[i.id].nosso_lance) ?? 0) * (i.quantidade ?? 0), 0);
 
   return (
     <>
-      <div className="resumo-linha">
-        <div className="mini-indicador">
-          <span>Itens disputados</span>
-          <strong>{participando.length}</strong>
+      {/* Mini painel do resultado: itens por situação, valor ganho e os empenhos no Pós-ganho. */}
+      <section className="cartao painel-resultado">
+        <div className="painel-resultado-numeros">
+          <div>
+            <span>Disputados</span>
+            <strong>{participando.length}</strong>
+          </div>
+          <div>
+            <span>Ganhos</span>
+            <strong className="texto-verde">{ganhos.length}</strong>
+          </div>
+          <div>
+            <span>Acompanhando</span>
+            <strong className="texto-amarelo">{acompanhando.length}</strong>
+          </div>
+          <div>
+            <span>Perdidos</span>
+            <strong className="texto-vermelho">{perdidos.length}</strong>
+          </div>
+          <div>
+            <span>Sem resultado</span>
+            <strong className="texto-fraco">{semResultado.length}</strong>
+          </div>
+          <div className="valor">
+            <span>Valor ganho</span>
+            <strong>{formatarMoeda(valorGanho)}</strong>
+          </div>
         </div>
-        <div className="mini-indicador">
-          <span>Ganhamos</span>
-          <strong className="texto-verde">{ganhos.length}</strong>
-        </div>
-        <div className="mini-indicador">
-          <span>Perdemos</span>
-          <strong className="texto-vermelho">{perdidos.length}</strong>
-        </div>
-        <div className="mini-indicador">
-          <span>Valor ganho</span>
-          <strong>{formatarMoeda(valorGanho)}</strong>
-        </div>
-      </div>
+        {participando.length > 0 && (
+          <div className="barra-resultado" aria-hidden="true">
+            {ganhos.length > 0 && <i className="verde" style={{ flex: ganhos.length }} />}
+            {acompanhando.length > 0 && <i className="amarelo" style={{ flex: acompanhando.length }} />}
+            {perdidos.length > 0 && <i className="vermelho" style={{ flex: perdidos.length }} />}
+            {semResultado.length > 0 && <i className="cinza" style={{ flex: semResultado.length }} />}
+          </div>
+        )}
+        {(execucoes.length > 0 || aoNovoEmpenho) && (
+          <div className="empenhos-resultado">
+            {execucoes.map((e) => (
+              <a key={e.id} className="link-empenho" {...link(`/pos-ganho/${e.id}`)}>
+                <Trophy size={14} /> {e.numero_empenho ? `Empenho ${e.numero_empenho}` : "Empenho no Pós-ganho"} · {nomeEtapa(ETAPAS_EXECUCAO, e.etapa)}
+              </a>
+            ))}
+            {aoNovoEmpenho && (
+              <button className="botao-link sem-margem" onClick={aoNovoEmpenho}>
+                + Registrar {execucoes.length ? "outro " : ""}empenho desta licitação
+              </button>
+            )}
+          </div>
+        )}
+      </section>
 
       <section className="cartao">
         <div className="cartao-titulo">
