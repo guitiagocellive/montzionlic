@@ -29,13 +29,32 @@ var (
 
 func padraoDoCaminho(caminho string) string { return digitos.ReplaceAllString(caminho, "#") }
 
-const scriptCaptcha = `(async () => {
+// scriptCaptcha pede um código ao captcha invisível da página. Logo depois do login a página da sala ainda está
+// carregando o hCaptcha: espera até 6 s ele aparecer (antes devolvia vazio na hora). Se o execute ficar preso,
+// desiste em LIMITE ms, reinicia o widget e avisa ("__tempo__"), para a próxima tentativa sair limpa — antes a
+// tentativa presa esperava 40 s e todos os captchas (lista, acompanhamento, robô) ficavam na fila atrás dela.
+const scriptCaptchaModelo = `(async () => {
+  const fim = Date.now() + 6000;
+  const pronto = () => (window.hcaptcha && hcaptcha.execute) || (window.grecaptcha && grecaptcha.execute);
+  while (!pronto() && Date.now() < fim) await new Promise((r) => setTimeout(r, 100));
+  if (!pronto()) return "__sem_captcha__";
+  const tempo = new Promise((r) => setTimeout(() => r("__tempo__"), LIMITE));
   try {
-    if (window.hcaptcha && hcaptcha.execute) { const r = await hcaptcha.execute({ async: true }); return (r && r.response) || ""; }
-    if (window.grecaptcha && grecaptcha.execute) return (await grecaptcha.execute()) || "";
-  } catch (e) {}
-  return "";
+    if (window.hcaptcha && hcaptcha.execute) {
+      const r = await Promise.race([hcaptcha.execute({ async: true }), tempo]);
+      if (r === "__tempo__") { try { hcaptcha.reset(); } catch (e) {} return r; }
+      return (r && r.response) || "";
+    }
+    const r = await Promise.race([grecaptcha.execute(), tempo]);
+    return r || "";
+  } catch (e) {
+    return "__erro__:" + String((e && e.message) || e).slice(0, 80);
+  }
 })()`
+
+func scriptCaptcha(limite time.Duration) string {
+	return strings.Replace(scriptCaptchaModelo, "LIMITE", fmt.Sprint(limite.Milliseconds()), 1)
+}
 
 func contextoPerdido(err error) bool {
 	if err == nil {
@@ -136,24 +155,43 @@ func (m *motor) gerarCaptcha() (string, error) {
 		inicioSala := time.Now()
 		if err := m.p.garantirSala(s); err != nil {
 			ultimo = err
+			marcarRobo("captcha: tentativa %d — sala de disputa não abriu em %d ms: %v", tentativa+1, time.Since(inicioSala).Milliseconds(), err)
 			continue
 		}
 		sala := time.Since(inicioSala)
 		inicio := time.Now()
-		codigo, err := m.p.avaliar(s.sessao, scriptCaptcha, 40*time.Second)
-		if err == nil && codigo != "" {
+		// O captcha normal sai em 0,2 a 2 s: as duas primeiras tentativas desistem em 5 s; a última espera mais
+		// (a página pode estar pedindo um desafio visível).
+		limite := 5 * time.Second
+		if tentativa == 2 {
+			limite = 30 * time.Second
+		}
+		codigo, err := m.p.avaliar(s.sessao, scriptCaptcha(limite), limite+8*time.Second)
+		if err == nil && codigo != "" && !strings.HasPrefix(codigo, "__") {
 			// Tempos do captcha (para achar demora): fila, sala de disputa aberta e o captcha em si.
-			marcarRobo("captcha pronto em %d ms (fila %d ms, sala %d ms, captcha %d ms)", time.Since(pediu).Milliseconds(), esperou.Milliseconds(), sala.Milliseconds(), time.Since(inicio).Milliseconds())
+			marcarRobo("captcha pronto em %d ms (fila %d ms, sala %d ms, captcha %d ms, tentativa %d)", time.Since(pediu).Milliseconds(), esperou.Milliseconds(), sala.Milliseconds(), time.Since(inicio).Milliseconds(), tentativa+1)
 			if total := time.Since(pediu); total > 2*time.Second {
-				registrarLog("captcha: %.1f s (fila %.1f s, sala %.1f s, captcha %.1f s)", total.Seconds(), esperou.Seconds(), sala.Seconds(), time.Since(inicio).Seconds())
+				registrarLog("captcha: %.1f s (fila %.1f s, sala %.1f s, captcha %.1f s, tentativa %d)", total.Seconds(), esperou.Seconds(), sala.Seconds(), time.Since(inicio).Seconds(), tentativa+1)
 			}
 			return codigo, nil
 		}
-		ultimo = err
-		if err == nil {
-			ultimo = fmt.Errorf("o captcha da página não respondeu")
+		motivo := ""
+		switch {
+		case err != nil:
+			motivo = err.Error()
+		case codigo == "__sem_captcha__":
+			motivo = "a página ainda não tinha o captcha (carregando)"
+		case codigo == "__tempo__":
+			motivo = fmt.Sprintf("o captcha da página ficou preso por %d s; reiniciado", int(limite.Seconds()))
+		case strings.HasPrefix(codigo, "__erro__:"):
+			motivo = "erro do captcha da página: " + strings.TrimPrefix(codigo, "__erro__:")
+		default:
+			motivo = "o captcha da página não respondeu"
 		}
-		time.Sleep(time.Duration(800*(tentativa+1)) * time.Millisecond) // a página pode estar recarregando
+		ultimo = fmt.Errorf("%s", motivo)
+		marcarRobo("captcha: tentativa %d falhou em %d ms — %s", tentativa+1, time.Since(inicio).Milliseconds(), motivo)
+		registrarLog("captcha: tentativa %d falhou em %.1f s — %s", tentativa+1, time.Since(inicio).Seconds(), mascararNumeros(motivo))
+		time.Sleep(time.Duration(300*(tentativa+1)) * time.Millisecond) // a página pode estar recarregando
 	}
 	return "", fmt.Errorf("não consegui o captcha do Compras.gov.br (%v)", ultimo)
 }

@@ -682,8 +682,11 @@ func (m *motor) lerItens(chave string) {
 		}
 		c.erro, c.lida = "", true
 		if len(itens) != c.qtdLog {
+			// Na 1ª leitura só registra quem tem itens em disputa (antes eram dezenas de "0 item(ns)" a cada login).
+			if c.qtdLog >= 0 || len(itens) > 0 {
+				registrarLog("robô: compra %s: %d item(ns) em disputa agora", mascararNumeros(chave), len(itens))
+			}
 			c.qtdLog = len(itens)
-			registrarLog("robô: compra %s: %d item(ns) em disputa agora", mascararNumeros(chave), len(itens))
 		}
 		presentes := map[int]bool{}
 		chaves := []string{}
