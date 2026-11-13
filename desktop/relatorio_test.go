@@ -55,3 +55,29 @@ func TestRelatorioDaDisputa(t *testing.T) {
 		t.Fatal("depois de salvar, a linha do tempo do item recomeça do zero")
 	}
 }
+
+func TestComparacaoNaMesmaRegua(t *testing.T) {
+	r := "compra …462026 item 3"
+	t0 := time.Now()
+	ms := func(n int) time.Time { return t0.Add(time.Duration(n) * time.Millisecond) }
+	// Dois robôs brigando pelo 1º (como em 13/11): um responde em ~80 ms, o outro em ~250 ms.
+	ev := []eventoRobo{
+		{ms(0), r + ": melhor lance R$ 15.785,1613", "melhor-conc", 0},
+		{ms(241), r + ": melhor lance R$ 15.783,58", "melhor-conc", 0},
+		{ms(316), r + ": melhor lance R$ 15.782,0016", "melhor-conc", 0},
+		{ms(669), r + ": melhor lance R$ 15.780,42", "melhor-conc", 0},
+		{ms(759), r + ": melhor lance R$ 15.778,8419", "melhor-conc", 0},
+		// O nosso robô: concorrente → enviando → o nosso vira o melhor 130 ms depois.
+		{ms(2000), r + ": melhor lance R$ 15.000,00", "melhor-conc", 0},
+		{ms(2001), r + ": enviando lance R$ 14.999,99 (lance)", "enviando", 0},
+		{ms(2090), r + ": lance R$ 14.999,99 aceito (200, lance)", "lance-ok", 89},
+		{ms(2130), r + ": melhor lance R$ 14.999,99 (nosso R$ 15.700,00 — é o nosso lance que acabou de entrar)", "melhor-meu", 0},
+	}
+	st := calcularEstatisticas(ev)
+	if len(st.ciclos) != 1 || st.ciclos[0] != 130 {
+		t.Fatalf("ciclo completo do nosso robô deveria ser 130 ms: %v", st.ciclos)
+	}
+	if len(st.ritmoConc) != 5 || percentil(st.ritmoConc, 0) != 75 || mediana(st.ritmoConc) != 241 {
+		t.Fatalf("ritmo dos concorrentes: %v", st.ritmoConc)
+	}
+}

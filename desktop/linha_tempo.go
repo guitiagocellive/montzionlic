@@ -211,6 +211,7 @@ func marcarMelhor(k string, it *itemMotor, meu bool) {
 	}
 	tipo := "melhor"
 	if meu {
+		tipo = "melhor-meu" // o nosso lance virou o melhor (fim do ciclo completo do robô, no relatório)
 		nosso += " — é o nosso lance que acabou de entrar"
 	} else if e.Nosso != nil && *e.Melhor < *e.Nosso-1e-9 {
 		tipo = "melhor-conc" // um concorrente está à frente: lance de concorrente (para o tempo de reação do relatório)

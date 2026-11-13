@@ -30,15 +30,39 @@ type estatisticasDisputa struct {
 	pedidos            []int64  // ms do pedido ao Compras.gov.br em cada lance nosso
 	leituras           []int64  // ms de cada leitura da classificação registrada
 	posicoes           []string // "Nº de M" em cada leitura da classificação (sua posição ao longo da disputa)
+	// Na mesma régua dos concorrentes (do aviso de um lance ao aviso do lance seguinte, vistos daqui):
+	ciclos    []int64 // aviso do lance do concorrente → o nosso lance virar o melhor
+	ritmoConc []int64 // aviso de um lance → aviso do lance de concorrente que o cobriu
 }
 
 var posicaoNaLeitura = regexp.MustCompile(`você em (\d+º de \d+)`)
 
 func calcularEstatisticas(ev []eventoRobo) estatisticasDisputa {
 	var st estatisticasDisputa
+	var ultimoMelhor time.Time
 	for i, e := range ev {
+		if e.tipo == "melhor-conc" || e.tipo == "melhor-meu" || e.tipo == "melhor" {
+			if e.tipo == "melhor-conc" && !ultimoMelhor.IsZero() && e.em.Sub(ultimoMelhor) < 5*time.Second {
+				st.ritmoConc = append(st.ritmoConc, e.em.Sub(ultimoMelhor).Milliseconds())
+			}
+			ultimoMelhor = e.em
+		}
 		switch e.tipo {
 		case "melhor-conc":
+			// Ciclo completo: este lance do concorrente → nós enviamos → o nosso lance vira o melhor.
+			enviou := false
+			for _, d := range ev[i+1:] {
+				if d.em.Sub(e.em) > 5*time.Second || d.tipo == "melhor-conc" {
+					break
+				}
+				if d.tipo == "enviando" {
+					enviou = true
+				}
+				if d.tipo == "melhor-meu" && enviou {
+					st.ciclos = append(st.ciclos, d.em.Sub(e.em).Milliseconds())
+					break
+				}
+			}
 			st.lancesConcorrentes++
 			respondeu := false
 			for _, d := range ev[i+1:] {
@@ -71,6 +95,16 @@ func calcularEstatisticas(ev []eventoRobo) estatisticasDisputa {
 		}
 	}
 	return st
+}
+
+// percentil: o valor abaixo do qual ficam p% das medidas (ex.: 10 = os 10% mais rápidos).
+func percentil(v []int64, p int) int64 {
+	if len(v) == 0 {
+		return -1
+	}
+	c := append([]int64(nil), v...)
+	sort.Slice(c, func(i, j int) bool { return c[i] < c[j] })
+	return c[(len(c)-1)*p/100]
 }
 
 func maximo(v []int64) int64 {
@@ -143,6 +177,15 @@ func salvarRelatorioDisputa(rotulo string, r resultadoDisputa) {
 	}
 	if len(st.pedidos) > 0 {
 		fmt.Fprintf(&b, "Aceite do Compras.gov.br (pedido do lance → resposta): mediana %d ms, pior %d ms\n", mediana(st.pedidos), maximo(st.pedidos))
+	}
+	b.WriteString("\n== Comparação na mesma régua (do aviso de um lance ao aviso do lance seguinte, vistos daqui) ==\n")
+	if len(st.ciclos) > 0 {
+		fmt.Fprintf(&b, "Nosso robô (lance do concorrente → o nosso virar o melhor): mediana %d ms, mais rápido %d ms (%d vezes)\n", mediana(st.ciclos), percentil(st.ciclos, 0), len(st.ciclos))
+	} else {
+		b.WriteString("Nosso robô: sem ciclo completo nesta disputa (o nosso lance não chegou a virar o melhor depois de um lance de concorrente)\n")
+	}
+	if len(st.ritmoConc) > 0 {
+		fmt.Fprintf(&b, "Concorrentes no 1º lugar (lance → lance de concorrente que o cobriu): mediana %d ms, os 10%% mais rápidos em até %d ms (%d lances)\n", mediana(st.ritmoConc), percentil(st.ritmoConc, 10), len(st.ritmoConc))
 	}
 	b.WriteString("\n== Linha do tempo do item ==\n")
 	var antes time.Time

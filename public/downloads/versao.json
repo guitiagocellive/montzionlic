@@ -1,9 +1,7 @@
 {
-  "versao": "3.1.41",
+  "versao": "3.1.42",
   "data": "2026-11-13",
   "novidades": [
-    "Relatório da disputa: agora é salvo também quando o item passa por \"Aguardando encerramento\" antes de encerrar. Na disputa real de 13/11 o relatório e a janela de resultado não apareceram por causa disso.",
-    "Briga por colocação nos últimos 10 s: a classificação é relida a cada 0,4 s (antes 0,7 s). Os concorrentes de trás só aparecem nela; assim o robô vê e responde mais cedo quem cobriu o seu lance.",
-    "Relatório mais claro para disputas por colocação: quantos lances o robô respondeu do total, as leituras da classificação e a sua posição no começo e no fim. Cada leitura da classificação mostra a sua posição na linha do tempo."
+    "Relatório da disputa: nova seção \"Comparação na mesma régua\". Mede o ciclo completo do nosso robô (do aviso do lance do concorrente até o nosso lance virar o melhor) e o ritmo dos concorrentes no 1º lugar (mediana e os 10% mais rápidos), os dois do mesmo jeito. Assim dá para comparar de verdade com o robô mais rápido da disputa."
   ]
 }
