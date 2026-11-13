@@ -1,8 +1,11 @@
 {
-  "versao": "3.1.36",
+  "versao": "3.1.37",
   "data": "2026-11-13",
   "novidades": [
-    "Freio automático: quando o Compras.gov.br responde \"429 – pedidos demais\", o aplicativo pausa o que não é urgente (leitura de fundo do Acompanhamento, classificação de itens longe do fim) por 20 s, 40 s… até 2 min. O lance e a reta final nunca param. O diagnóstico mostra quando o freio está ligado.",
-    "Captcha logo depois do login: quando a página ainda está montando o captcha (\"missing-captcha\"), espera até ele ficar pronto em vez de gastar as tentativas em 1 segundo. O primeiro captcha sai assim que a página permite."
+    "Disputas: botão \"Testar o robô\" logo abaixo do \"Copiar diagnóstico\". Com a sua conta logada, mede cada parte do caminho do lance (página ↔ aplicativo, conexão, resposta do Compras.gov.br, captcha, classificação, relógio), procura erros na configuração dos itens ligados e sugere ajustes. Não envia lance; não roda com item na reta final.",
+    "Relógio: o robô mede a diferença entre o relógio do computador e o do Compras.gov.br e corrige sozinho os \"10 s finais\" (com o relógio do Windows atrasado, o robô entrava tarde).",
+    "Acompanhamento: ao abrir uma licitação, as propostas dos itens são lidas uma de cada vez, indo direto no endereço que funcionou naquela licitação (antes até 4 endereços por item, 2 itens ao mesmo tempo, o que provocava o \"429 – pedidos demais\").",
+    "Freio do 429: vários 429 no mesmo segundo contam como uma vez só (antes um clique levava o freio direto a 2 min). Longe do fim, o robô usa a classificação de até 3 min atrás em vez de travar em \"lendo a classificação\".",
+    "Captcha logo depois do login: a 1ª tentativa presa desiste em 2,5 s (antes 5 s)."
   ]
 }

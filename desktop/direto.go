@@ -181,12 +181,9 @@ func (m *motor) gerarCaptcha() (string, error) {
 		}
 		sala := time.Since(inicioSala)
 		inicio := time.Now()
-		// O captcha normal sai em 0,2 a 2 s: as duas primeiras tentativas desistem em 5 s; a última espera mais
-		// (a página pode estar pedindo um desafio visível).
-		limite := 5 * time.Second
-		if tentativa == 2 {
-			limite = 30 * time.Second
-		}
+		// O captcha normal sai em 0,2 a 1,5 s. Logo depois do login o 1º execute costuma ficar preso: a 1ª
+		// tentativa desiste em 2,5 s, a 2ª em 5 s; a última espera mais (a página pode pedir um desafio visível).
+		limite := []time.Duration{2500 * time.Millisecond, 5 * time.Second, 30 * time.Second}[tentativa]
 		codigo, err := m.p.avaliar(s.sessao, scriptCaptcha(limite), limite+8*time.Second)
 		if err == nil && codigo != "" && !strings.HasPrefix(codigo, "__") {
 			// Tempos do captcha (para achar demora): fila, sala de disputa aberta e o captcha em si.
@@ -259,10 +256,12 @@ func (m *motor) requisicao(metodo, caminho, query string, captcha string, corpo 
 	if tipo != "" {
 		req.Header.Set("Content-Type", tipo)
 	}
+	envio := time.Now()
 	r, err := clienteLongo.Do(req)
 	if err != nil {
 		return respostaDireta{}, err
 	}
+	amostraRelogio(r.Header.Get("Date"), envio, time.Now())
 	defer r.Body.Close()
 	dados, _ := io.ReadAll(io.LimitReader(r.Body, 40<<20))
 	if r.StatusCode == 429 {

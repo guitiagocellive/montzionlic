@@ -624,6 +624,8 @@ func (p *ponte) atender(sessao, payload string) {
 		resposta = p.motor.Classificacao(pedido.Compra, pedido.Item)
 	case "fornecedor":
 		resposta = p.motor.PedidoCompras(pedido.Pedido)
+	case "testarRobo":
+		resposta = p.motor.TestarRobo()
 	case "testarLeitura":
 		resposta = p.motor.TestarLeitura()
 	case "mensagem":

@@ -225,7 +225,8 @@ func lerItem(b map[string]any) estadoItem {
 	if fim := fimDaContagem(b["dataHoraFimContagem"]); fim != nil {
 		e.FimEm = fim
 		if e.RestanteSeg == nil {
-			r := math.Max(0, time.Until(*fim).Seconds())
+			// Corrige pela diferença entre o relógio do computador e o do Compras.gov.br (relogio.go).
+			r := math.Max(0, time.Until(*fim).Seconds()-desvioRelogio().Seconds())
 			e.RestanteSeg = &r
 		}
 	}

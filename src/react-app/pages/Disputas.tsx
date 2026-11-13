@@ -1,4 +1,4 @@
-import { Check, ChevronDown, ClipboardCopy, Download, ListOrdered, LogIn, Play, RefreshCw, Square, TriangleAlert, Volume2, VolumeX, Zap } from "lucide-react";
+import { Check, ChevronDown, CircleX, ClipboardCopy, Download, Gauge, Info, ListOrdered, LogIn, Play, RefreshCw, Square, TriangleAlert, Volume2, VolumeX, Zap } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { podeEditar, podeVer } from "../../shared/permissoes";
 import { type CompraDisputa, type ConfigItemRobo, FASES, ITEM_ROBO_PADRAO, type ItemDisputa, lerCompra, lerItemDisputa, SEGUNDOS_FINAIS } from "../../shared/robo";
@@ -7,7 +7,7 @@ import { api, mensagemDeErro } from "../api";
 import { avisar, Modal, Vazio } from "../components/Ui";
 import { paraNumero } from "../formato";
 import { link } from "../rota";
-import { noAplicativo, type PainelRobo, ponte, temPonte } from "../robo/ponte";
+import { noAplicativo, type PainelRobo, ponte, type ResultadoTesteRobo, temPonte } from "../robo/ponte";
 import { BotaoRecarregarGovBr } from "../robo/ErroCompras";
 
 // Página Disputas: o robô roda dentro do aplicativo (recebe os lances em tempo real e responde na hora).
@@ -82,6 +82,7 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
   const juntando = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [fechada, setFechada] = useState<Record<string, string>>({});
   const [enviandoFechada, setEnviandoFechada] = useState<string | null>(null);
+  const [testeRobo, setTesteRobo] = useState(false);
 
   // A ponte pode aparecer um pouco depois da página carregar.
   useEffect(() => {
@@ -780,16 +781,120 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
             Enquanto o robô está sendo aprimorado: o diagnóstico traz o que o robô viu e fez, com a hora em milissegundos (ligar, captcha, classificação,
             lance). Copie e mande para o suporte. Não tem senhas, chaves nem CPF/CNPJ.
           </span>
-          <button className="botao secundario" onClick={copiarDiagnostico}>
-            <ClipboardCopy /> Copiar diagnóstico
-          </button>
+          <div className="botoes-diagnostico">
+            <button className="botao secundario" onClick={copiarDiagnostico}>
+              <ClipboardCopy /> Copiar diagnóstico
+            </button>
+            <button className="botao secundario" onClick={() => setTesteRobo(true)} title="Mede a velocidade do caminho do lance, procura erros e sugere ajustes. Não envia lance.">
+              <Gauge /> Testar o robô
+            </button>
+          </div>
         </footer>
       )}
+      {testeRobo && <JanelaTesteRobo aoFechar={() => setTesteRobo(false)} />}
       {resultadosNaTela && resultadosNaTela.length > 0 && (
         <JanelaResultados resultados={resultadosNaTela} compras={compras} aoFechar={() => setResultadosNaTela(null)} />
       )}
       {classificacao && <JanelaClassificacao {...classificacao} quatro={(config[`${classificacao.compra}:${classificacao.item}`] ?? ITEM_ROBO_PADRAO).quatroCasas} aoFechar={() => setClassificacao(null)} />}
     </>
+  );
+}
+
+/** Teste do robô: velocidade de cada parte do caminho do lance, erros de configuração e sugestões (com a conta
+ *  gov.br já logada no aplicativo). Não envia lance. */
+function JanelaTesteRobo({ aoFechar }: { aoFechar: () => void }) {
+  const [estado, setEstado] = useState<{ r?: ResultadoTesteRobo; erro?: string; ponteMs?: number } | null>(null);
+  const rodada = useRef(0);
+  const iniciou = useRef(false);
+  const testar = async () => {
+    const minha = ++rodada.current; // só a última rodada mostra o resultado
+    setEstado(null);
+    // Página ↔ aplicativo: 5 idas e voltas pela ponte (é por ela que o "ligar" e as opções chegam ao robô).
+    const tempos: number[] = [];
+    for (let i = 0; i < 5; i++) {
+      const t0 = performance.now();
+      try {
+        await ponte.painel();
+        tempos.push(performance.now() - t0);
+      } catch {
+        /* sem ponte: o teste do aplicativo avisa */
+      }
+    }
+    const ponteMs = tempos.length ? Math.round(tempos.sort((a, b) => a - b)[Math.floor(tempos.length / 2)]) : undefined;
+    try {
+      const r = await ponte.testarRobo();
+      if (minha !== rodada.current) return;
+      if (r.erro) setEstado({ erro: r.erro, ponteMs });
+      else setEstado({ r, ponteMs });
+    } catch (e) {
+      if (minha !== rodada.current) return;
+      const msg = mensagemDeErro(e);
+      setEstado({ erro: /desconhecido/i.test(msg) ? "Atualize o aplicativo para usar o teste do robô." : msg, ponteMs });
+    }
+  };
+  useEffect(() => {
+    if (iniciou.current) return; // o React (em desenvolvimento) roda o efeito duas vezes
+    iniciou.current = true;
+    testar();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const itens = estado?.r?.itens ?? [];
+  const grupos = [...new Set(itens.map((i) => i.grupo))];
+  const icone = (e: string) => (e === "ok" ? <Check size={16} /> : e === "erro" ? <CircleX size={16} /> : e === "atencao" ? <TriangleAlert size={16} /> : <Info size={16} />);
+  const textoPonte = estado?.ponteMs != null ? `Página ↔ aplicativo: ${estado.ponteMs} ms (mediana de 5)` : "";
+  async function copiar() {
+    try {
+      await navigator.clipboard.writeText([estado?.r?.texto ?? estado?.erro ?? "", textoPonte].filter(Boolean).join("\n"));
+      avisar("Resultado do teste copiado.");
+    } catch (e) {
+      avisar(mensagemDeErro(e), "erro");
+    }
+  }
+  return (
+    <Modal titulo="Teste do robô" aoFechar={aoFechar}>
+      {!estado ? (
+        <p className="texto-suave carregando-linha">
+          <RefreshCw className="girando" /> Testando com a sua conta (conexão, captcha, classificação, relógio e a configuração dos itens). Nenhum lance é enviado…
+        </p>
+      ) : (
+        <div className="teste-robo">
+          {estado.erro ? <p className="alerta erro">{estado.erro}</p> : <p className="teste-robo-resumo">{estado.r?.resumo}</p>}
+          {estado.ponteMs != null && (
+            <div className={`teste-robo-linha ${estado.ponteMs > 150 ? "atencao" : "ok"}`}>
+              {icone(estado.ponteMs > 150 ? "atencao" : "ok")}
+              <div>
+                <strong>Página ↔ aplicativo</strong>
+                <span>{estado.ponteMs} ms (mediana de 5)</span>
+              </div>
+            </div>
+          )}
+          {grupos.map((g) => (
+            <section key={g} className="teste-robo-grupo">
+              <h4>{g}</h4>
+              {itens
+                .filter((i) => i.grupo === g)
+                .map((i, n) => (
+                  <div key={n} className={`teste-robo-linha ${i.estado}`}>
+                    {icone(i.estado)}
+                    <div>
+                      <strong>{i.nome}</strong>
+                      <span>{i.valor}</span>
+                      {i.dica && <small>{i.dica}</small>}
+                    </div>
+                  </div>
+                ))}
+            </section>
+          ))}
+          <div className="linha-acoes">
+            <button className="botao secundario" onClick={testar}>
+              <RefreshCw /> Testar de novo
+            </button>
+            <button className="botao secundario" onClick={copiar}>
+              <ClipboardCopy /> Copiar resultado
+            </button>
+          </div>
+        </div>
+      )}
+    </Modal>
   );
 }
 

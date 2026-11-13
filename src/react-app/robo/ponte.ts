@@ -115,6 +115,7 @@ export const ponte = {
   /** Abre a janela de login do gov.br (mostrar = abre mesmo se já estiver logado). */
   entrar: (mostrar = false) => chamar<{ ok: boolean; jaLogado?: boolean }>("entrar", { atualizar: mostrar }),
   /** Mede a leitura das participações com páginas de 10, 25, 50 e 100 (com a sessão da pessoa) e passa a usar o melhor tamanho. */
+  testarRobo: () => chamar<ResultadoTesteRobo & { erro?: string }>("testarRobo", {}, 120_000),
   testarLeitura: () => chamar<ResultadoTesteLeitura & { erro?: string }>("testarLeitura", {}, 180_000),
   /** Abre a página de login do gov.br de novo na janela do Compras (quando ela travou, deu erro ou ficou em branco). */
   recarregarLogin: () => chamar<{ ok: boolean }>("recarregar", {}),
@@ -161,4 +162,18 @@ export interface ResultadoTesteLeitura {
   antes: { pedidos: number; ms: number };
   depois: { pedidos: number; ms: number };
   diagnostico: string;
+}
+
+/** Teste do robô (página Disputas): velocidade de cada parte do caminho do lance, erros e sugestões. */
+export interface ItemTesteRobo {
+  grupo: string;
+  nome: string;
+  estado: "ok" | "atencao" | "erro" | "info";
+  valor: string;
+  dica?: string;
+}
+export interface ResultadoTesteRobo {
+  itens: ItemTesteRobo[];
+  resumo: string;
+  texto: string;
 }

@@ -11,9 +11,10 @@ import (
 )
 
 var freio struct {
-	mu    sync.Mutex
-	ate   time.Time
-	nivel int
+	mu     sync.Mutex
+	ate    time.Time
+	nivel  int
+	ultimo time.Time // último 429 que contou como uma "vez"
 }
 
 func acionarFreio(onde string) {
@@ -22,7 +23,15 @@ func acionarFreio(onde string) {
 	if agora.Sub(freio.ate) > 5*time.Minute {
 		freio.nivel = 0 // passou um tempo sem 429: começa de novo do freio curto
 	}
-	freio.nivel++
+	// Uma rajada de 429 (vários pedidos que já estavam a caminho, todos recusados no mesmo segundo) conta como uma
+	// vez só: antes, um único clique levava o freio direto a 2 min.
+	if agora.Sub(freio.ultimo) >= 10*time.Second || freio.nivel == 0 {
+		freio.nivel++
+		freio.ultimo = agora
+	} else if agora.Before(freio.ate) {
+		freio.mu.Unlock()
+		return
+	}
 	espera := 20 * time.Second << min(freio.nivel-1, 3)
 	if espera > 2*time.Minute {
 		espera = 2 * time.Minute

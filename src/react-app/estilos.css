@@ -13909,3 +13909,72 @@ p.etapa-fechada {
     align-items: stretch;
   }
 }
+
+/* Disputas: botões do diagnóstico (um embaixo do outro) e janela do teste do robô. */
+.botoes-diagnostico {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.teste-robo {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.teste-robo-resumo {
+  font-weight: 600;
+  margin: 0;
+}
+.teste-robo-grupo h4 {
+  margin: 4px 0 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--texto-fraco, #6b7280);
+}
+.teste-robo-linha {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--borda, #e6e6eb);
+  margin-bottom: 6px;
+}
+.teste-robo-linha > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.teste-robo-linha div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.teste-robo-linha span {
+  overflow-wrap: anywhere;
+}
+.teste-robo-linha small {
+  color: var(--texto-fraco, #6b7280);
+}
+.teste-robo-linha.ok > svg {
+  color: #16a34a;
+}
+.teste-robo-linha.atencao > svg {
+  color: #d97706;
+}
+.teste-robo-linha.erro > svg {
+  color: #dc2626;
+}
+.teste-robo-linha.erro {
+  border-color: #fecaca;
+}
+.teste-robo-linha.info > svg {
+  color: #2563eb;
+}
+@media (max-width: 640px) {
+  .botoes-diagnostico {
+    width: 100%;
+  }
+}

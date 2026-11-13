@@ -56,7 +56,8 @@ type registroLance struct {
 	Mensagem string  `json:"mensagem"`
 	Em       int64   `json:"em"`
 	ReacaoMs int64   `json:"reacaoMs"`
-	Posicao  int     `json:"posicao,omitempty"` // colocação que o lance buscava
+	PedidoMs int64   `json:"pedidoMs,omitempty"` // só o pedido ao Compras.gov.br (envio → resposta)
+	Posicao  int     `json:"posicao,omitempty"`  // colocação que o lance buscava
 	Tipo     string  `json:"tipo,omitempty"`
 }
 
@@ -446,8 +447,10 @@ func (m *motor) pedir(metodo, caminho string, corpo any) (int, []byte, error) {
 		}
 		req, _ := http.NewRequest(metodo, strings.TrimRight(m.p.cfg.Compras, "/")+caminho, leitor)
 		m.cabecalhos(req, token)
+		envio := time.Now()
 		r, err := m.httpc.Do(req)
 		if err == nil {
+			amostraRelogio(r.Header.Get("Date"), envio, time.Now())
 			dados, _ := io.ReadAll(io.LimitReader(r.Body, 8<<20))
 			r.Body.Close()
 			if r.StatusCode == 429 {
@@ -1211,7 +1214,13 @@ func (m *motor) avaliar(k string) {
 	// Classificação lida há pouco: a regra usa para a melhor colocação. Lances só descem, então uma leitura de
 	// alguns segundos atrás ainda serve (a regra junta o melhor lance atual, e a próxima leitura corrige o resto).
 	r := m.ranking[k]
-	if r != nil && !r.em.IsZero() && agora.Sub(r.em) < 20*time.Second {
+	// Na reta final a classificação vale 20 s; longe do fim (relida a cada 15 s, ou segurada pelo freio do 429)
+	// vale até 3 min — o robô não fica travado em "lendo a classificação" sem precisar agir.
+	validade := 20 * time.Second
+	if !retaFinal(e, &cfg) {
+		validade = 3 * time.Minute
+	}
+	if r != nil && !r.em.IsZero() && agora.Sub(r.em) < validade {
 		e.Concorrentes = append([]float64{}, r.concorrentes...)
 	}
 	e.PassoNoConcorrente = m.passoConc[k]
@@ -1285,7 +1294,7 @@ func (m *motor) enviarLance(compra string, numero int, k string, d decisao, fase
 	agora := time.Now()
 	m.mu.Lock()
 	m.seqLance++
-	reg := registroLance{ID: m.seqLance, Compra: compra, Item: numero, Valor: d.Valor, OK: ok, Mensagem: msg, Em: agora.UnixMilli(), ReacaoMs: reacao + agora.Sub(inicio).Milliseconds(), Posicao: d.Posicao, Tipo: d.Tipo}
+	reg := registroLance{ID: m.seqLance, Compra: compra, Item: numero, Valor: d.Valor, OK: ok, Mensagem: msg, Em: agora.UnixMilli(), ReacaoMs: reacao + agora.Sub(inicio).Milliseconds(), PedidoMs: agora.Sub(inicio).Milliseconds(), Posicao: d.Posicao, Tipo: d.Tipo}
 	m.ultimos[chaveItem(compra, numero)] = reg
 	// Os 3 últimos lances de cada item (o mais novo primeiro), para a tela mostrar o que o robô fez.
 	rec := append([]registroLance{reg}, m.recentes[chaveItem(compra, numero)]...)
@@ -1499,7 +1508,7 @@ func (m *motor) Painel() any {
 				copia["situacaoParticipanteDisputa"] = e.Situacao
 			}
 			if e.FimEm != nil {
-				copia["fimEm"] = e.FimEm.UnixMilli()
+				copia["fimEm"] = e.FimEm.Add(-desvioRelogio()).UnixMilli() // no relógio do computador (para a tela)
 			}
 			// Colocação pela última classificação lida (melhor lance de cada participante).
 			if r := m.ranking[chaveItem(chave, n)]; r != nil && len(r.todos) > 0 {

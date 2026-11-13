@@ -189,37 +189,44 @@ export function lerCodigoSolicitada(): Promise<boolean> {
   return codigoSolicitadaLido;
 }
 
+/** Qual endereço das propostas funcionou em cada compra (a etapa vale para todos os itens dela): os outros itens vão
+ *  direto nele, em vez de tentar até 4 endereços em cada item (eram ~10 pedidos em meio segundo e o Compras.gov.br
+ *  respondia "429 – pedidos demais"). */
+const rotaPropostas = new Map<string, "selecao" | "propostas" | "iniciais">();
+
+/** Erro de "pedidos demais" do Compras.gov.br. */
+export const pedidosDemais = (e: unknown) => (e as { status?: number }).status === 429 || /429|too many requests|pedidos demais/i.test(mensagemDeErro(e));
+
 /** Propostas do item (a sua e as de todas as empresas), como a tela do item no Compras.gov.br. */
 export async function carregarPropostas(compra: CompraAcomp, numeroItem: number, cnpj: string) {
   const base = `/v1/compras/${compra.chave}/itens/${numeroItem}`;
   // 1) tela da fase de seleção ("Todas as propostas" oficial); 2) item com as propostas; 3) propostas iniciais.
   // "Não existe ainda" inclui as recusas por etapa: com a disputa encerrada e o julgamento ainda não iniciado, o
   // Compras.gov.br recusa a tela da seleção ("A etapa de julgamento de propostas ainda não foi iniciada").
-  const naoExiste = (e: unknown) => [400, 403, 404, 409, 422].includes((e as { status?: number }).status ?? 0) || /40[0349]|422|não encontr|not found|sem dados|não permite|nao permite|não foi iniciad|ainda não/i.test(mensagemDeErro(e));
+  const naoExiste = (e: unknown) => !pedidosDemais(e) && ([400, 403, 404, 409, 422].includes((e as { status?: number }).status ?? 0) || /40[0349]|422|não encontr|not found|sem dados|não permite|nao permite|não foi iniciad|ainda não/i.test(mensagemDeErro(e)));
   let aviso = "";
-  try {
-    const d = await consultar(`/v1/compras/${compra.chave}/em-selecao-fornecedores/itens/${numeroItem}/propostas`, { query: "ordenacao-propostas=P", captcha: false });
-    const lido = lerItemComPropostas(d, cnpj);
-    if (lido.todas.length) return { ...lido, iniciais: false, aviso };
-  } catch (e) {
-    if (!naoExiste(e)) throw e;
-    aviso = mensagemDeErro(e);
+  const rotas = {
+    selecao: async () => lerItemComPropostas(await consultar(`/v1/compras/${compra.chave}/em-selecao-fornecedores/itens/${numeroItem}/propostas`, { query: "ordenacao-propostas=P", captcha: false }), cnpj),
+    propostas: async () => lerItemComPropostas(await consultar(`${base}/propostas`), cnpj),
+    iniciais: async () => lerItemComPropostas({ propostasItem: propostasBrutasDoItem(await consultar(`${base}/propostas-iniciais`, { captcha: false }), numeroItem) }, cnpj),
+  };
+  // Com a rota já descoberta nesta compra, começa por ela (as anteriores já falharam aqui pela etapa da compra).
+  const todas = ["selecao", "propostas", "iniciais"] as const;
+  const ordem = todas.slice(Math.max(0, todas.indexOf(rotaPropostas.get(compra.chave) ?? "selecao")));
+  for (const rota of ordem) {
+    try {
+      const lido = await rotas[rota]();
+      if (lido.todas.length || rota === "iniciais") {
+        rotaPropostas.set(compra.chave, rota);
+        return { ...lido, iniciais: rota === "iniciais", aviso };
+      }
+    } catch (e) {
+      if (!naoExiste(e)) throw e;
+      aviso ||= mensagemDeErro(e);
+    }
   }
-  try {
-    const lido = lerItemComPropostas(await consultar(`${base}/propostas`), cnpj);
-    if (lido.todas.length) return { ...lido, iniciais: false, aviso };
-  } catch (e) {
-    if (!naoExiste(e)) throw e;
-    aviso ||= mensagemDeErro(e);
-  }
-  // Antes do julgamento: as propostas iniciais (com a sua) — se nem elas vierem, mostra sem erro, com o motivo.
-  try {
-    const d = await consultar(`${base}/propostas-iniciais`, { captcha: false });
-    return { ...lerItemComPropostas({ propostasItem: propostasBrutasDoItem(d, numeroItem) }, cnpj), iniciais: true, aviso };
-  } catch (e) {
-    if (!naoExiste(e)) throw e;
-    return { ...lerItemComPropostas({ propostasItem: [] }, cnpj), iniciais: true, aviso: aviso || mensagemDeErro(e) };
-  }
+  // Antes do julgamento e sem propostas iniciais: mostra sem erro, com o motivo.
+  return { ...lerItemComPropostas({ propostasItem: [] }, cnpj), iniciais: true, aviso };
 }
 export type PropostasDoItem = Awaited<ReturnType<typeof carregarPropostas>>;
 
@@ -241,20 +248,20 @@ async function carregarIniciais(compra: CompraAcomp, numeroItem: number): Promis
 }
 export const chavePropostas = (compra: CompraAcomp, numeroItem: number) => `propostas:${compra.chave}:${numeroItem}`;
 
-/** Lê as propostas de vários itens por trás (2 de cada vez), para os cartões já mostrarem a análise. */
+/** Lê as propostas de vários itens por trás, um de cada vez e com uma pausa entre eles, para os cartões já
+ *  mostrarem a análise. Se o Compras.gov.br responder "pedidos demais" (429), para — o item mostra quando aberto. */
 export async function preCarregarPropostas(compra: CompraAcomp, itens: number[], cnpj: string, aoLer: () => void, parar: () => boolean) {
   const fila = itens.filter((n) => !jaLido(chavePropostas(compra, n)));
-  const trabalhar = async () => {
-    for (let n = fila.shift(); n != null && !parar(); n = fila.shift()) {
-      try {
-        await lerComMemoria(chavePropostas(compra, n), () => carregarPropostas(compra, n, cnpj));
-        aoLer();
-      } catch {
-        /* o item mostra o erro quando for aberto */
-      }
+  for (let i = 0; i < fila.length && !parar(); i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 400));
+    try {
+      await lerComMemoria(chavePropostas(compra, fila[i]), () => carregarPropostas(compra, fila[i], cnpj));
+      aoLer();
+    } catch (e) {
+      if (pedidosDemais(e)) return; // o Compras pediu para ir mais devagar: não insiste
+      /* o item mostra o erro quando for aberto */
     }
-  };
-  await Promise.all([trabalhar(), trabalhar()]);
+  }
 }
 
 /** Análise rápida do item a partir das propostas: quem está à frente, desclassificadas e a distância para a 1ª válida. */
