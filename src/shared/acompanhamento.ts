@@ -211,6 +211,14 @@ export interface ItemAcomp {
   participa: boolean;
 }
 
+// Valor de "SOLICITADA" (SituacaoSolicitacaoAoParticipanteEnum). A tabela oficial (/v1/enums) diz o código;
+// até ela ser lida, vale o "S".
+let codigosSolicitada = new Set(["S"]);
+export function definirCodigoSolicitada(codigo: string) {
+  if (codigo) codigosSolicitada = new Set(["S", codigo]);
+}
+export const solicitada = (v: unknown) => codigosSolicitada.has(texto(v));
+
 const PENDENCIAS: [string, Pendencia["tipo"], string][] = [
   ["situacaoUltimaSolicitacaoAnexos", "anexos", "Envio de anexos / proposta ajustada"],
   ["situacaoUltimaNegociacao", "negociacao", "Negociação de valor"],
@@ -250,7 +258,7 @@ export function lerItemAcomp(bruto: unknown): ItemAcomp | null {
   const fase = FASES_ITEM[texto(x.fase)] ?? "";
   const colocacao = numero(primeiro(p.classificacao, x.classificacao, x.posicao, x.classificacaoPropostaFornecedor));
   const participantes = numero(primeiro(x.qtdeParticipantes, x.quantidadeParticipantes, x.qtdePropostas));
-  const pendencias: Pendencia[] = PENDENCIAS.filter(([campo]) => texto(primeiro(p[campo], x[campo])) === "S").map(([, tipo, rotulo]) => ({ tipo, rotulo }));
+  const pendencias: Pendencia[] = PENDENCIAS.filter(([campo]) => solicitada(primeiro(p[campo], x[campo]))).map(([, tipo, rotulo]) => ({ tipo, rotulo }));
   const desclassificado = DESCLASSIFICADA.has(codigoSituacao) || x.desclassificado === true || p.desclassificado === true;
   const item: ItemAcomp = {
     numero: n,
@@ -549,7 +557,7 @@ export function lerProposta(bruto: unknown): PropostaEmpresa {
     situacao: SITUACOES_PROPOSTA[sit] ?? "",
     motivo: texto(primeiro(p.motivoDesclassificacao, p.justificativaDesclassificacao)),
     desclassificada: DESCLASSIFICADA.has(sit) || sit === "5" || p.desclassificado === true,
-    convocada: PENDENCIAS.some(([campo]) => texto(p[campo]) === "S") || p.canalChatAberto === true,
+    convocada: PENDENCIAS.some(([campo]) => solicitada(p[campo])),
     meEpp: part.porte === "ME" || part.porte === "EPP" || p.declaracaoMeEpp === true || part.declaracaoMeEpp === true,
     uf: texto(primeiro(obj(part.endereco).uf, part.uf, p.uf, p.ufFornecedor)),
     valorProposta: valorDe(valores.valorPropostaInicial),
@@ -561,7 +569,7 @@ export function lerProposta(bruto: unknown): PropostaEmpresa {
     valorSugerido: valorDe(valores.valorSugeridoNegociacao),
     quantidadeAnexos: numero(p.quantidadeDeAnexos),
     chatAberto: p.canalChatAberto === true,
-    pendencias: PENDENCIAS.filter(([campo]) => texto(p[campo]) === "S").map(([, tipo, rotulo]) => ({ tipo, rotulo })),
+    pendencias: PENDENCIAS.filter(([campo]) => solicitada(p[campo])).map(([, tipo, rotulo]) => ({ tipo, rotulo })),
     dataLimite: texto(primeiro(p.dataHoraLimiteAtendimento, p.dataHoraLimiteEnvioAnexos)),
     codigo: sit,
   };

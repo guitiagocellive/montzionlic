@@ -6,7 +6,7 @@ import { avisar, Modal } from "../../components/Ui";
 import { formatarMoeda } from "../../formato";
 import { link } from "../../rota";
 import { CadastroProposta, NovaProposta } from "./CadastroProposta";
-import { chavePropostas, conversaDoItem, COR_CHANCE, estadoDoItem, ItemCompras, jaLido, preCarregarPropostas, type PropostasDoItem } from "./ItemCompras";
+import { chavePropostas, conversaDoItem, COR_CHANCE, estadoDoItem, ItemCompras, jaLido, lerCodigoSolicitada, preCarregarPropostas, type PropostasDoItem } from "./ItemCompras";
 import { noAplicativo, ponte, type ResultadoTesteLeitura, temPonte } from "../../robo/ponte";
 import { BotaoRecarregarGovBr } from "../../robo/ErroCompras";
 
@@ -112,11 +112,18 @@ export function Acompanhamento() {
     };
   }, [ligada]);
 
-  const andamento = useMemo(() => montarCompras(painel?.andamento ?? null, painel?.detalhes ?? null), [painel]);
+  // Código oficial de "SOLICITADA" (convocação para anexos etc.): lido uma vez, refaz as compras com ele.
+  const [codigos, setCodigos] = useState(0);
+  const conectadoAgora = !!painel?.conectado;
+  useEffect(() => {
+    if (!conectadoAgora) return;
+    lerCodigoSolicitada().then((ok) => ok && setCodigos((n) => n + 1));
+  }, [conectadoAgora]);
+  const andamento = useMemo(() => montarCompras(painel?.andamento ?? null, painel?.detalhes ?? null), [painel, codigos]);
   const finalizadas = useMemo(() => {
     const emAndamento = new Set(andamento.map((c) => c.chave));
     return montarCompras(painel?.finalizadas ?? null, painel?.detalhes ?? null).filter((c) => !emAndamento.has(c.chave));
-  }, [painel, andamento]);
+  }, [painel, andamento, codigos]);
   const avisos = useMemo(() => avisosDe(andamento, painel?.agora ?? Date.now()), [andamento, painel?.agora]);
 
   // Se a compra veio por link (?compra=), abre na aba certa.

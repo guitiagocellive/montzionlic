@@ -2,6 +2,7 @@ import { ErroCompras } from "../../robo/ErroCompras";
 import { BellRing, ChevronDown, Download, FileText, FileUp, Gavel, Loader2, MessageSquare, Paperclip, Send, ShieldQuestion, Trash2, UserRound, Users } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  definirCodigoSolicitada,
   idEmpresa,
   type AnexoCompras,
   cnpjFormatadoAcomp,
@@ -164,6 +165,25 @@ function Secao({ titulo, aberta: inicial = false, extra, children }: { titulo: s
   );
 }
 
+let codigoSolicitadaLido: Promise<boolean> | null = null;
+/** Lê na tabela oficial (/v1/enums) o código de "SOLICITADA" — é ele que diz se o pregoeiro pediu anexos, negociação... */
+export function lerCodigoSolicitada(): Promise<boolean> {
+  codigoSolicitadaLido ??= pedir({ caminho: `${FE}/v1/enums` })
+    .then((r) => {
+      const lista = Array.isArray(r.dados) ? (r.dados as Record<string, unknown>[]) : [];
+      const e = lista.find((x) => x.name === "SituacaoSolicitacaoAoParticipanteEnum");
+      const v = (Array.isArray(e?.values) ? (e.values as Record<string, unknown>[]) : []).find((x) => x.enumName === "SOLICITADA");
+      if (v?.value == null) return false;
+      definirCodigoSolicitada(String(v.value));
+      return true;
+    })
+    .catch(() => {
+      codigoSolicitadaLido = null;
+      return false;
+    });
+  return codigoSolicitadaLido;
+}
+
 /** Propostas do item (a sua e as de todas as empresas), como a tela do item no Compras.gov.br. */
 export async function carregarPropostas(compra: CompraAcomp, numeroItem: number, cnpj: string) {
   const base = `/v1/compras/${compra.chave}/itens/${numeroItem}`;
@@ -187,6 +207,23 @@ export async function carregarPropostas(compra: CompraAcomp, numeroItem: number,
   }
 }
 export type PropostasDoItem = Awaited<ReturnType<typeof carregarPropostas>>;
+
+/** Propostas iniciais do item (antes da disputa): é onde aparecem as desclassificadas na análise das propostas. */
+async function carregarIniciais(compra: CompraAcomp, numeroItem: number): Promise<PropostaEmpresa[]> {
+  const todas: PropostaEmpresa[] = [];
+  for (let pagina = 0; pagina < 5; pagina++) {
+    let d: unknown;
+    try {
+      d = await consultar(`/v1/compras/${compra.chave}/itens/${numeroItem}/propostas-iniciais`, { captcha: false, query: `pagina=${pagina}&tamanhoPagina=100` });
+    } catch {
+      break; // sem propostas iniciais para mostrar: fica só a lista da seleção
+    }
+    const lidas = propostasDoItem(d, numeroItem);
+    todas.push(...lidas);
+    if (lidas.length < 100) break;
+  }
+  return todas;
+}
 export const chavePropostas = (compra: CompraAcomp, numeroItem: number) => `propostas:${compra.chave}:${numeroItem}`;
 
 /** Lê as propostas de vários itens por trás (2 de cada vez), para os cartões já mostrarem a análise. */
@@ -297,7 +334,15 @@ export function ItemCompras({
   const colocacao = estado.colocacao ?? minha?.colocacao ?? item.colocacao;
   const analise = estado.analise;
   const conversa = conversaDoItem(compra.mensagens, item.numero, cnpj);
-  const pendencias = item.pendencias.length ? item.pendencias : (minha?.pendencias ?? []);
+  // Convocações abertas: as da lista de itens e as da sua proposta (sem repetir).
+  const iniciaisCarga = useCarga(aba === "todos" && !!dados.dados && !dados.dados.iniciais, () => carregarIniciais(compra, item.numero), `iniciais:${compra.chave}:${item.numero}`);
+  const extras = useMemo(() => {
+    const presentes = new Set((dados.dados?.todas ?? []).map((p) => p.cnpj));
+    return (iniciaisCarga.dados ?? [])
+      .filter((p) => p.cnpj && !presentes.has(p.cnpj))
+      .map((p) => ({ ...p, desclassificada: true, colocacao: null, situacao: p.situacao || "Desclassificada na análise das propostas" }));
+  }, [iniciaisCarga.dados, dados.dados]);
+  const pendencias = [...item.pendencias, ...(minha?.pendencias ?? [])].filter((p, i, l) => l.findIndex((x) => x.tipo === p.tipo) === i);
   const convocadoAnexos = pendencias.some((p) => p.tipo === "anexos");
   const emDiligencia = pendencias.some((p) => p.tipo === "diligencia");
 
@@ -400,7 +445,7 @@ export function ItemCompras({
                 <h4>
                   <Paperclip size={15} /> Anexos que enviei
                 </h4>
-                <MeusAnexos compra={compra} item={item} cnpj={cnpj} convocado={convocadoAnexos || !!minha?.convocada} />
+                <MeusAnexos compra={compra} item={item} cnpj={cnpj} convocado={convocadoAnexos} />
               </section>
               <section className="cartao-secao-compras">
                 <h4>
@@ -416,7 +461,17 @@ export function ItemCompras({
 
       {aba === "todos" && (
         <Estado carregando={dados.carregando} erro={dados.erro} recarregar={dados.recarregar}>
-          <TodasPropostas compra={compra} item={item} cnpj={cnpj} lista={dados.dados?.todas ?? []} iniciais={!!dados.dados?.iniciais} nomes={nomes} analise={analise} />
+          <TodasPropostas
+            compra={compra}
+            item={item}
+            cnpj={cnpj}
+            lista={dados.dados?.todas ?? []}
+            iniciais={!!dados.dados?.iniciais}
+            nomes={nomes}
+            analise={analise}
+            extras={extras}
+            carregandoExtras={iniciaisCarga.carregando}
+          />
         </Estado>
       )}
 
@@ -869,6 +924,8 @@ function TodasPropostas({
   iniciais,
   nomes,
   analise,
+  extras = [],
+  carregandoExtras = false,
 }: {
   compra: CompraAcomp;
   item: ItemAcomp;
@@ -877,6 +934,9 @@ function TodasPropostas({
   iniciais: boolean;
   nomes: Map<string, string>;
   analise: ReturnType<typeof analisarPropostas>;
+  /** Empresas desclassificadas antes da disputa (só aparecem nas propostas iniciais). */
+  extras?: PropostaEmpresa[];
+  carregandoExtras?: boolean;
 }) {
   const [aberta, setAberta] = useState<string | null>(null);
   const [anexos, setAnexos] = useState<Record<string, number | "lendo" | "erro">>({});
@@ -903,54 +963,18 @@ function TodasPropostas({
   const conhecidas = aFrente.filter((p) => qtdAnexos(p) != null);
   const semAnexos = conhecidas.filter((p) => qtdAnexos(p) === 0);
 
-  if (!lista.length) return <p className="texto-fraco">O Compras.gov.br ainda não mostra as propostas deste item (elas aparecem depois da disputa).</p>;
-  return (
-    <div className="painel-compras">
-      <div className="resumo-todos">
-        <span>
-          <strong>{lista.length}</strong> propostas
-        </span>
-        <span>
-          <strong>{analise?.desclassificadas ?? 0}</strong> desclassificadas
-        </span>
-        {minhaPos >= 0 && (
-          <span>
-            Você: <strong>{lista[minhaPos].colocacao ?? minhaPos + 1}º</strong>
-            {analise?.posicaoValida ? ` · ${analise.posicaoValida}ª entre as válidas` : ""}
-          </span>
-        )}
-        {iniciais && <span className="texto-fraco">Propostas iniciais (antes da disputa)</span>}
-      </div>
-      {aFrente.length > 0 && (
-        <div className="conferir-anexos">
-          {semContagem.length > 0 && (
-            <button className="botao secundario pequeno" onClick={conferirAnexos} disabled={conferindo}>
-              {conferindo ? <Loader2 className="girando" /> : <Paperclip />} Conferir anexos de quem está à sua frente
-            </button>
-          )}
-          {conhecidas.length === aFrente.length && (
-            <span className={semAnexos.length ? "texto-verde" : "texto-suave"}>
-              {semAnexos.length
-                ? aFrente.length === 1
-                  ? "A empresa à sua frente não enviou anexos: se o edital exige, ela tende a ser recusada e você sobe."
-                  : `${semAnexos.length} de ${aFrente.length} empresas à sua frente não enviaram anexos: se o edital exige, elas tendem a ser recusadas e você sobe.`
-                : aFrente.length === 1
-                  ? "A empresa à sua frente enviou anexos."
-                  : "Todas as empresas à sua frente enviaram anexos."}
-            </span>
-          )}
-        </div>
-      )}
-      <ol className="todas-propostas">
-        {lista.map((p, i) => {
+  const linha = (p: PropostaEmpresa, i: number, posicao?: string) => {
           const minha = !!cnpj && p.cnpj === cnpj;
+          // Conversa do pregoeiro com esta empresa no item (das mensagens da licitação, sem pedir de novo).
+          const msgs = compra.mensagens.filter((m) => m.item === item.numero && !!p.cnpj && (m.destinatario === p.cnpj || m.remetente === p.cnpj));
+          const conversa = { total: msgs.length, ultima: [...msgs].reverse().find((m) => m.quem === "pregoeiro") ?? null };
           const chave = p.cnpj || String(i);
           const aberto = aberta === chave;
           const n = anexos[p.cnpj] === "lendo" ? "lendo" : qtdAnexos(p);
           return (
             <li key={chave} className={`${minha ? "minha" : ""} ${p.desclassificada ? "fora" : ""} ${aberto ? "aberta" : ""}`}>
               <button className="linha-todas" onClick={() => setAberta(aberto ? null : chave)} aria-expanded={aberto}>
-                <span className="posicao-proposta">{p.colocacao ?? i + 1}º</span>
+                <span className="posicao-proposta">{posicao ?? `${p.colocacao ?? i + 1}º`}</span>
                 <span className="nome-todas">
                   <span>
                     {p.empresa} {minha && <span className="chip azul">Você</span>}
@@ -962,6 +986,11 @@ function TodasPropostas({
                     {p.marca ? ` · ${p.marca}${p.modelo ? ` ${p.modelo}` : ""}` : ""}
                   </small>
                   {p.desclassificada && p.motivo && <small className="texto-vermelho">Motivo: {resumir(p.motivo, 140)}</small>}
+                  {conversa.ultima && (
+                    <small className="previa-conversa">
+                      <MessageSquare size={11} /> Pregoeiro: “{resumir(conversa.ultima.texto, 120)}”
+                    </small>
+                  )}
                 </span>
                 <span className="valores-todas">
                   <span>
@@ -976,7 +1005,16 @@ function TodasPropostas({
                 <span className="chips-todas">
                   {p.desclassificada && <span className="chip vermelho">{p.situacao || "Desclassificada"}</span>}
                   {!p.desclassificada && p.situacao && <span className="chip verde">{p.situacao}</span>}
-                  {p.convocada && <span className="chip amarelo">Convocada</span>}
+                  {p.pendencias.map((x) => (
+                    <span key={x.tipo} className="chip amarelo">
+                      {x.rotulo}
+                    </span>
+                  ))}
+                  {conversa.total > 0 && (
+                    <span className="chip azul" title="Mensagens do pregoeiro com esta empresa neste item">
+                      <MessageSquare size={11} /> {conversa.total}
+                    </span>
+                  )}
                   {n === "lendo" && <Loader2 className="girando" size={13} />}
                   {n === 0 && <span className="chip vermelho">Sem anexos</span>}
                   {typeof n === "number" && n > 0 && <span className="chip cinza">{n === 1 ? "1 anexo" : `${n} anexos`}</span>}
@@ -1021,8 +1059,62 @@ function TodasPropostas({
               )}
             </li>
           );
-        })}
+  };
+
+  if (!lista.length && !extras.length) return <p className="texto-fraco">O Compras.gov.br ainda não mostra as propostas deste item (elas aparecem depois da disputa).</p>;
+  return (
+    <div className="painel-compras">
+      <div className="resumo-todos">
+        <span>
+          <strong>{lista.length + extras.length}</strong> propostas
+        </span>
+        <span>
+          <strong>{(analise?.desclassificadas ?? 0) + extras.length}</strong> desclassificadas
+        </span>
+        {minhaPos >= 0 && (
+          <span>
+            Você: <strong>{lista[minhaPos].colocacao ?? minhaPos + 1}º</strong>
+            {analise?.posicaoValida ? ` · ${analise.posicaoValida}ª entre as válidas` : ""}
+          </span>
+        )}
+        {iniciais && <span className="texto-fraco">Propostas iniciais (antes da disputa)</span>}
+      </div>
+      {aFrente.length > 0 && (
+        <div className="conferir-anexos">
+          {semContagem.length > 0 && (
+            <button className="botao secundario pequeno" onClick={conferirAnexos} disabled={conferindo}>
+              {conferindo ? <Loader2 className="girando" /> : <Paperclip />} Conferir anexos de quem está à sua frente
+            </button>
+          )}
+          {conhecidas.length === aFrente.length && (
+            <span className={semAnexos.length ? "texto-verde" : "texto-suave"}>
+              {semAnexos.length
+                ? aFrente.length === 1
+                  ? "A empresa à sua frente não enviou anexos: se o edital exige, ela tende a ser recusada e você sobe."
+                  : `${semAnexos.length} de ${aFrente.length} empresas à sua frente não enviaram anexos: se o edital exige, elas tendem a ser recusadas e você sobe.`
+                : aFrente.length === 1
+                  ? "A empresa à sua frente enviou anexos."
+                  : "Todas as empresas à sua frente enviaram anexos."}
+            </span>
+          )}
+        </div>
+      )}
+      <ol className="todas-propostas">
+        {lista.map((p, i) => linha(p, i))}
       </ol>
+      {extras.length > 0 && (
+        <>
+          <h5 className="titulo-extras">
+            Desclassificadas antes da disputa <span className="texto-fraco">({extras.length}) · na análise das propostas</span>
+          </h5>
+          <ol className="todas-propostas">{extras.map((p, i) => linha(p, i, "—"))}</ol>
+        </>
+      )}
+      {carregandoExtras && (
+        <p className="texto-fraco pequeno">
+          <Loader2 className="girando" size={13} /> Conferindo as propostas desclassificadas antes da disputa…
+        </p>
+      )}
     </div>
   );
 }

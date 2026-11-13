@@ -13612,3 +13612,23 @@ p.etapa-fechada {
 .cartao-item.nao-participa .colocacao-cartao strong {
   color: var(--texto-fraco);
 }
+
+.titulo-extras {
+  margin: 8px 0 0;
+  font-size: 0.86rem;
+  color: var(--vermelho);
+}
+.previa-conversa {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--texto-suave) !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chips-todas .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}

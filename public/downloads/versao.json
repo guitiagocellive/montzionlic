@@ -1,8 +1,9 @@
 {
-  "versao": "3.1.23",
+  "versao": "3.1.24",
   "data": "2026-11-13",
   "novidades": [
-    "Acompanhamento: na licitação, escolha entre \"Itens que participo\" e \"Todos os itens da licitação\". Os itens sem proposta sua aparecem com a descrição, a situação, a quantidade e o valor estimado.",
-    "O \"+\" de um item sem proposta sua abre \"Todos os participantes\" (classificação, desclassificadas, conversas e anexos de cada empresa) e \"Lances\"."
+    "Anexos: o envio só é liberado quando o pregoeiro realmente solicitou anexos (como no Compras: situação \"SOLICITADA\"). Chat aberto, negociação ou diligência não liberam mais o envio de anexos.",
+    "Todos os participantes: agora aparecem também as empresas desclassificadas antes da disputa (na análise das propostas), com o motivo.",
+    "Na lista de participantes, cada empresa mostra quantas mensagens o pregoeiro trocou com ela no item e a última mensagem, sem precisar abrir; abrindo, aparecem a conversa completa, a proposta, os anexos (para baixar) e as diligências."
   ]
 }
