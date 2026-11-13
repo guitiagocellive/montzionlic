@@ -276,6 +276,26 @@ func TestGanharTempo(t *testing.T) {
 	if d := decidir(e5, cfg); d.Enviar {
 		t.Errorf("aleatório não tem cronômetro para prorrogar: %+v", d)
 	}
+	// Em 4º lugar (melhor 500, nosso 600, mínimo 100 — daria para ser 1º): ganhando tempo NÃO cobre o 1º; só
+	// prorroga com o intervalo mínimo sobre o próprio lance.
+	quarto := estadoItem{Fase: "LA", RestanteSeg: f(8), Melhor: f(500), Nosso: f(600), Situacao: "P", Variacao: f(0.01), TipoVariacao: "V", PodeGanharTempo: true}
+	if d := decidir(quarto, cfg); !d.Enviar || d.Tipo != "ganhar-tempo" || d.Valor != 599.99 {
+		t.Errorf("em 4º: deveria dar 599,99 (sobre o próprio lance), sem cobrir o 1º; veio %+v", d)
+	}
+	quarto.RestanteSeg = f(90)
+	if d := decidir(quarto, &configItem{Ligado: true, Minimo: f(100), GanharTempo: true, NaoAguardar: true}); d.Enviar {
+		t.Errorf("ganhando tempo, mesmo com \"não esperar\", não cobre ninguém fora dos 10 s finais: %+v", d)
+	}
+	// Desmarcou o "ganhar tempo": volta a disputar (cobre o 1º com o intervalo).
+	quarto.RestanteSeg = f(8)
+	if d := decidir(quarto, sem); !d.Enviar || d.Tipo != "lance" || d.Valor != 499.99 {
+		t.Errorf("sem a opção: cobre o 1º (499,99), veio %+v", d)
+	}
+	// Recusado por empate de valor: desce um intervalo a mais.
+	quarto.PassosExtraGanharTempo = 1
+	if d := decidir(quarto, cfg); !d.Enviar || d.Valor != 599.98 {
+		t.Errorf("depois de uma recusa: 599,98, veio %+v", d)
+	}
 	if !ehDispensa("17000706000392026") || ehDispensa("98765405000392026") {
 		t.Error("modalidade 06 na chave = dispensa (sem ganhar tempo); 05 = pregão")
 	}

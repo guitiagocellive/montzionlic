@@ -121,6 +121,7 @@ type motor struct {
 	meusValores map[string][]valorEnviado
 	// Ganhar tempo: liberado quando o cronômetro passa dos 10 s finais; gasto ao dar o lance (um por rodada).
 	tempoArmado map[string]bool
+	passosGT    map[string]int // lances de ganhar tempo recusados seguidos (desce um intervalo a mais)
 }
 
 type valorEnviado struct {
@@ -132,7 +133,7 @@ func novoMotor(p *ponte) *motor {
 	m := &motor{
 		p: p, compras: map[string]*compraMotor{}, config: map[string]configItem{}, mensagens: map[string]mensagemItem{},
 		enviando: map[string]time.Time{}, fechadaOK: map[string]bool{}, inscricoes: map[string]string{}, ranking: map[string]*classificacaoItem{}, ultimos: map[string]registroLance{}, recentes: map[string][]registroLance{}, fimVisto: map[string]bool{}, passoConc: map[string]bool{},
-		enviandoDesde: map[string]time.Time{}, enviandoValor: map[string]float64{}, recusas: map[string]int{}, meusValores: map[string][]valorEnviado{}, tempoArmado: map[string]bool{},
+		enviandoDesde: map[string]time.Time{}, enviandoValor: map[string]float64{}, recusas: map[string]int{}, meusValores: map[string][]valorEnviado{}, tempoArmado: map[string]bool{}, passosGT: map[string]int{},
 		fase: "sem-login", versaoSistema: "6.4.4", plataforma: "WEB",
 		// HTTP/2 (quando o Compras.gov.br aceita): o lance vai pela conexão já aberta, mesmo com outras leituras em
 		// andamento, sem esperar um aperto de mão TLS novo (100–300 ms a mais justamente nos segundos finais).
@@ -1240,6 +1241,10 @@ func (m *motor) avaliar(k string) {
 		m.tempoArmado[k] = true
 	}
 	e.PodeGanharTempo = m.tempoArmado[k] && !ehDispensa(compra)
+	e.PassosExtraGanharTempo = m.passosGT[k]
+	if ehDispensa(compra) {
+		cfg.GanharTempo = false // na dispensa o período de lances não é prorrogado: ganhar tempo só baixaria o preço
+	}
 	d := decidir(e, &cfg)
 	marcarDecisao(k, d)
 	// Mantém a classificação em dia sempre que não dá para ser 1º acima do mínimo, já antes dos 10 s finais,
@@ -1350,6 +1355,9 @@ func (m *motor) enviarLance(compra string, numero int, k string, d decisao, fase
 		m.enviando[k] = time.Time{}
 		delete(m.enviandoDesde, k)
 		m.recusas[k] = 0
+		if d.Tipo == "ganhar-tempo" {
+			m.passosGT[k] = 0
+		}
 		// Disputando colocação: relê a classificação logo depois do lance (a próxima decisão sai com ela fresca).
 		if d.Tipo == "colocacao" {
 			if r := m.ranking[k]; r != nil {
@@ -1368,7 +1376,10 @@ func (m *motor) enviarLance(compra string, numero int, k string, d decisao, fase
 		// Compras com o mesmo erro). Antes eram sempre 700 ms parado.
 		m.esquecerMeuValor(k, d.Valor) // recusado: esse valor não é nosso (pode ser de um concorrente)
 		if d.Tipo == "ganhar-tempo" {
-			m.tempoArmado[k] = true // não saiu: pode tentar de novo nesta rodada
+			m.tempoArmado[k] = true // não saiu: pode tentar de novo nesta rodada,
+			if m.passosGT[k] < 5 {  // um intervalo mais abaixo (o valor pode ser igual ao de outra empresa)
+				m.passosGT[k]++
+			}
 		}
 		m.recusas[k]++
 		espera := time.Duration(150<<min(m.recusas[k]-1, 4)) * time.Millisecond
@@ -1636,6 +1647,9 @@ type classificacaoItem struct {
 
 // intervaloClassificacao: de quanto em quanto tempo reler a classificação do item (0 = não precisa agora).
 func intervaloClassificacao(e estadoItem, c *configItem, d decisao, temLeitura bool) time.Duration {
+	if c.GanharTempo && e.Fase == "LA" {
+		return 0 // ganhando tempo o robô não cobre ninguém: não precisa da classificação (poupa captcha por horas)
+	}
 	if !fasesDeLance[e.Fase] || e.Fase == "LF" || e.Situacao == "G" || e.Nosso == nil || c.Minimo == nil || e.Melhor == nil {
 		return 0
 	}

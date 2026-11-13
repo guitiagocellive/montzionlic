@@ -512,8 +512,8 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
                     </div>
                     <div className="item-disputa-opcoes">
                       {c.modalidade !== "dispensa" && (
-                        <label title="Ganhando, nos 10 segundos finais o robô dá um lance do intervalo mínimo abaixo do seu próprio lance: o cronômetro do pregão é prorrogado e a disputa se estende, cansando os concorrentes. Para no seu mínimo. (Lances com 4 casas decimais agora são automáticos quando o edital pede.)">
-                          <input type="checkbox" checked={!!cfg.ganharTempo} onChange={(e) => mudarItem(k, { ganharTempo: e.target.checked })} /> Ganhar tempo (lance do intervalo mínimo nos 10 s finais, mesmo ganhando)
+                        <label title="Em qualquer posição: nos 10 segundos finais o robô dá um lance só do intervalo mínimo abaixo do SEU próprio lance e não cobre os concorrentes. O cronômetro do pregão é prorrogado e a disputa se estende — quem está na frente acha que já ganhou e para de acompanhar. Quando quiser atacar, desmarque: o robô volta a disputar na hora. Para no seu mínimo. (Lances com 4 casas decimais agora são automáticos quando o edital pede.)">
+                          <input type="checkbox" checked={!!cfg.ganharTempo} onChange={(e) => mudarItem(k, { ganharTempo: e.target.checked })} /> Ganhar tempo (só o intervalo mínimo sobre o seu lance nos 10 s finais, sem cobrir ninguém — desmarque para atacar)
                         </label>
                       )}
                       <label>

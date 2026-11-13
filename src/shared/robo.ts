@@ -21,8 +21,8 @@ export interface ConfigItemRobo {
   naoAguardar: boolean;
   /** Lances com 4 casas decimais (senão, centavos). O robô também liga sozinho quando o edital ou os lances pedem. */
   quatroCasas: boolean;
-  /** Ganhar tempo (só pregão): ganhando, nos 10 s finais dá um lance do intervalo mínimo abaixo do próprio lance para
-   *  prorrogar o cronômetro e cansar os concorrentes; para no mínimo. */
+  /** Ganhar tempo (só pregão, etapa aberta): em qualquer posição, nos 10 s finais dá um lance do intervalo mínimo
+   *  abaixo do próprio lance e não cobre os concorrentes — prorroga o cronômetro até a pessoa desmarcar e atacar. */
   ganharTempo?: boolean;
 }
 
@@ -73,7 +73,7 @@ export function precisaQuatroCasas(estado: Pick<EstadoItem, "variacaoMinima" | "
 
 export type TipoDecisao =
   | "desligado" | "sem-minimo" | "aguardando-fase" | "ganhando" | "aguardando-final" | "lance" | "colocacao"
-  | "melhor-possivel" | "precisa-classificacao" | "no-minimo" | "fechada" | "fechada-manual" | "sem-proposta" | "ganhar-tempo";
+  | "melhor-possivel" | "precisa-classificacao" | "no-minimo" | "fechada" | "fechada-manual" | "sem-proposta" | "ganhar-tempo" | "ganhar-tempo-aguardando" | "ganhar-tempo-minimo";
 
 export interface Decisao {
   acao: "aguardar" | "enviar";
@@ -122,15 +122,17 @@ export function decidir(estado: EstadoItem, item: ConfigItemRobo | undefined): D
     return { acao: "aguardar", tipo: "fechada-manual", motivo: `Etapa fechada: confira e envie o seu lance único (sugestão: ${reais(minimo, q)})` };
   }
 
-  if (estado.situacao === "G") {
-    // Ganhar tempo: lance do intervalo mínimo sobre o próprio lance nos 10 s finais (prorroga o cronômetro do pregão).
-    if (item.ganharTempo && estado.podeGanharTempo && estado.fase === "LA" && estado.restanteSeg != null && estado.restanteSeg <= SEGUNDOS_FINAIS) {
-      const alvo = arredondarAbaixo(estado.nossoLance - passoMinimo(estado.nossoLance, estado, q), q);
-      if (alvo >= minimo && alvo < estado.nossoLance)
-        return { acao: "enviar", tipo: "ganhar-tempo", valor: alvo, motivo: `Ganhando tempo: ${reais(alvo, q)} para prorrogar o cronômetro` };
-    }
-    return { acao: "aguardar", tipo: "ganhando", motivo: "Ganhando" };
+  // Ganhar tempo (etapa aberta): em qualquer posição, só o intervalo mínimo sobre o próprio lance nos 10 s finais,
+  // sem cobrir ninguém (prorroga o cronômetro até a pessoa desmarcar e atacar).
+  if (item.ganharTempo && estado.fase === "LA") {
+    const alvo = arredondarAbaixo(estado.nossoLance - passoMinimo(estado.nossoLance, estado, q), q);
+    if (alvo < minimo || !(alvo < estado.nossoLance)) return { acao: "aguardar", tipo: "ganhar-tempo-minimo", motivo: "Ganhar tempo: chegou ao seu mínimo" };
+    if (estado.podeGanharTempo && estado.restanteSeg != null && estado.restanteSeg <= SEGUNDOS_FINAIS)
+      return { acao: "enviar", tipo: "ganhar-tempo", valor: alvo, motivo: `Ganhando tempo: ${reais(alvo, q)} sobre o próprio lance` };
+    return { acao: "aguardar", tipo: "ganhar-tempo-aguardando", motivo: "Ganhando tempo (sem cobrir os concorrentes)" };
   }
+
+  if (estado.situacao === "G") return { acao: "aguardar", tipo: "ganhando", motivo: "Ganhando" };
 
   // Espera os 10 segundos finais (no encerramento aleatório não há cronômetro: qualquer segundo pode ser o último).
   if (!item.naoAguardar && estado.fase === "LA" && estado.restanteSeg != null && estado.restanteSeg > SEGUNDOS_FINAIS) {

@@ -1,8 +1,9 @@
 {
-  "versao": "3.1.38",
+  "versao": "3.1.39",
   "data": "2026-11-13",
   "novidades": [
-    "Pregão: nova opção \"Ganhar tempo\". Com você em 1º lugar, nos 10 s finais o robô dá um lance só do intervalo mínimo abaixo do seu próprio lance (ex.: 500,00 → 499,99). O cronômetro do pregão é prorrogado e a disputa se estende, cansando os concorrentes. Um lance por rodada do cronômetro; para no seu mínimo, quando o pregoeiro encerra ou quando a disputa acaba. Não aparece na dispensa, onde o período de lances não é prorrogado.",
-    "Lances com 4 casas decimais agora são automáticos: o robô usa 4 casas sozinho quando o intervalo do edital ou os lances do item têm mais de 2 casas. A caixinha deu lugar ao \"Ganhar tempo\"."
+    "\"Ganhar tempo\" agora funciona em qualquer posição: nos 10 s finais o robô dá só o intervalo mínimo abaixo do SEU próprio lance e não cobre os concorrentes. O cronômetro do pregão é prorrogado: quem está na frente acha que já ganhou e para de acompanhar. Quando quiser atacar, desmarque a opção (com o robô ligado): o robô volta a disputar na mesma hora, cobrindo o 1º se couber no seu mínimo.",
+    "Ganhando tempo, se o lance for recusado por valor igual ao de outra empresa, o robô tenta um intervalo a mais abaixo (sem passar do mínimo). Enquanto ganha tempo, não lê a classificação (poupa captcha e pedidos ao Compras.gov.br durante horas).",
+    "O \"Testar o robô\" avisa quando um item está com \"Ganhar tempo\" ligado (o robô não cobre ninguém até você desmarcar)."
   ]
 }

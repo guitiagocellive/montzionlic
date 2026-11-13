@@ -346,7 +346,13 @@ func (m *motor) TestarRobo() any {
 				}
 			}
 		}
-		if cfg.NaoAguardar && e.Fase == "LA" && e.RestanteSeg != nil && *e.RestanteSeg > 3600 {
+		if cfg.GanharTempo && !ehDispensa(strings.SplitN(l.k, ":", 2)[0]) {
+			problemas = append(problemas, "\"Ganhar tempo\" ligado: o robô só prorroga o cronômetro e NÃO cobre os concorrentes até você desmarcar")
+			if estado == "ok" {
+				estado = "info"
+			}
+		}
+		if cfg.NaoAguardar && !cfg.GanharTempo && e.Fase == "LA" && e.RestanteSeg != nil && *e.RestanteSeg > 3600 {
 			problemas = append(problemas, fmt.Sprintf("\"Não esperar\" com %.0f h pela frente: o robô age a qualquer momento (é isso mesmo?)", *e.RestanteSeg/3600))
 			if estado == "ok" {
 				estado = "info"

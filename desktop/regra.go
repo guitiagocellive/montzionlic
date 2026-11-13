@@ -25,8 +25,10 @@ type configItem struct {
 	TipoDesconto string   `json:"tipoDesconto"` // "V" = desconto em R$; senão, em %
 	NaoAguardar  bool     `json:"naoAguardar"`  // cobrir na hora, sem esperar os 10 s finais
 	QuatroCasas  bool     `json:"quatroCasas"`
-	// Ganhar tempo (só pregão): ganhando, nos 10 s finais dá um lance do intervalo mínimo abaixo do próprio lance; o
-	// cronômetro é prorrogado e a disputa se estende, cansando os concorrentes. Para no mínimo.
+	// Ganhar tempo (só pregão, etapa aberta): em QUALQUER posição, nos 10 s finais dá um lance do intervalo mínimo
+	// abaixo do próprio lance e NÃO cobre os concorrentes. O cronômetro é prorrogado e a disputa se estende: quem está
+	// na frente acha que está resolvido e para de acompanhar; quando a pessoa quiser atacar, desmarca a opção e o
+	// robô volta a disputar normalmente. Para no mínimo.
 	GanharTempo bool `json:"ganharTempo"`
 }
 
@@ -50,6 +52,8 @@ type estadoItem struct {
 	// Ganhar tempo liberado nesta rodada do cronômetro: é pregão e o cronômetro voltou a passar dos 10 s finais
 	// desde o último lance para ganhar tempo (um lance por rodada).
 	PodeGanharTempo bool
+	// Lances de ganhar tempo recusados seguidos (ex.: valor igual ao de outra empresa): desce um intervalo a mais.
+	PassosExtraGanharTempo int
 }
 
 type decisao struct {
@@ -117,6 +121,24 @@ func passoMinimo(base float64, e estadoItem, quatro bool) float64 {
 	return math.Max(arredondarAcima(v, quatro), menor)
 }
 
+// ganharTempo: com a opção ligada na etapa aberta, o robô só prorroga o cronômetro — nos 10 s finais, um lance do
+// intervalo mínimo sobre o próprio lance (um por rodada), em qualquer posição e sem cobrir ninguém.
+func ganharTempo(e estadoItem, minimo, nosso float64, q bool) decisao {
+	passo := passoMinimo(nosso, e, q)
+	alvo := arredondarAbaixo(nosso-passo*float64(1+e.PassosExtraGanharTempo), q)
+	if alvo < minimo || !(alvo < nosso) {
+		return decisao{Tipo: "ganhar-tempo-minimo", Motivo: "Ganhar tempo: chegou ao seu mínimo; o robô não dá mais lances (desmarque para disputar)"}
+	}
+	if e.RestanteSeg != nil && *e.RestanteSeg <= segundosFinais {
+		if e.PodeGanharTempo {
+			return decisao{Enviar: true, Tipo: "ganhar-tempo", Valor: alvo,
+				Motivo: "Ganhando tempo: lance de " + reaisTexto(alvo, q) + " sobre o próprio lance para prorrogar o cronômetro"}
+		}
+		return decisao{Tipo: "ganhar-tempo-aguardando", Motivo: "Ganhando tempo: lance dado, aguardando o cronômetro reiniciar"}
+	}
+	return decisao{Tipo: "ganhar-tempo-aguardando", Motivo: fmt.Sprintf("Ganhando tempo: nos %d s finais dá %s sobre o próprio lance, sem cobrir os concorrentes (desmarque para disputar)", segundosFinais, reaisTexto(alvo, q))}
+}
+
 // precisaQuatroCasas: o edital ou os lances do item têm mais de 2 casas decimais (o robô passa a usar 4 casas
 // sozinho, sem depender da caixinha).
 func precisaQuatroCasas(e estadoItem) bool {
@@ -164,17 +186,10 @@ func decidir(e estadoItem, c *configItem) decisao {
 		// o valor na tela (se tiver sido convocada para a etapa fechada).
 		return decisao{Tipo: "fechada-manual", Motivo: "Etapa fechada: confira e envie o seu lance único (sugestão: " + reaisTexto(minimo, q) + ")"}
 	}
+	if c.GanharTempo && e.Fase == "LA" {
+		return ganharTempo(e, minimo, nosso, q)
+	}
 	if e.Situacao == "G" {
-		if c.GanharTempo && e.Fase == "LA" && e.RestanteSeg != nil && *e.RestanteSeg <= segundosFinais {
-			alvo := arredondarAbaixo(nosso-passoMinimo(nosso, e, q), q)
-			switch {
-			case alvo < minimo || !(alvo < nosso):
-				return decisao{Tipo: "ganhando", Motivo: "Ganhando (no mínimo: sem lance para ganhar tempo)"}
-			case e.PodeGanharTempo:
-				return decisao{Enviar: true, Tipo: "ganhar-tempo", Valor: alvo, Posicao: 1,
-					Motivo: "Ganhando tempo: lance do intervalo mínimo sobre o próprio lance (" + reaisTexto(alvo, q) + ") para prorrogar o cronômetro"}
-			}
-		}
 		return decisao{Tipo: "ganhando", Motivo: "Ganhando"}
 	}
 	if !c.NaoAguardar && e.Fase == "LA" && e.RestanteSeg != nil && *e.RestanteSeg > segundosFinais {
