@@ -259,6 +259,7 @@ func (m *motor) PedidoCompras(p pedidoCompras) any {
 		return mapa{"erro": err.Error()}
 	}
 	marcarUso()
+	querCaptchaParaAcomp(30 * time.Second) // a pessoa está mexendo numa compra: deixa o próximo captcha pronto
 	if p.Metodo == "GET" && !leiturasPorMinuto.permitir() {
 		return mapa{"erro": "Muitas consultas seguidas ao Compras.gov.br: espere alguns segundos e tente de novo."}
 	}
@@ -270,7 +271,11 @@ func (m *motor) PedidoCompras(p pedidoCompras) any {
 				m.releCompraDoCaminho(p.Caminho)
 			}
 		}
-		return r
+		// Arquivo (anexo) que o Compras recusou pelo pedido direto: tenta de dentro da página oficial, igual ao site.
+		if st, _ := r["status"].(int); !(p.Baixar && st >= 400) {
+			return r
+		}
+		registrarLog("compras: arquivo %s recusado direto (%v); tentando pela página", mascararNumeros(p.Caminho), r["status"])
 	} else if !strings.Contains(err.Error(), "bloqueado") && !strings.Contains(err.Error(), "dial tcp") && !strings.Contains(err.Error(), "timeout") {
 		return mapa{"erro": err.Error()}
 	} else {

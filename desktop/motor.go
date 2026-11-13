@@ -25,6 +25,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -269,6 +270,7 @@ func (m *motor) verSessao() {
 	precisaLista := novoLogin || (m.listaEm.IsZero() && !m.buscandoLista)
 	m.mu.Unlock()
 	if novoLogin {
+		querCaptchaParaAcomp(40 * time.Second)
 		acordarAcompanhamento() // a tela mostra a leitura guardada: lê as participações já, sem esperar o ciclo
 	}
 	if mudouToken && !novoLogin {
@@ -767,11 +769,20 @@ func (m *motor) cicloLeitura() {
 }
 
 // precisaCaptchaPronto: há item com robô ligado em fase de lances perto do fim (≤ 2,5 min, aleatório ou "não esperar").
+// captchaParaAcomp: até quando (ms) deixar captchas prontos para o Acompanhamento (lendo a lista, abrindo uma
+// compra): o próximo captcha é feito enquanto a página anterior ainda está chegando do Compras.gov.br.
+var captchaParaAcomp atomic.Int64
+
+func querCaptchaParaAcomp(d time.Duration) { captchaParaAcomp.Store(time.Now().Add(d).UnixMilli()) }
+
 func (m *motor) precisaCaptchaPronto() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.token == "" {
 		return false
+	}
+	if time.Now().UnixMilli() < captchaParaAcomp.Load() {
+		return true
 	}
 	agora := time.Now()
 	for k, cfg := range m.config {

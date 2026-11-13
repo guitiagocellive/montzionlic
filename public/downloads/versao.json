@@ -1,7 +1,10 @@
 {
-  "versao": "3.1.28",
+  "versao": "3.1.29",
   "data": "2026-11-13",
   "novidades": [
-    "Acompanhamento: depois do login no gov.br, a lista do Compras.gov.br é lida na hora (antes podia esperar até ~15 s). O aplicativo percebe o login mais rápido e a tela mostra a lista nova assim que ela chega."
+    "Acompanhamento muito mais rápido: cada página da lista do Compras exige um captcha novo. Agora a atualização pede só 2 ou 3 páginas (antes chegava a ~33 com as finalizadas carregadas): as \"em andamento\" aparecem primeiro e, nas finalizadas, só a 1ª página é relida; as antigas são lidas quando você vai até elas.",
+    "O aplicativo testa sozinho, uma vez, se o Compras aceita 50 por página (menos páginas, menos captchas) e deixa o próximo captcha pronto enquanto a página anterior chega.",
+    "Total de finalizadas certo desde a abertura (ex.: 302), mesmo antes de ler todas.",
+    "Anexos: o arquivo é pedido sempre pelo campo \"nome\", como o site do Compras, e se o pedido direto for recusado o aplicativo tenta pela página oficial."
   ]
 }

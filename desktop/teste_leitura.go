@@ -183,3 +183,36 @@ func resumoMedidas(ms []medidaLeitura) string {
 	}
 	return strings.Join(partes, " | ")
 }
+
+// tamanhoPaginaTestado: já se sabe se o Compras aceita páginas maiores (o arquivo do tamanho existe).
+func tamanhoPaginaTestado() bool {
+	_, err := os.Stat(arquivoTamanhoPagina())
+	return err == nil
+}
+
+// testarTamanhoPagina: uma vez só, pede a lista "em andamento" com 50 por página. Se o Compras devolver as 50 (ou
+// todas, quando há menos de 50 e mais de 10), passa a ler de 50 em 50 — menos páginas, menos captchas.
+func (m *motor) testarTamanhoPagina() int {
+	r, err := m.consultarDiretoOpc("GET", fe+"/v1/compras/participacoes", "filtro=2&pagina=0&tamanhoPagina=50", true, nil, "", true)
+	if err != nil || !okHTTP(r.Status) {
+		return 10 // não deu para testar agora: tenta na próxima leitura
+	}
+	total := 0
+	fmt.Sscan(r.Cab.Get("register-count"), &total)
+	veio := len(listaQualquer(r.Corpo))
+	if veio == 0 && r.Cab.Get("register-count") == "" {
+		guardarTamanhoPagina(10) // recusou a página de 50 (veio vazia, sem totais): fica de 10 em 10
+		registrarLog("acompanhamento: o Compras não aceitou 50 por página; lendo de 10 em 10")
+		return 10
+	}
+	if total <= 10 {
+		return 10 // com até 10 não dá para saber: testa de novo quando houver mais
+	}
+	usar := 10
+	if veio == min(50, total) {
+		usar = 50
+	}
+	guardarTamanhoPagina(usar)
+	registrarLog("acompanhamento: o Compras devolveu %d de %d com 50 por página; lendo de %d em %d", veio, total, usar, usar)
+	return usar
+}

@@ -308,6 +308,7 @@ func (m *motor) coletarAcompanhamento() {
 		escolhidas = nil
 	}
 	_ = quantosPedidos
+	querCaptchaParaAcomp(40 * time.Second)
 	inicioLeitura := time.Now()
 	a.mu.Lock()
 	if a.doCache {
@@ -641,25 +642,40 @@ func (m *motor) lerAcompanhamentoDireto(lista, finalizadas bool, escolhidas []co
 		return juntarLista(todas), nil
 	}
 	if lista {
+		// Cada página da lista custa um captcha novo (1 a 3 s): menos páginas = leitura mais rápida.
+		// 1) O tamanho de página (o Compras aceita 50? testado uma vez só) e as "em andamento", que aparecem na hora.
+		if tam == 10 && !tamanhoPaginaTestado() {
+			tam = m.testarTamanhoPagina()
+		}
 		a, err := participacoes("2", paginasPara(80, tam))
 		if err != nil {
 			return err
 		}
-		var f json.RawMessage
-		if finalizadas {
-			m.acomp.mu.Lock()
-			paginas := paginasPara(max(1, m.acomp.paginasFinalizadas)*10, tam)
-			m.acomp.mu.Unlock()
-			if f, err = participacoes("6", paginas); err != nil {
+		if len(listaDe(a)) > 0 || !finalizadas {
+			v.Andamento = a
+			if err := m.aplicarLeitura(v, true); err != nil {
 				return err
 			}
 		}
-		if len(listaDe(a)) == 0 && len(listaDe(f)) == 0 {
+		// 2) As finalizadas: só a 1ª página (as mais recentes), juntando com as que já tinham sido lidas. As
+		// páginas mais antigas são lidas quando a pessoa vai até elas.
+		if finalizadas {
+			f, err := participacoes("6", 1)
+			if err != nil {
+				return err
+			}
+			if len(listaDe(a)) == 0 && len(listaDe(f)) == 0 {
+				return fmt.Errorf("lista vazia (%s %s)", strings.Join(v.Erros, " | "), strings.Join(v.Formatos, " | "))
+			}
+			m.acomp.mu.Lock()
+			antigas := m.acomp.finalizadas
+			m.acomp.mu.Unlock()
+			v.Andamento, v.Finalizadas = a, juntarSemRepetir(f, antigas)
+			if err := m.aplicarLeitura(v, true); err != nil {
+				return err
+			}
+		} else if len(listaDe(a)) == 0 {
 			return fmt.Errorf("lista vazia (%s %s)", strings.Join(v.Erros, " | "), strings.Join(v.Formatos, " | "))
-		}
-		v.Andamento, v.Finalizadas = a, f
-		if err := m.aplicarLeitura(v, true); err != nil {
-			return err
 		}
 		v.Erros, v.Formatos = nil, nil
 	}
@@ -775,6 +791,7 @@ func (m *motor) detalharDireto(c compraAcomp) *detalheCompra {
 
 // detalharAberta lê já a compra que a pessoa abriu (itens, participação e chat), sem esperar a volta da lista.
 func (m *motor) detalharAberta(chave string) {
+	querCaptchaParaAcomp(30 * time.Second)
 	a := &m.acomp
 	defer func() {
 		a.mu.Lock()
@@ -817,14 +834,12 @@ func (m *motor) lerMaisFinalizadasAcomp() {
 	}()
 	marcarUso()
 	tam := tamanhoPaginaAcomp()
-	if len(ja)%tam != 0 {
-		ja = nil // lida com outro tamanho de página: lê de novo desde o começo
-	}
 	todas := make([]json.RawMessage, 0, len(ja)+30)
 	for _, x := range ja {
 		b, _ := json.Marshal(x)
 		todas = append(todas, b)
 	}
+	// Continua da página onde parou (a 1ª página relida pode ter empurrado as outras: juntarSemRepetir tira as repetidas).
 	for pagina := len(ja) / tam; pagina < paginasPara(paginas*10, tam); pagina++ {
 		r, err := m.consultarDiretoOpc("GET", fe+"/v1/compras/participacoes", fmt.Sprintf("filtro=6&pagina=%d&tamanhoPagina=%d", pagina, tam), true, nil, "", true)
 		if err != nil || !okHTTP(r.Status) {
@@ -837,7 +852,7 @@ func (m *motor) lerMaisFinalizadasAcomp() {
 		}
 	}
 	a.mu.Lock()
-	a.finalizadas = juntarLista(todas)
+	a.finalizadas = juntarSemRepetir(juntarLista(todas), nil)
 	a.sujo = true
 	a.mu.Unlock()
 }
@@ -851,6 +866,9 @@ type cacheAcomp struct {
 	Em            int64                     `json:"em"`
 	FinalizadasEm int64                     `json:"finalizadasEm"`
 	Cnpj          string                    `json:"cnpj"`
+	// Totais do Compras.gov.br (ex.: 302 finalizadas, mesmo com só 82 já lidas).
+	TotalAndamento   int `json:"totalAndamento,omitempty"`
+	TotalFinalizadas int `json:"totalFinalizadas,omitempty"`
 }
 
 func arquivoCacheAcomp() string { return filepath.Join(pastaInstalacao(), "acompanhamento.json") }
@@ -871,6 +889,7 @@ func (m *motor) carregarCacheAcomp() {
 		a.detalhes = map[string]*detalheCompra{}
 	}
 	a.em, a.finalizadasEm, a.cnpjCache = time.UnixMilli(c.Em), time.UnixMilli(c.FinalizadasEm), c.Cnpj
+	a.totalAndamento, a.totalFinalizadas = c.TotalAndamento, c.TotalFinalizadas
 	a.doCache, a.versao = true, 1
 	a.mu.Unlock()
 }
@@ -886,7 +905,7 @@ func (m *motor) cicloCacheAcomp() {
 			continue
 		}
 		a.sujo = false
-		dados, err := json.Marshal(cacheAcomp{a.andamento, a.finalizadas, a.detalhes, a.em.UnixMilli(), a.finalizadasEm.UnixMilli(), a.cnpjCache})
+		dados, err := json.Marshal(cacheAcomp{a.andamento, a.finalizadas, a.detalhes, a.em.UnixMilli(), a.finalizadasEm.UnixMilli(), a.cnpjCache, a.totalAndamento, a.totalFinalizadas})
 		a.mu.Unlock()
 		if err != nil {
 			continue
@@ -967,4 +986,27 @@ func (m *motor) todosItensSelecao(chave string) []json.RawMessage {
 		}
 	}
 	return todos
+}
+
+// juntarSemRepetir: a lista nova primeiro e depois as da antiga que não estão nela (pela chave da compra).
+func juntarSemRepetir(nova, antiga json.RawMessage) json.RawMessage {
+	vistos := map[string]bool{}
+	saida := []json.RawMessage{}
+	for _, lista := range []json.RawMessage{nova, antiga} {
+		for _, b := range listaQualquer(lista) {
+			var x map[string]any
+			k := ""
+			if json.Unmarshal(b, &x) == nil {
+				k = chaveDaParticipacao(x)
+			}
+			if k != "" && vistos[k] {
+				continue
+			}
+			if k != "" {
+				vistos[k] = true
+			}
+			saida = append(saida, b)
+		}
+	}
+	return juntarLista(saida)
 }

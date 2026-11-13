@@ -634,8 +634,8 @@ export function lerAnexos(dados: unknown): AnexoCompras[] {
       // No Compras.gov.br o anexo é identificado pelo "nome" (nome guardado no servidor) e mostrado pelo
       // "nomeOriginal" (o nome do arquivo que a empresa enviou); não tem "id".
       return {
-        // Como o site: o arquivo é pedido pelo "nome" (guardado no servidor) sempre que o anexo tem "nomeOriginal".
-        id: texto(a.nomeOriginal != null && a.nome != null ? a.nome : primeiro(a.id, a.identificador, a.sequencial, a.codigo, a.nome)),
+        // Como o site: o arquivo é sempre pedido pelo campo "nome" (anexo.nome), nunca pelo id.
+        id: texto(primeiro(a.nome, a.id, a.identificador, a.sequencial, a.codigo)),
         nome: texto(primeiro(a.nomeOriginal, a.nome, a.nomeArquivo, a.descricao)) || "Arquivo",
         dataHora: texto(primeiro(a.dataHoraInclusao, a.dataHora, a.dataHoraEnvio, a.dataInclusao)),
         tipo: texto(primeiro(a.tipoAnexoDescricao, a.tipoAnexo, a.tipo, a.fase)),
