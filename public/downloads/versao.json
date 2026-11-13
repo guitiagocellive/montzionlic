@@ -1,10 +1,7 @@
 {
-  "versao": "3.1.27",
+  "versao": "3.1.28",
   "data": "2026-11-13",
   "novidades": [
-    "Acompanhamento: depois de entrar com o gov.br, a lista atualiza sozinha (não precisa mais clicar em Atualizar).",
-    "Lista do Acompanhamento em páginas de 10, como no Compras.gov.br: números das páginas e atalhos para a primeira e a última. Nas finalizadas, a página escolhida é buscada na hora.",
-    "Anexos das outras empresas abrem e baixam (acabou o erro \"No message available\"): o arquivo é pedido pelo mesmo identificador que o site do Compras usa.",
-    "Quadro > Resultado: botão \"Puxar dados da licitação\". Lê no Compras.gov.br a sua colocação, o seu valor e a situação de cada item (ganho, perdido com o vencedor e o motivo, ou acompanhando) e preenche o resultado para você conferir e salvar."
+    "Acompanhamento: depois do login no gov.br, a lista do Compras.gov.br é lida na hora (antes podia esperar até ~15 s). O aplicativo percebe o login mais rápido e a tela mostra a lista nova assim que ela chega."
   ]
 }

@@ -59,6 +59,7 @@ type acompanhamento struct {
 	totalFinalizadas int
 	// Páginas de finalizadas que a página pediu ("Carregar mais"); 1 = só as 10 mais recentes.
 	paginasFinalizadas int
+	tentouCacheEm      time.Time       // última tentativa de trocar a leitura guardada pela do Compras.gov.br
 	detalhando         map[string]bool // compras abertas pela pessoa sendo lidas agora
 	lendoMais          bool
 }
@@ -211,9 +212,22 @@ const scriptAcompanhamento = `(async (entrada) => {
 })`
 
 // cicloAcompanhamento lê as participações de tempos em tempos enquanto a pessoa está logada.
+// acordarAcomp: o login acabou de acontecer (ou a pessoa pediu): o ciclo lê na hora, sem esperar a próxima volta.
+var acordarAcomp = make(chan struct{}, 1)
+
+func acordarAcompanhamento() {
+	select {
+	case acordarAcomp <- struct{}{}:
+	default:
+	}
+}
+
 func (m *motor) cicloAcompanhamento() {
 	for {
-		time.Sleep(5 * time.Second)
+		select {
+		case <-time.After(5 * time.Second):
+		case <-acordarAcomp:
+		}
 		m.mu.Lock()
 		// Logado (a fase do robô pode estar em "buscando"/"erro-lista" das disputas: isso não impede ler as participações).
 		pronto := m.token != "" && m.fase != "sem-login" && m.fase != "aguardando-login" && m.fase != "entrando"
@@ -239,7 +253,8 @@ func (m *motor) cicloAcompanhamento() {
 		}
 		desde := time.Since(a.em)
 		_ = faltam // as compras sem detalhe são lidas quando a pessoa abre (não forçam leitura de fundo)
-		precisa := a.forcar || desde > intervaloAcompanhamento || (a.doCache && desde > 20*time.Second)
+		// Mostrando a leitura guardada: lê já (e, se falhar, tenta de novo a cada 15 s).
+		precisa := a.forcar || desde > intervaloAcompanhamento || (a.doCache && time.Since(a.tentouCacheEm) > 15*time.Second)
 		// A pessoa está usando (abriu uma compra, cadastrando...): a leitura de fundo espera, salvo se ela pediu.
 		// Mas a primeira leitura depois do login (a tela ainda mostra a leitura guardada) nunca espera.
 		if !a.forcar && !a.doCache && pessoaUsando() && a.andamento != nil {
@@ -293,7 +308,16 @@ func (m *motor) coletarAcompanhamento() {
 		escolhidas = nil
 	}
 	_ = quantosPedidos
+	inicioLeitura := time.Now()
+	a.mu.Lock()
+	if a.doCache {
+		a.tentouCacheEm = inicioLeitura
+	}
+	a.mu.Unlock()
 	erro := m.lerAcompanhamento(!soPedidos, finalizadas, escolhidas)
+	if d := time.Since(inicioLeitura); d > 5*time.Second {
+		registrarLog("acompanhamento: leitura demorou %.1f s", d.Seconds())
+	}
 
 	a.mu.Lock()
 	a.buscando = false
@@ -457,6 +481,7 @@ func (m *motor) Acompanhamento(compra string, atualizar bool, desde int, mais bo
 	cnpjGuardado := a.cnpjCache
 	if atualizar {
 		a.forcar = true
+		acordarAcompanhamento()
 	}
 	if compra != "" {
 		marcarUso()

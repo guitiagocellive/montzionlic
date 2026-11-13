@@ -231,7 +231,7 @@ func (m *motor) cicloSessao() {
 		if logado {
 			time.Sleep(5 * time.Second)
 		} else {
-			time.Sleep(time.Second)
+			time.Sleep(500 * time.Millisecond) // esperando o login: percebe logo que a pessoa entrou
 		}
 	}
 }
@@ -268,6 +268,9 @@ func (m *motor) verSessao() {
 	m.expira = exp
 	precisaLista := novoLogin || (m.listaEm.IsZero() && !m.buscandoLista)
 	m.mu.Unlock()
+	if novoLogin {
+		acordarAcompanhamento() // a tela mostra a leitura guardada: lê as participações já, sem esperar o ciclo
+	}
 	if mudouToken && !novoLogin {
 		registrarLog("robô: token renovado pela sala de disputa")
 	}

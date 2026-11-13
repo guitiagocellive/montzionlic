@@ -40,6 +40,8 @@ export function Acompanhamento() {
   const [agora, setAgora] = useState(Date.now());
   const pedida = useRef<string | null>(aberta); // compra que veio pelo link: ler já
   const versao = useRef(0);
+  const rapido = useRef(false);
+  const deCache = useRef(false);
   const [novaProposta, setNovaProposta] = useState(false);
   const [cadastro, setCadastro] = useState<string | null>(null);
   const [verAvisos, setVerAvisos] = useState(false);
@@ -81,6 +83,8 @@ export function Acompanhamento() {
         pedida.current = null;
         const p = await ponte.acompanhamento(compra, false, versao.current);
         if (!vivo) return;
+        if (!p.igual) deCache.current = !!p.deCache;
+        rapido.current = !!p.conectado && (!!p.buscando || deCache.current);
         if (p.igual) {
           // Nada mudou: só atualiza o "lendo…" e a hora, sem montar a lista de novo.
           setPainel((atual) =>
@@ -105,11 +109,18 @@ export function Acompanhamento() {
       }
       if (vivo) setAgora(Date.now());
     };
-    ler();
-    const t = setInterval(ler, 2000);
+    // Enquanto a tela mostra a leitura guardada (ou está lendo), pergunta ao aplicativo bem mais rápido: a lista
+    // nova aparece assim que chega. Depois, a cada 2 s.
+    let t = 0;
+    const volta = async () => {
+      await ler();
+      if (!vivo) return;
+      t = window.setTimeout(volta, rapido.current ? 400 : 2000);
+    };
+    volta();
     return () => {
       vivo = false;
-      clearInterval(t);
+      clearTimeout(t);
     };
   }, [ligada]);
 
