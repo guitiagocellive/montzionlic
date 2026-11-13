@@ -63,7 +63,8 @@ function Pagina({ caminho, usuario, aoMudarUsuario }: { caminho: string; usuario
   let m: Record<string, string> | null;
   const limpo = caminho.replace(/\/+$/, "");
   if (limpo === "/licitacoes/buscar") return podeVer(p, "licitacoes") ? <BuscarLicitacoes usuario={usuario} /> : <SemAcesso />;
-  if (limpo === "/licitacoes/acompanhamento") return podeVer(p, "licitacoes") ? <Acompanhamento /> : <SemAcesso />;
+  if (limpo === "/licitacoes/acompanhamento") return podeVer(p, "licitacoes") ? <Acompanhamento key="acompanhamento" /> : <SemAcesso />;
+  if (limpo === "/licitacoes/cadastradas") return podeVer(p, "licitacoes") ? <Acompanhamento key="cadastradas" modo="cadastradas" /> : <SemAcesso />;
   if (limpo === "/licitacoes/empresas") return podeVer(p, "licitacoes") ? <Empresas /> : <SemAcesso />;
   if (limpo === "/licitacoes/mercado") return podeVer(p, "licitacoes") ? <Mercado /> : <SemAcesso />;
   if (limpo === "/licitacoes/painel") return podeVer(p, "licitacoes") ? <PainelLicitacoes /> : <SemAcesso />;

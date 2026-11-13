@@ -1,4 +1,4 @@
-import { Bell, BellRing, ChevronDown, Gauge, Mail, Plus, ClipboardCopy, FilePlus2, Download, ExternalLink, LogIn, MessageSquare, Pencil, RefreshCw, Search, Send, Star, TriangleAlert } from "lucide-react";
+import { Bell, BellRing, CalendarClock, ChevronDown, Gauge, Mail, Plus, ClipboardCopy, FilePlus2, Download, ExternalLink, MessageSquare, Pencil, RefreshCw, Search, Send, Star, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type AvisoAcomp, avisosDe, idEmpresa, type CompraAcomp, dataDe, montarCompras, type PainelAcompanhamento, ROTULO_CHANCE } from "../../../shared/acompanhamento";
 import { api, mensagemDeErro } from "../../api";
@@ -9,7 +9,7 @@ import { link } from "../../rota";
 import { CadastroProposta, NovaProposta } from "./CadastroProposta";
 import { chavePropostas, conversaDoItem, COR_CHANCE, estadoDoItem, ItemCompras, jaLido, lerCodigoSolicitada, preCarregarPropostas, type PropostasDoItem } from "./ItemCompras";
 import { noAplicativo, ponte, type ResultadoTesteLeitura, temPonte } from "../../robo/ponte";
-import { BotaoRecarregarGovBr } from "../../robo/ErroCompras";
+import { SemContaGovBr } from "../../robo/ConexaoGovBr";
 
 // Aba Acompanhamento: as participações no Compras.gov.br (em andamento e finalizadas), com a colocação de
 // cada item, a chance de ser chamado, os avisos do pregoeiro e a conversa com ele. Quem lê é o aplicativo do
@@ -31,8 +31,41 @@ function dataHora(s: string | null) {
   return new Date(t).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+/**
+ * Proposta cadastrada e sessão ainda não aberta ("Aguardando abertura", ou "Aguardando publicação" com a abertura
+ * marcada para depois): fica na aba Cadastradas. Quando a sessão abre, a compra passa para o Acompanhamento.
+ */
+export function ehCadastrada(c: CompraAcomp, agora: number) {
+  if (c.encerrada) return false;
+  if (c.faseCodigo === "1") return true;
+  return c.faseCodigo === "6" && dataDe(c.abertura ?? "") > agora;
+}
 
-export function Acompanhamento() {
+const porAbertura = (a: CompraAcomp, b: CompraAcomp) => (dataDe(a.abertura ?? "") || Number.MAX_SAFE_INTEGER) - (dataDe(b.abertura ?? "") || Number.MAX_SAFE_INTEGER);
+
+/** Quanto falta para a sessão abrir: "Abre em 2 d 4 h", "Abre em 35 min"... (curto: sem o "Abre"). */
+function contagem(abertura: string | null, agora: number, curto = false) {
+  const t = dataDe(abertura ?? "");
+  if (!t) return curto ? "—" : "Abertura sem data";
+  const falta = t - agora;
+  if (falta <= 0) return curto ? "agora" : "Abrindo a sessão";
+  const min = Math.floor(falta / 60_000);
+  const h = Math.floor(min / 60);
+  const d = Math.floor(h / 24);
+  const texto = d > 0 ? `${d} d ${h % 24} h` : h > 0 ? `${h} h ${min % 60} min` : `${Math.max(1, min)} min`;
+  return curto ? `em ${texto}` : `Abre em ${texto}`;
+}
+
+const corContagem = (abertura: string | null, agora: number) => {
+  const falta = dataDe(abertura ?? "") - agora;
+  return !dataDe(abertura ?? "") ? "cinza" : falta <= 3_600_000 ? "vermelho" : falta <= 86_400_000 ? "amarelo" : "azul";
+};
+
+const mesmoDia = (a: number, b: number) => new Date(a).toDateString() === new Date(b).toDateString();
+
+
+export function Acompanhamento({ modo = "acompanhamento" }: { modo?: "acompanhamento" | "cadastradas" }) {
+  const cadastradasModo = modo === "cadastradas";
   const [ligada, setLigada] = useState(temPonte());
   const [antigo, setAntigo] = useState(false);
   const [painel, setPainel] = useState<PainelAcompanhamento | null>(null);
@@ -138,6 +171,9 @@ export function Acompanhamento() {
     return montarCompras(painel?.finalizadas ?? null, painel?.detalhes ?? null).filter((c) => !emAndamento.has(c.chave));
   }, [painel, andamento, codigos]);
   const avisos = useMemo(() => avisosDe(andamento, painel?.agora ?? Date.now()), [andamento, painel?.agora]);
+  // Cadastradas (sessão ainda não abriu), pela abertura mais próxima; o resto do "em andamento" é o Acompanhamento.
+  const cadastradas = useMemo(() => andamento.filter((c) => ehCadastrada(c, agora)).sort(porAbertura), [andamento, agora]);
+  const acompanhadas = useMemo(() => andamento.filter((c) => !ehCadastrada(c, agora)), [andamento, agora]);
 
   // Se a compra veio por link (?compra=), abre na aba certa.
   useEffect(() => {
@@ -177,52 +213,65 @@ export function Acompanhamento() {
   const fase = painel?.fase ?? "";
   // Já tem a última leitura guardada no computador: mostra a lista na hora e atualiza por trás.
   const temGuardado = (painel?.andamento?.length ?? 0) + (painel?.finalizadas?.length ?? 0) > 0;
-  const base =
-    aba === "finalizadas"
+  const base = cadastradasModo
+    ? cadastradas
+    : aba === "finalizadas"
       ? finalizadas
       : aba === "favoritas"
-        ? [...andamento, ...finalizadas].filter((c) => marcas[c.chave]?.favorito)
+        ? [...acompanhadas, ...finalizadas].filter((c) => marcas[c.chave]?.favorito)
         : aba === "andamento"
-          ? andamento
-          : andamento.filter((c) => FILTROS[aba].fases.includes(c.faseCodigo));
+          ? acompanhadas
+          : acompanhadas.filter((c) => FILTROS[aba].fases.includes(c.faseCodigo));
   const termo = busca.trim().toLowerCase();
-  const lista = base
-    .filter((c) => !termo || [c.numero, c.uasg, c.orgao, c.objeto, marcas[c.chave]?.apelido ?? "", nomeCompra(c)].some((t) => t.toLowerCase().includes(termo)))
-    .sort((a, b) => Number(!!marcas[b.chave]?.favorito) - Number(!!marcas[a.chave]?.favorito));
+  const filtrada = base.filter((c) => !termo || [c.numero, c.uasg, c.orgao, c.objeto, marcas[c.chave]?.apelido ?? "", nomeCompra(c)].some((t) => t.toLowerCase().includes(termo)));
+  // Cadastradas: pela abertura mais próxima. No acompanhamento: favoritas primeiro.
+  const lista = cadastradasModo ? filtrada : filtrada.sort((a, b) => Number(!!marcas[b.chave]?.favorito) - Number(!!marcas[a.chave]?.favorito));
   const totalFinalizadas = Math.max(painel?.totalFinalizadas ?? 0, finalizadas.length);
   // Páginas de 10, como no Compras.gov.br. Nas finalizadas, a página escolhida é lida na hora se ainda não veio.
-  const totalRegistros = aba === "finalizadas" && !termo ? totalFinalizadas : lista.length;
+  const totalRegistros = !cadastradasModo && aba === "finalizadas" && !termo ? totalFinalizadas : lista.length;
   const totalPaginas = Math.max(1, Math.ceil(totalRegistros / POR_PAGINA));
   const paginaAtual = Math.min(pagina, totalPaginas);
   const daPagina = lista.slice((paginaAtual - 1) * POR_PAGINA, paginaAtual * POR_PAGINA);
-  const faltaLer = aba === "finalizadas" && !termo && daPagina.length < Math.min(POR_PAGINA, totalRegistros - (paginaAtual - 1) * POR_PAGINA);
+  const faltaLer = !cadastradasModo && aba === "finalizadas" && !termo && daPagina.length < Math.min(POR_PAGINA, totalRegistros - (paginaAtual - 1) * POR_PAGINA);
   const lendoMais = !!painel?.lendoMais;
   useEffect(() => {
     if (faltaLer && !lendoMais) ponte.acompanhamento("", false, 0, false, paginaAtual * POR_PAGINA).catch(() => {});
   }, [faltaLer, lendoMais, paginaAtual]);
-  const totalAndamento = Math.max(painel?.totalAndamento ?? 0, andamento.length);
+  // O total do Compras conta as cadastradas também: elas agora ficam na aba Cadastradas.
+  const totalAndamento = Math.max(Math.max(painel?.totalAndamento ?? 0, andamento.length) - cadastradas.length, acompanhadas.length);
   const urgentes = avisos.filter((a) => a.urgente).length;
   const compraAberta = [...andamento, ...finalizadas].find((c) => c.chave === aberta) ?? null;
-  const emPrimeiro = andamento.reduce((s, c) => s + c.itens.filter((i) => i.colocacao === 1 && i.chance !== "fora").length, 0);
-  const convocacoes = andamento.reduce((s, c) => s + c.itens.filter((i) => i.pendencias.length).length, 0);
+  const emPrimeiro = acompanhadas.reduce((s, c) => s + c.itens.filter((i) => i.colocacao === 1 && i.chance !== "fora").length, 0);
+  const convocacoes = acompanhadas.reduce((s, c) => s + c.itens.filter((i) => i.pendencias.length).length, 0);
+  const abremHoje = cadastradas.filter((c) => mesmoDia(dataDe(c.abertura ?? ""), agora)).length;
+  const abremSemana = cadastradas.filter((c) => {
+    const t = dataDe(c.abertura ?? "");
+    return t > agora && t - agora <= 7 * 86_400_000;
+  }).length;
+  const proxima = cadastradas.find((c) => dataDe(c.abertura ?? "") > agora) ?? null;
+  const ultimaLeitura = painel?.em ? new Date(painel.em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "";
 
   return (
     <>
       <div className="cabecalho-pagina entrar">
         <div>
           <span className="sobretitulo">Licitações</span>
-          <h1>Acompanhamento</h1>
+          <h1>{cadastradasModo ? "Cadastradas" : "Acompanhamento"}</h1>
           <p className="texto-suave">
-            Suas participações no Compras.gov.br: colocação em cada item, chance de ser chamado, avisos e mensagens do pregoeiro.
+            {cadastradasModo
+              ? "Licitações em que você já cadastrou proposta e cuja sessão ainda não abriu, pela abertura mais próxima. Quando a sessão abre, elas passam para o Acompanhamento."
+              : "Suas participações no Compras.gov.br depois que a sessão abre: colocação em cada item, chance de ser chamado, avisos e mensagens do pregoeiro."}
           </p>
         </div>
         {ligada && painel?.conectado && (
           <div className="cabecalho-acoes">
             <span className="texto-fraco pequeno">{painel.buscando ? "Lendo…" : painel.em ? `Atualizado ${ha(painel.em, agora)}` : ""}</span>
+            {!cadastradasModo && (
             <button className={`botao-sino-acomp ${urgentes ? "urgente" : ""}`} onClick={() => setVerAvisos(true)} aria-label={`Avisos (${avisos.length})`} title="Avisos das suas participações">
               {urgentes ? <BellRing /> : <Bell />}
               {avisos.length > 0 && <span className="contador-sino">{avisos.length > 99 ? "99+" : avisos.length}</span>}
             </button>
+            )}
             <button className="botao acento" onClick={() => setNovaProposta(true)}>
               <FilePlus2 /> Cadastrar proposta
             </button>
@@ -264,19 +313,15 @@ export function Acompanhamento() {
           </div>
         </section>
       ) : !temGuardado && (!painel.conectado || fase === "sem-login" || fase === "aguardando-login") ? (
-        <section className="cartao disputas-aviso entrar">
-          <LogIn />
-          <div>
-            <h2>{fase === "aguardando-login" ? "Entre com a sua conta gov.br na janela que abriu" : "Entre na sua conta do Compras.gov.br"}</h2>
-            <p className="texto-suave">Depois de entrar uma vez, o aplicativo acompanha as participações sozinho e avisa no sino quando o pregoeiro chamar.</p>
-            <div className="linha-acoes">
-              <button className="botao acento" onClick={() => ponte.entrar(fase === "aguardando-login").catch((e) => avisar(mensagemDeErro(e), "erro"))}>
-                <LogIn /> {fase === "aguardando-login" ? "Mostrar a janela de login" : "Entrar com gov.br"}
-              </button>
-              {fase === "aguardando-login" && <BotaoRecarregarGovBr />}
-            </div>
-          </div>
-        </section>
+        // O popup "Entre na sua conta gov.br" abre sozinho por cima; aqui fica só uma linha discreta.
+        <SemContaGovBr
+          aguardando={fase === "aguardando-login"}
+          texto={
+            cadastradasModo
+              ? "Entre na sua conta gov.br para ver as licitações em que você cadastrou proposta."
+              : "Entre na sua conta gov.br para acompanhar as suas participações. O mesmo login conecta Cadastradas e Disputas."
+          }
+        />
       ) : !temGuardado && (fase === "entrando" || (!painel.em && !painel.andamento)) ? (
         <section className="cartao disputas-aviso entrar">
           {painel.problema ? <TriangleAlert /> : <RefreshCw className="girando" />}
@@ -300,22 +345,6 @@ export function Acompanhamento() {
       ) : (
         <>
           {painel.problema && <p className="alerta erro">{painel.problema}</p>}
-          {(painel.deCache || !painel.conectado) && (
-            <div className="alerta aviso linha-erro-item">
-              <span>
-                Mostrando a última leitura{painel.em ? ` (${new Date(painel.em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })})` : ""}.{" "}
-                {painel.conectado ? "Atualizando com o Compras.gov.br…" : "Entre no Compras.gov.br para atualizar."}
-              </span>
-              {!painel.conectado && (
-                <button className="botao acento pequeno" onClick={() => ponte.entrar(fase === "aguardando-login").catch((e) => avisar(mensagemDeErro(e), "erro"))}>
-                  <LogIn /> {fase === "aguardando-login" ? "Mostrar a janela de login" : "Entrar com gov.br"}
-                </button>
-              )}
-              {!painel.conectado && fase === "aguardando-login" && (
-                <BotaoRecarregarGovBr />
-              )}
-            </div>
-          )}
           {(painel.andamento?.length ?? 0) > andamento.length && (
             <p className="alerta aviso">
               O Compras.gov.br devolveu {painel.andamento?.length} participações, mas {painel.andamento!.length - andamento.length} vieram num formato que eu ainda não reconheço.{" "}
@@ -326,6 +355,28 @@ export function Acompanhamento() {
             </p>
           )}
 
+          {cadastradasModo ? (
+          <div className="resumo-acomp entrar">
+            <div>
+              <span>Cadastradas</span>
+              <strong>{cadastradas.length}</strong>
+            </div>
+            <div className={abremHoje ? "destaque-acomp" : ""}>
+              <span>Abrem hoje</span>
+              <strong>{abremHoje}</strong>
+            </div>
+            <div>
+              <span>Próximos 7 dias</span>
+              <strong>{abremSemana}</strong>
+            </div>
+            <div>
+              <span>Próxima abertura</span>
+              <strong className="kpi-contagem" title={proxima ? dataHora(proxima.abertura) : undefined}>
+                {proxima ? contagem(proxima.abertura, agora, true) : "—"}
+              </strong>
+            </div>
+          </div>
+          ) : (
           <div className="resumo-acomp entrar">
             <div>
               <span>Em andamento</span>
@@ -345,6 +396,7 @@ export function Acompanhamento() {
               <strong>{painel?.totalFinalizadas ? totalFinalizadas : finalizadas.length >= 10 ? `${finalizadas.length}+` : finalizadas.length}</strong>
             </div>
           </div>
+          )}
 
 
           <div className="barra-acomp">
@@ -352,6 +404,7 @@ export function Acompanhamento() {
               <Search aria-hidden="true" />
               <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por número, órgão, objeto ou apelido" aria-label="Buscar participações" />
             </div>
+            {!cadastradasModo && (
             <select value={aba} onChange={(e) => setAba(e.target.value as Filtro)} aria-label="Filtrar participações">
               {(Object.keys(FILTROS) as Filtro[]).map((f) => (
                 <option key={f} value={f}>
@@ -359,26 +412,39 @@ export function Acompanhamento() {
                   {f === "finalizadas"
                     ? totalFinalizadas
                     : f === "favoritas"
-                      ? [...andamento, ...finalizadas].filter((c) => marcas[c.chave]?.favorito).length
+                      ? [...acompanhadas, ...finalizadas].filter((c) => marcas[c.chave]?.favorito).length
                       : f === "andamento"
                         ? totalAndamento
-                        : andamento.filter((c) => FILTROS[f].fases.includes(c.faseCodigo)).length}
+                        : acompanhadas.filter((c) => FILTROS[f].fases.includes(c.faseCodigo)).length}
                   )
                 </option>
               ))}
             </select>
+            )}
           </div>
           <span className="texto-fraco pequeno linha-contagem-acomp">
             {totalRegistros > 0
               ? `Exibindo ${(paginaAtual - 1) * POR_PAGINA + 1}–${Math.min(paginaAtual * POR_PAGINA, totalRegistros)} de ${totalRegistros} registro(s)`
               : "Exibindo 0 registro(s)"}{" "}
-            · {painel.buscando ? "lendo o Compras.gov.br…" : `atualizado ${ha(painel.em, agora)}`}
+            ·{" "}
+            {!painel.conectado
+              ? `última leitura${ultimaLeitura ? ` em ${ultimaLeitura}` : ""} (gov.br desconectado)`
+              : painel.buscando || painel.deCache
+                ? "lendo o Compras.gov.br…"
+                : `atualizado ${ha(painel.em, agora)}`}
           </span>
+          {!cadastradasModo && cadastradas.length > 0 && (
+            <p className="texto-fraco pequeno dica-cadastradas">
+              {cadastradas.length === 1 ? "1 licitação aguardando a sessão está" : `${cadastradas.length} licitações aguardando a sessão estão`} em{" "}
+              <a {...link("/licitacoes/cadastradas")}>Cadastradas</a>.
+            </p>
+          )}
 
           {lista.length === 0 && !faltaLer ? (
             <p className="texto-fraco vazio-acomp">
-              {aba === "finalizadas" ? "Nenhuma participação finalizada recente." : "Nenhuma participação aqui."} Se no Compras.gov.br aparecem participações, clique em
-              Atualizar; se continuar vazio, use o Copiar diagnóstico abaixo.
+              {cadastradasModo
+                ? "Nenhuma licitação aguardando a sessão. Quando você cadastrar uma proposta no Compras.gov.br, ela aparece aqui até a sessão abrir."
+                : `${aba === "finalizadas" ? "Nenhuma participação finalizada recente." : "Nenhuma participação aqui."} Se no Compras.gov.br aparecem participações, clique em Atualizar; se continuar vazio, use o Copiar diagnóstico abaixo.`}
             </p>
           ) : (
             <div className="lista-compras">
@@ -389,6 +455,7 @@ export function Acompanhamento() {
                   cnpj={painel.cnpj ?? ""}
                   marca={marcas[c.chave]}
                   lendo={!!painel.lendo?.[c.chave]}
+                  cadastrada={cadastradasModo ? agora : undefined}
                   aoAbrir={() => abrir(c.chave)}
                   aoFavoritar={() => marcar(c.chave, { favorito: !marcas[c.chave]?.favorito })}
                   aoApelidar={() => setApelidando(c)}
@@ -637,7 +704,7 @@ type Filtro = "andamento" | "favoritas" | "propostas" | "disputa" | "selecao" | 
 const FILTROS: Record<Filtro, { rotulo: string; fases: string[] }> = {
   andamento: { rotulo: "Em andamento", fases: [] },
   favoritas: { rotulo: "Favoritas", fases: [] },
-  propostas: { rotulo: "Propostas", fases: ["1", "2", "6"] },
+  propostas: { rotulo: "Análise de propostas", fases: ["1", "2", "6"] },
   disputa: { rotulo: "Disputa", fases: ["3", "99"] },
   selecao: { rotulo: "Seleção de fornecedores", fases: ["4"] },
   finalizadas: { rotulo: "Finalizadas", fases: [] },
@@ -663,6 +730,7 @@ function LinhaCompra({
   cnpj,
   marca,
   lendo,
+  cadastrada,
   aoAbrir,
   aoFavoritar,
   aoApelidar,
@@ -671,6 +739,8 @@ function LinhaCompra({
   cnpj: string;
   marca?: { favorito: boolean; apelido: string };
   lendo: boolean;
+  /** Na aba Cadastradas: a hora de agora, para a contagem até a sessão abrir. */
+  cadastrada?: number;
   aoAbrir: () => void;
   aoFavoritar: () => void;
   aoApelidar: () => void;
@@ -707,10 +777,21 @@ function LinhaCompra({
         </span>
         {c.objeto && <span className="objeto-acomp texto-fraco">{c.objeto}</span>}
       </span>
-      <span className="etapa-linha-compra">
-        <small>Etapa</small> {c.fase || "—"}
-      </span>
+      {cadastrada != null ? (
+        <span className="etapa-linha-compra">
+          <small>Abertura</small> {dataHora(c.abertura) || "—"}
+        </span>
+      ) : (
+        <span className="etapa-linha-compra">
+          <small>Etapa</small> {c.fase || "—"}
+        </span>
+      )}
       <span className="etiquetas-compra">
+        {cadastrada != null && (
+          <span className={`chip ${corContagem(c.abertura, cadastrada)}`} title={c.fase ? `Etapa: ${c.fase}` : undefined}>
+            <CalendarClock size={12} /> {contagem(c.abertura, cadastrada)}
+          </span>
+        )}
         {(convocado || c.convocacaoRemanescentes) && <span className="chip vermelho">Convocado</span>}
         {c.diligencia && <span className="chip vermelho">Diligência</span>}
         {falou && <span className="chip azul">Pregoeiro falou com você</span>}

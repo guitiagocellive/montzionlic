@@ -1,4 +1,4 @@
-import { Check, ChevronDown, CircleX, ClipboardCopy, Download, FileText, Gauge, Info, ListOrdered, LogIn, Play, RefreshCw, Square, TriangleAlert, Volume2, VolumeX, Zap } from "lucide-react";
+import { Check, ChevronDown, CircleX, ClipboardCopy, Download, FileText, Gauge, Info, ListOrdered, Play, RefreshCw, Square, TriangleAlert, Volume2, VolumeX, Zap } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { podeEditar, podeVer } from "../../shared/permissoes";
 import { type CompraDisputa, type ConfigItemRobo, FASES, ITEM_ROBO_PADRAO, type ItemDisputa, lerCompra, lerItemDisputa, precisaQuatroCasas, SEGUNDOS_FINAIS } from "../../shared/robo";
@@ -9,6 +9,7 @@ import { paraNumero } from "../formato";
 import { link } from "../rota";
 import { noAplicativo, type PainelRobo, ponte, type RelatorioDisputa, type ResultadoTesteRobo, temPonte } from "../robo/ponte";
 import { BotaoRecarregarGovBr } from "../robo/ErroCompras";
+import { SemContaGovBr } from "../robo/ConexaoGovBr";
 
 // Página Disputas: o robô roda dentro do aplicativo (recebe os lances em tempo real e responde na hora).
 // Aqui só mostramos o que ele vê, guardamos a configuração de cada item e registramos os lances.
@@ -48,7 +49,6 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
   const [abaItens, setAbaItens] = useState<Record<string, string>>({});
   const [config, setConfig] = useState<Record<string, ConfigItemRobo>>({});
   const [textos, setTextos] = useState<Record<string, string>>({});
-  const [entrando, setEntrando] = useState(false);
   const [entrandoDesde, setEntrandoDesde] = useState<number | null>(null);
   const [classificacao, setClassificacao] = useState<{ compra: string; item: number; titulo: string } | null>(null);
   const mexidas = useRef(new Set<string>());
@@ -359,13 +359,10 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
   }
 
   async function entrar(mostrar = false) {
-    setEntrando(true);
     try {
       await ponte.entrar(mostrar);
     } catch (e) {
       avisar(mensagemDeErro(e), "erro");
-    } finally {
-      setTimeout(() => setEntrando(false), 1500);
     }
   }
 
@@ -716,22 +713,11 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
           </div>
         </section>
       ) : fase === "sem-login" || fase === "aguardando-login" ? (
-        <section className="cartao disputas-aviso entrar">
-          <LogIn />
-          <div>
-            <h2>{fase === "aguardando-login" ? "Entre com a sua conta gov.br na janela que abriu" : "Entre na sua conta do Compras.gov.br"}</h2>
-            <p className="texto-suave">
-              Abre a janela de login do gov.br (certificado ou senha). Quando você entrar, ela fecha sozinha e as suas disputas aparecem aqui, só as que estão
-              acontecendo.
-            </p>
-            <div className="linha-acoes">
-              <button className="botao acento" onClick={() => entrar(fase === "aguardando-login")} disabled={entrando}>
-                <LogIn /> {fase === "aguardando-login" ? "Mostrar a janela de login" : "Entrar com gov.br"}
-              </button>
-              {fase === "aguardando-login" && <BotaoRecarregarGovBr />}
-            </div>
-          </div>
-        </section>
+        // O popup "Entre na sua conta gov.br" abre sozinho por cima; aqui fica só uma linha discreta.
+        <SemContaGovBr
+          aguardando={fase === "aguardando-login"}
+          texto="Entre na sua conta gov.br e as disputas que estão acontecendo aparecem aqui. O mesmo login conecta Cadastradas e Acompanhamento."
+        />
       ) : fase === "entrando" || fase === "buscando" || (fase === "erro-lista" && !compras.length) ? (
         <section className="cartao disputas-aviso entrar">
           {fase === "erro-lista" ? <TriangleAlert /> : <RefreshCw className="girando" />}

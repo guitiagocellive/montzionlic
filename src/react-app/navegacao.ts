@@ -4,6 +4,7 @@ import {
   Bot,
   CalendarDays,
   ChartColumnIncreasing,
+  ClipboardCheck,
   FilePlus2,
   FileSearch,
   FileSignature,
@@ -29,6 +30,8 @@ export interface Funcao {
   rotulo: string;
   icone: LucideIcon;
   modulo?: Modulo;
+  /** Funções do mesmo grupo ficam juntas numa "pílula" no menu lateral (ex.: as que usam a conta gov.br). */
+  grupo?: "compras";
 }
 
 export interface Area {
@@ -55,14 +58,17 @@ export const AREAS: Area[] = [
     rotulo: "Licitações",
     icone: Gavel,
     funcoes: [
+      // Na ordem do ciclo da licitação: achar, organizar, analisar; depois, na pílula azul, o que acontece no
+      // Compras.gov.br com a sua conta gov.br (proposta cadastrada → disputa → acompanhamento).
       { caminho: "/licitacoes", rotulo: "Quadro de licitações", icone: KanbanSquare, modulo: "licitacoes" },
       { caminho: "/licitacoes/buscar", rotulo: "Buscar licitações", icone: FileSearch, modulo: "licitacoes" },
-      { caminho: "/licitacoes/mercado", rotulo: "Inteligência de mercado", icone: TrendingUp, modulo: "licitacoes" },
-      { caminho: "/licitacoes/empresas", rotulo: "Análise de empresas", icone: Building2, modulo: "licitacoes" },
-      { caminho: "/licitacoes/acompanhamento", rotulo: "Acompanhamento", icone: ListChecks, modulo: "licitacoes" },
-      { caminho: "/disputas", rotulo: "Disputas (robô de lances)", icone: Bot, modulo: "licitacoes" },
       { caminho: "/licitacoes/painel", rotulo: "Painel de licitações", icone: LayoutDashboard, modulo: "licitacoes" },
       { caminho: "/fornecedores", rotulo: "Fornecedores", icone: Truck, modulo: "fornecedores" },
+      { caminho: "/licitacoes/empresas", rotulo: "Análise de empresas", icone: Building2, modulo: "licitacoes" },
+      { caminho: "/licitacoes/mercado", rotulo: "Inteligência de mercado", icone: TrendingUp, modulo: "licitacoes" },
+      { caminho: "/licitacoes/cadastradas", rotulo: "Cadastradas (aguardando a sessão)", icone: ClipboardCheck, modulo: "licitacoes", grupo: "compras" },
+      { caminho: "/disputas", rotulo: "Disputas (robô de lances)", icone: Bot, modulo: "licitacoes", grupo: "compras" },
+      { caminho: "/licitacoes/acompanhamento", rotulo: "Acompanhamento", icone: ListChecks, modulo: "licitacoes", grupo: "compras" },
     ],
   },
   {

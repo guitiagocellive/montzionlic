@@ -346,6 +346,232 @@ a {
   margin: 6px 0;
 }
 
+/* Pílula azul do menu lateral: o que usa a conta gov.br (Cadastradas → Disputas → Acompanhamento). */
+.rail-pilula {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 5px;
+  margin-top: 4px;
+  border-radius: 32px;
+  background: var(--azul-fundo);
+  border: 1px solid color-mix(in srgb, var(--azul) 26%, transparent);
+}
+
+.rail-pilula .rail-item:not(.ativo) {
+  color: var(--azul);
+}
+
+.rail-pilula .rail-item:not(.ativo):hover {
+  background: color-mix(in srgb, var(--azul) 16%, transparent);
+}
+
+/* Bolinha de conexão com o gov.br, no canto da pílula. */
+.rail-pilula-status {
+  position: absolute;
+  top: -3px;
+  right: -1px;
+  z-index: 1;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #94a3b8;
+  box-shadow: 0 0 0 2px var(--superficie-solida, var(--superficie));
+}
+
+button.rail-pilula-status {
+  cursor: pointer;
+}
+
+.rail-pilula-status.conectado {
+  background: #22c55e;
+}
+
+.rail-pilula-status.conectando,
+.rail-pilula-status.aguardando {
+  background: #f59e0b;
+  animation: piscar-suave 1.6s ease-in-out infinite;
+}
+
+/* Disputa acontecendo agora: bolinha vermelha pulsando no ícone de Disputas. */
+.rail-indicador-disputa {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #ef4444;
+  pointer-events: none;
+}
+
+.rail-indicador-disputa::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: #ef4444;
+  animation: pulso-disputa 1.4s ease-out infinite;
+}
+
+@keyframes pulso-disputa {
+  from {
+    transform: scale(1);
+    opacity: 0.75;
+  }
+  to {
+    transform: scale(2.8);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rail-indicador-disputa::after,
+  .rail-pilula-status {
+    animation: none !important;
+  }
+}
+
+/* Telas baixas (notebook 1366×768): o menu lateral fica mais compacto para caber tudo. */
+@media (min-width: 861px) and (max-height: 760px) {
+  .rail-logo {
+    width: 42px;
+    height: 42px;
+    margin-bottom: 10px;
+  }
+
+  .rail-nav {
+    gap: 4px;
+  }
+
+  .rail-item {
+    width: 42px;
+    height: 42px;
+  }
+
+  .rail-pilula {
+    gap: 3px;
+    padding: 4px;
+  }
+
+  .rail-indicador-disputa {
+    top: 6px;
+    right: 6px;
+  }
+}
+
+/* Popup "Entre na sua conta gov.br": um só para as três páginas da pílula. */
+.popup-govbr-fundo {
+  position: fixed;
+  inset: 0;
+  z-index: 75;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: var(--fundo-modal);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: aparecer 0.2s ease;
+}
+
+.popup-govbr {
+  position: relative;
+  width: min(380px, 100%);
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 30px 24px 20px;
+  border-radius: 24px;
+  background: var(--superficie-solida);
+  box-shadow: var(--sombra-flutuante);
+  text-align: center;
+  animation: abrir-menu 0.25s var(--curva);
+}
+
+.popup-govbr h2 {
+  margin: 2px 0 0;
+  font-size: 1.15rem;
+}
+
+.popup-govbr p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.popup-govbr-icone {
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: var(--azul-fundo);
+  color: var(--azul);
+}
+
+.popup-govbr-icone svg {
+  width: 28px;
+  height: 28px;
+}
+
+.fechar-popup-govbr {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
+.popup-govbr .botao-govbr {
+  width: 100%;
+  height: 46px;
+  margin-top: 4px;
+  background: #1351b4;
+  color: #ffffff;
+  font-size: 0.95rem;
+}
+
+.popup-govbr .botao-govbr:hover:not(:disabled) {
+  background: #0c3d8c;
+}
+
+.agora-nao-govbr {
+  padding: 4px 10px;
+  border: 0;
+  background: none;
+  color: var(--texto-suave);
+  font: inherit;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.agora-nao-govbr:hover {
+  color: var(--texto);
+  text-decoration: underline;
+}
+
+/* No lugar da lista, sem a conta gov.br conectada: discreto, sem cartão. */
+.sem-conta-govbr {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 56px 16px;
+  text-align: center;
+}
+
+.sem-conta-govbr > svg {
+  width: 34px;
+  height: 34px;
+  color: var(--azul);
+  opacity: 0.8;
+}
+
+.sem-conta-govbr p {
+  margin: 0;
+  max-width: 420px;
+}
+
 .principal {
   flex: 1;
   min-width: 0;
@@ -5288,6 +5514,47 @@ a.kpi:hover {
 
   .rail-item .dica {
     display: none;
+  }
+
+  /* Com muitas funções (Licitações), a barra de baixo rola de lado em vez de cortar a pílula. */
+  .rail-nav {
+    justify-content: flex-start;
+    gap: 4px;
+    overflow-x: auto;
+    padding: 4px 2px;
+    scrollbar-width: none;
+  }
+
+  .rail-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .rail-nav > .rail-item,
+  .rail-nav > .rail-pilula {
+    flex-shrink: 0;
+  }
+
+  .rail-pilula {
+    flex-direction: row;
+    gap: 2px;
+    margin-top: 0;
+    padding: 3px;
+  }
+
+  .rail-pilula .rail-item {
+    width: 40px;
+    height: 40px;
+  }
+
+  .rail-pilula-status {
+    top: 0;
+    left: 2px;
+    right: auto;
+  }
+
+  .rail-indicador-disputa {
+    top: 6px;
+    right: 6px;
   }
 
   .conteudo {
@@ -14035,4 +14302,18 @@ p.etapa-fechada {
 .botao-aplicar-minimo {
   flex-shrink: 0;
   padding: 6px 10px;
+}
+
+/* Aba Cadastradas: contagem até a sessão abrir. */
+.resumo-acomp strong.kpi-contagem {
+  display: block;
+  font-size: 1.05rem;
+  line-height: 1.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dica-cadastradas {
+  margin: 2px 0 8px;
 }

@@ -2,7 +2,7 @@ import { LogOut, MonitorDown, Moon, Settings, Sparkle, Sun, UserRound } from "lu
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { Usuario } from "../../shared/tipos";
 import { api } from "../api";
-import { areaDoCaminho, areasPermitidas, funcaoAtiva } from "../navegacao";
+import { areaDoCaminho, areasPermitidas, type Funcao, funcaoAtiva } from "../navegacao";
 import { link, navegar } from "../rota";
 import { aplicarTema, modoVisivel, preferenciaAtual } from "../tema";
 import { Avatar } from "./Avatar";
@@ -11,6 +11,7 @@ import { useFecharAoClicarFora } from "./useFecharAoClicarFora";
 import { podeVer } from "../../shared/permissoes";
 import { VigiaAcompanhamento } from "../robo/VigiaAcompanhamento";
 import { noAplicativo } from "../robo/ponte";
+import { abrirPopupGovBr, PopupGovBr, TITULO_CONEXAO, useConexaoGovBr } from "../robo/ConexaoGovBr";
 
 interface Props {
   usuario: Usuario;
@@ -36,6 +37,32 @@ export function Layout({ usuario, caminho, aoSair, aoMudarUsuario, children }: P
       barra.scrollTo({ left: ativa.offsetLeft - (barra.clientWidth - ativa.offsetWidth) / 2, behavior: "smooth" });
     }
   }, [area?.chave]);
+
+  // Pílula azul (Cadastradas, Disputas, Acompanhamento): no aplicativo, mostra se a conta gov.br está conectada,
+  // pisca em Disputas quando há disputa acontecendo e abre o popup de login nas páginas dela.
+  const app = noAplicativo();
+  const temPilula = funcoes.some((f) => f.grupo);
+  const naPilula = funcoes.some((f) => f.grupo && funcaoAtiva(caminho, f, funcoes));
+  const conexao = useConexaoGovBr(app && temPilula, naPilula);
+  const blocos: (Funcao | Funcao[])[] = [];
+  for (const f of funcoes) {
+    const ultimo = blocos[blocos.length - 1];
+    if (f.grupo && Array.isArray(ultimo) && ultimo[0].grupo === f.grupo) ultimo.push(f);
+    else blocos.push(f.grupo ? [f] : f);
+  }
+  const itemRail = (f: Funcao) => {
+    const Icone = f.icone;
+    const ativo = funcaoAtiva(caminho, f, funcoes);
+    const disputaAgora = f.caminho === "/disputas" && conexao.emDisputa;
+    const rotulo = disputaAgora ? `${f.rotulo}: disputa acontecendo agora` : f.rotulo;
+    return (
+      <a key={f.caminho} className={`rail-item ${ativo ? "ativo" : ""}`} aria-label={rotulo} aria-current={ativo ? "page" : undefined} {...link(f.caminho)}>
+        <Icone aria-hidden="true" />
+        {disputaAgora && <span className="rail-indicador-disputa" aria-hidden="true" />}
+        <span className="dica">{rotulo}</span>
+      </a>
+    );
+  };
 
   const [menuAberto, setMenuAberto] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -70,16 +97,29 @@ export function Layout({ usuario, caminho, aoSair, aoMudarUsuario, children }: P
           <Sparkle strokeWidth={2.2} />
         </a>
         <nav className="rail-nav">
-          {funcoes.map((f) => {
-            const Icone = f.icone;
-            const ativo = funcaoAtiva(caminho, f, funcoes);
-            return (
-              <a key={f.caminho} className={`rail-item ${ativo ? "ativo" : ""}`} aria-label={f.rotulo} aria-current={ativo ? "page" : undefined} {...link(f.caminho)}>
-                <Icone aria-hidden="true" />
-                <span className="dica">{f.rotulo}</span>
-              </a>
-            );
-          })}
+          {blocos.map((b) =>
+            Array.isArray(b) ? (
+              <div key={`grupo-${b[0].caminho}`} className="rail-pilula" role="group" aria-label="Compras.gov.br (conta gov.br)">
+                {app &&
+                  (conexao.estado === "desconectado" || conexao.estado === "aguardando" ? (
+                    <button
+                      type="button"
+                      className={`rail-pilula-status ${conexao.estado}`}
+                      title={TITULO_CONEXAO[conexao.estado]}
+                      aria-label={TITULO_CONEXAO[conexao.estado]}
+                      onClick={abrirPopupGovBr}
+                    />
+                  ) : (
+                    conexao.estado !== "desconhecido" && (
+                      <span className={`rail-pilula-status ${conexao.estado}`} title={TITULO_CONEXAO[conexao.estado]} role="img" aria-label={TITULO_CONEXAO[conexao.estado]} />
+                    )
+                  ))}
+                {b.map(itemRail)}
+              </div>
+            ) : (
+              itemRail(b)
+            ),
+          )}
           <span className="rail-separador" style={{ marginTop: "auto" }} />
           <a className={`rail-item ${emConfiguracoes ? "ativo" : ""}`} aria-label="Configurações" {...link("/configuracoes")}>
             <Settings aria-hidden="true" />
@@ -147,6 +187,7 @@ export function Layout({ usuario, caminho, aoSair, aoMudarUsuario, children }: P
         </header>
 
         <main className="conteudo">{children}</main>
+        {app && temPilula && <PopupGovBr estado={conexao.estado} automatico={naPilula} />}
       </div>
     </div>
   );
