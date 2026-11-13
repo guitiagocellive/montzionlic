@@ -20,6 +20,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
@@ -235,6 +236,11 @@ type janelaWeb struct {
 	principal  bool
 	inicial    string
 	aoCarregar func(erro error)
+	// Navegação mais recente (só a janela do Compras): para medir quanto cada tentativa levou e para ignorar a
+	// falha de uma navegação que nós mesmos cancelamos ao abrir outra (ela chegava como "erro 9" e contava em dobro).
+	navID     uint64
+	navInicio time.Time
+	navURI    string
 }
 
 type aplicativo struct {
@@ -545,13 +551,30 @@ func (a *aplicativo) ligarWeb(j *janelaWeb) {
 			}), uintptr(unsafe.Pointer(&token)))
 		}
 		if !j.principal {
+			metodo(web, 7, novoManipulador(func(_, args uintptr) uintptr { // add_NavigationStarting
+				var id uint64
+				var p uintptr
+				metodo(args, 9, uintptr(unsafe.Pointer(&id))) // get_NavigationId
+				metodo(args, 3, uintptr(unsafe.Pointer(&p)))  // get_Uri
+				j.navID, j.navInicio, j.navURI = id, time.Now(), textoCOM(p)
+				return 0
+			}), uintptr(unsafe.Pointer(&token)))
 			// Página do gov.br/Compras que não carregou (tempo esgotado, conexão caiu): tenta de novo sozinho,
-			// até 3 vezes em 2 minutos, pela página de login (o link antigo do gov.br expira).
+			// pela página de login (o link antigo do gov.br expira), com espera crescente.
 			metodo(web, 15, novoManipulador(func(_, args uintptr) uintptr { // add_NavigationCompleted
 				var ok int32
 				var status int32
+				var id uint64
 				metodo(args, 3, uintptr(unsafe.Pointer(&ok)))     // get_IsSuccess
 				metodo(args, 4, uintptr(unsafe.Pointer(&status))) // get_WebErrorStatus
+				metodo(args, 5, uintptr(unsafe.Pointer(&id)))     // get_NavigationId
+				if ok == 0 && id != 0 && j.navID != 0 && id != j.navID {
+					// Navegação antiga, cancelada porque outra começou (ex.: a página de erro do Montzion): não é
+					// uma tentativa nova.
+					registrarLog("janela do Compras.gov.br: navegação anterior cancelada (erro %d), ignorada", status)
+					return 0
+				}
+				levou := time.Since(j.navInicio).Milliseconds()
 				if ok != 0 {
 					if f := j.fonte(); strings.HasPrefix(f, "http") {
 						falhasCompras.Store(0) // carregou uma página de verdade: zera as tentativas
@@ -563,7 +586,7 @@ func (a *aplicativo) ligarWeb(j *janelaWeb) {
 					// Em vez da página de erro do Edge (cujo "Atualizar" reabre o link vencido do gov.br), mostra a
 					// página do Montzion, que tenta de novo sozinha pela página de login, com espera crescente.
 					n := falhasCompras.Add(1)
-					registrarLog("janela do Compras.gov.br: página não carregou (erro %d, tentativa %d)", status, n)
+					registrarLog("janela do Compras.gov.br: página não carregou (erro %d, tentativa %d) em %d ms: %s", status, n, levou, semValores(j.navURI))
 					go func() {
 						diag := testarGovBr()
 						guardarPaginaErro(paginaGovForaDoAr(int(n), status, diag, j.inicial))

@@ -5,10 +5,12 @@ package main
 // sempre pela página de login (o endereço antigo do gov.br expira e o "Atualizar" do Edge não resolve).
 
 import (
+	"crypto/tls"
 	"fmt"
 	"html"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -49,6 +51,8 @@ type diagnosticoGovBr struct {
 	Proxy     string // proxy do Windows (a janela usa; o teste do aplicativo não)
 	IPv4      int    // endereços do gov.br no DNS do Windows
 	IPv6      int
+	Etapas    string // tempos de DNS, TCP, TLS e resposta
+	Parou     string // etapa em que parou (quando falhou)
 }
 
 // redeGovBr: o que pode fazer a janela (Edge WebView2) falhar enquanto o aplicativo consegue: proxy do Windows e
@@ -67,20 +71,73 @@ func redeGovBr(d *diagnosticoGovBr) {
 }
 
 // testarGovBr: o próprio aplicativo tenta falar com o gov.br, para dizer se o problema é do gov.br/da internet
-// ou só da janela (só abre a página inicial do login, sem enviar nada).
+// ou só da janela (só abre a página inicial do login, sem enviar nada). Um teste por vez; o resultado vale 15 s
+// (antes, cada falha da janela disparava um teste novo e o gov.br era consultado em dobro).
+var testeGovBr struct {
+	mu        sync.Mutex
+	em        time.Time
+	resultado diagnosticoGovBr
+}
+
 func testarGovBr() diagnosticoGovBr {
-	cli := &http.Client{Timeout: 12 * time.Second, Transport: &http.Transport{Proxy: http.ProxyFromEnvironment}}
+	testeGovBr.mu.Lock()
+	defer testeGovBr.mu.Unlock()
+	if time.Since(testeGovBr.em) < 15*time.Second {
+		return testeGovBr.resultado
+	}
+	d := testarGovBrAgora()
+	testeGovBr.em, testeGovBr.resultado = time.Now(), d
+	return d
+}
+
+func testarGovBrAgora() diagnosticoGovBr {
+	cli := &http.Client{Timeout: 12 * time.Second, Transport: &http.Transport{Proxy: http.ProxyFromEnvironment, DisableKeepAlives: true}}
+	// Em que etapa a conexão parou: DNS, conexão TCP, TLS ou a resposta. É o que diz se é a rede (TCP não
+	// conecta), algo no caminho segurando pacotes grandes (TCP conecta e o TLS trava) ou o gov.br lento.
+	var dnsMs, tcpMs, tlsMs, respMs int64 = -1, -1, -1, -1
 	inicio := time.Now()
-	r, err := cli.Get("https://sso.acesso.gov.br/")
+	ms := func() int64 { return time.Since(inicio).Milliseconds() }
+	trace := &httptrace.ClientTrace{
+		DNSDone: func(httptrace.DNSDoneInfo) { dnsMs = ms() },
+		ConnectDone: func(_, _ string, err error) {
+			if err == nil {
+				tcpMs = ms()
+			}
+		},
+		TLSHandshakeDone: func(_ tls.ConnectionState, err error) {
+			if err == nil {
+				tlsMs = ms()
+			}
+		},
+		GotFirstResponseByte: func() { respMs = ms() },
+	}
+	req, _ := http.NewRequest("GET", "https://sso.acesso.gov.br/", nil)
+	req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
+	r, err := cli.Do(req)
 	d := diagnosticoGovBr{Segundos: time.Since(inicio).Seconds()}
+	etapa := func(nome string, v int64) string {
+		if v < 0 {
+			return nome + " —"
+		}
+		return fmt.Sprintf("%s %d ms", nome, v)
+	}
+	d.Etapas = strings.Join([]string{etapa("DNS", dnsMs), etapa("TCP", tcpMs), etapa("TLS", tlsMs), etapa("resposta", respMs)}, ", ")
+	switch {
+	case tcpMs < 0:
+		d.Parou = "conexão TCP"
+	case tlsMs < 0:
+		d.Parou = "TLS (conectou, mas a conversa segura não terminou)"
+	case respMs < 0:
+		d.Parou = "resposta do gov.br"
+	}
 	redeGovBr(&d)
-	rede := fmt.Sprintf("DNS: %d IPv4, %d IPv6; proxy do Windows: %s", d.IPv4, d.IPv6, textoOu(d.Proxy, "nenhum"))
+	rede := fmt.Sprintf("etapas: %s; DNS: %d IPv4, %d IPv6; proxy do Windows: %s", d.Etapas, d.IPv4, d.IPv6, textoOu(d.Proxy, "nenhum"))
 	if err != nil {
 		d.Erro = err.Error()
 		if strings.Contains(d.Erro, "Timeout") || strings.Contains(d.Erro, "deadline") {
 			d.Erro = "não respondeu em 12 segundos"
 		}
-		registrarLog("teste do gov.br pelo aplicativo: falhou em %.1f s (%s); %s", d.Segundos, mascararNumeros(d.Erro), mascararNumeros(rede))
+		registrarLog("teste do gov.br pelo aplicativo: falhou em %.1f s (%s; parou em: %s); %s", d.Segundos, mascararNumeros(d.Erro), d.Parou, mascararNumeros(rede))
 		return d
 	}
 	r.Body.Close()
@@ -96,7 +153,9 @@ func paginaGovForaDoAr(tentativa int, status int32, d diagnosticoGovBr, destino 
 	espera := esperaNovaTentativa(tentativa)
 	diag := ""
 	if d.Respondeu {
-		espera = min(espera, 5) // o gov.br respondeu ao aplicativo: tenta logo
+		// O gov.br respondeu ao aplicativo: tenta mais cedo, mas sem martelar (antes era sempre 5 s: dezenas de
+		// tentativas seguidas, e o gov.br pode passar a segurar as conexões deste computador).
+		espera = min(espera, 20)
 		diag = fmt.Sprintf("O aplicativo testou agora e o gov.br <b>respondeu</b> (em %s s). Deve ter sido uma demora momentânea: a janela já vai tentar de novo.",
 			strings.Replace(fmt.Sprintf("%.1f", d.Segundos), ".", ",", 1))
 		if tentativa >= 3 {
@@ -109,6 +168,9 @@ func paginaGovForaDoAr(tentativa int, status int32, d diagnosticoGovBr, destino 
 		}
 	} else {
 		diag = "O aplicativo também testou agora e o gov.br <b>" + html.EscapeString(d.Erro) + "</b>. O problema está no gov.br (que costuma ficar lento) ou na sua internet — não no Montzion."
+		if d.Parou != "" {
+			diag += " Parou na etapa: " + html.EscapeString(d.Parou) + "."
+		}
 	}
 	motivo := map[int32]string{7: "demorou demais para responder", 6: "não está respondendo", 13: "não foi encontrado (DNS)", 12: "recusou a conexão", 9: "interrompeu a conexão", 10: "reiniciou a conexão", 11: "a internet caiu"}[status]
 	if motivo == "" {

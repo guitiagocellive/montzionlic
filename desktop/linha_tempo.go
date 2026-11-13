@@ -195,6 +195,17 @@ func (m *motor) estadoRoboTexto() string {
 	}
 	fmt.Fprintf(&b, "Fase: %s · logado: %v · tempo real: %v · pedidos: %s · captchas prontos: %d (deixar prontos agora: %v)\n",
 		m.fase, m.token != "", m.tempoReal, modo, prontos, precisa)
+	testeGovBr.mu.Lock()
+	if !testeGovBr.em.IsZero() {
+		g := testeGovBr.resultado
+		res := "respondeu"
+		if !g.Respondeu {
+			res = "falhou (" + g.Erro + ", parou em: " + textoOu(g.Parou, "?") + ")"
+		}
+		fmt.Fprintf(&b, "Último teste do gov.br (há %.0f s): %s em %.1f s · %s · tentativas seguidas da janela: %d\n",
+			time.Since(testeGovBr.em).Seconds(), res, g.Segundos, g.Etapas, falhasCompras.Load())
+	}
+	testeGovBr.mu.Unlock()
 	var linhas []string
 	for chave, c := range m.compras {
 		for n, it := range c.itens {
