@@ -1,9 +1,9 @@
 {
-  "versao": "3.1.39",
+  "versao": "3.1.40",
   "data": "2026-11-13",
   "novidades": [
-    "\"Ganhar tempo\" agora funciona em qualquer posição: nos 10 s finais o robô dá só o intervalo mínimo abaixo do SEU próprio lance e não cobre os concorrentes. O cronômetro do pregão é prorrogado: quem está na frente acha que já ganhou e para de acompanhar. Quando quiser atacar, desmarque a opção (com o robô ligado): o robô volta a disputar na mesma hora, cobrindo o 1º se couber no seu mínimo.",
-    "Ganhando tempo, se o lance for recusado por valor igual ao de outra empresa, o robô tenta um intervalo a mais abaixo (sem passar do mínimo). Enquanto ganha tempo, não lê a classificação (poupa captcha e pedidos ao Compras.gov.br durante horas).",
-    "O \"Testar o robô\" avisa quando um item está com \"Ganhar tempo\" ligado (o robô não cobre ninguém até você desmarcar)."
+    "Relatório de cada disputa: quando a disputa de um item termina, o aplicativo salva sozinho um relatório com o resultado (colocação), um resumo em números e a linha do tempo completa do item. O resumo traz os lances dos concorrentes, os seus lances (aceitos e recusados), o tempo de reação do robô a cada lance de concorrente (mediana e pior caso) e o tempo de aceite do Compras.gov.br.",
+    "Página Disputas: botão \"Relatórios das disputas\" (abaixo do \"Testar o robô\"). Abre a lista, mostra o relatório e copia para mandar ao suporte, mesmo horas depois. Guarda os 60 mais recentes, sem chaves nem CPF/CNPJ.",
+    "Linha do tempo: o aviso do nosso próprio lance não é mais contado como lance de concorrente."
   ]
 }

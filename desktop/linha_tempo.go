@@ -69,6 +69,8 @@ func marcarMudancasConfig(antes, depois map[string]configItem) {
 type eventoRobo struct {
 	em    time.Time
 	texto string
+	tipo  string // para o relatório da disputa: melhor-conc, enviando, lance-ok, lance-recusado…
+	ms    int64  // tempo do pedido ao Compras.gov.br (nos eventos de lance)
 }
 
 var linhaTempo struct {
@@ -78,7 +80,16 @@ var linhaTempo struct {
 	ligadoEm map[string]time.Time // quando o robô foi ligado em cada item
 	melhor   map[string]float64   // último melhor lance visto por item
 	classif  map[string]string    // última classificação lida por item (para registrar só quando muda)
+	// Para o relatório de cada disputa: a linha do tempo completa de cada item (até 5.000 eventos) e os eventos
+	// gerais (captcha, freio) das últimas horas.
+	porItem map[string][]eventoRobo
+	gerais  []eventoRobo
 }
+
+const (
+	maxEventosItem   = 5000
+	maxEventosGerais = 3000
+)
 
 // mudouClassificacao: a classificação lida é diferente da anterior do item.
 func mudouClassificacao(k, resumo string) bool {
@@ -97,15 +108,35 @@ const maxEventosRobo = 300
 // MONTZION_LINHA_NO_REGISTRO=1 (só para testes): a linha do tempo também vai para o registro.
 var linhaNoRegistro = os.Getenv("MONTZION_LINHA_NO_REGISTRO") == "1"
 
-func marcarRobo(formato string, args ...any) {
+func marcarRobo(formato string, args ...any) { marcarRoboT("", 0, formato, args...) }
+
+// marcarRoboT: evento com tipo (e o tempo do pedido, nos lances), para as contas do relatório da disputa.
+func marcarRoboT(tipo string, ms int64, formato string, args ...any) {
 	if linhaNoRegistro {
 		registrarLog("linha: "+formato, args...)
 	}
+	ev := eventoRobo{time.Now(), fmt.Sprintf(formato, args...), tipo, ms}
 	linhaTempo.mu.Lock()
 	defer linhaTempo.mu.Unlock()
-	linhaTempo.eventos = append(linhaTempo.eventos, eventoRobo{time.Now(), fmt.Sprintf(formato, args...)})
+	linhaTempo.eventos = append(linhaTempo.eventos, ev)
 	if n := len(linhaTempo.eventos); n > maxEventosRobo {
 		linhaTempo.eventos = append([]eventoRobo(nil), linhaTempo.eventos[n-maxEventosRobo:]...)
+	}
+	// Eventos de um item ("compra …392026 item 1: …") vão também para a linha do tempo completa dele.
+	if rotulo, _, ok := strings.Cut(ev.texto, ": "); ok && strings.HasPrefix(rotulo, "compra ") {
+		if linhaTempo.porItem == nil {
+			linhaTempo.porItem = map[string][]eventoRobo{}
+		}
+		l := append(linhaTempo.porItem[rotulo], ev)
+		if len(l) > maxEventosItem {
+			l = l[len(l)-maxEventosItem:]
+		}
+		linhaTempo.porItem[rotulo] = l
+	} else {
+		linhaTempo.gerais = append(linhaTempo.gerais, ev)
+		if n := len(linhaTempo.gerais); n > maxEventosGerais {
+			linhaTempo.gerais = append([]eventoRobo(nil), linhaTempo.gerais[n-maxEventosGerais:]...)
+		}
 	}
 }
 
@@ -159,7 +190,7 @@ func marcarDecisao(k string, d decisao) {
 }
 
 // marcarMelhor: o melhor lance do item mudou (aviso do tempo real ou leitura).
-func marcarMelhor(k string, it *itemMotor) {
+func marcarMelhor(k string, it *itemMotor, meu bool) {
 	e := lerItem(it.bruto)
 	if !fasesDeLance[e.Fase] || e.Melhor == nil {
 		return
@@ -178,7 +209,13 @@ func marcarMelhor(k string, it *itemMotor) {
 	if e.Nosso != nil {
 		nosso = reaisTexto(*e.Nosso, true)
 	}
-	marcarRobo("%s: melhor lance %s (nosso %s, situação %s, fase %s)", rotuloItem(k), reaisTexto(*e.Melhor, true), nosso, e.Situacao, e.Fase)
+	tipo := "melhor"
+	if meu {
+		nosso += " — é o nosso lance que acabou de entrar"
+	} else if e.Nosso != nil && *e.Melhor < *e.Nosso-1e-9 {
+		tipo = "melhor-conc" // um concorrente está à frente: lance de concorrente (para o tempo de reação do relatório)
+	}
+	marcarRoboT(tipo, 0, "%s: melhor lance %s (nosso %s, situação %s, fase %s)", rotuloItem(k), reaisTexto(*e.Melhor, true), nosso, e.Situacao, e.Fase)
 }
 
 func textoLinhaTempo() string {

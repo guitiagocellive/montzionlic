@@ -667,7 +667,7 @@ func (m *motor) mesclar(c *compraMotor, novo map[string]any, agora time.Time) st
 		it.recebidoEm = agora
 	}
 	it.atualizadoEm = agora
-	marcarMelhor(chaveItem(c.chave, int(*n)), it)
+	marcarMelhor(chaveItem(c.chave, int(*n)), it, m.ehMeuValor(chaveItem(c.chave, int(*n)), valorDe(it.bruto["melhorValorGeral"])))
 	return chaveItem(c.chave, int(*n))
 }
 
@@ -910,6 +910,19 @@ func (m *motor) reconhecerMeuLance(k string, e *estadoItem, agora time.Time) {
 			return
 		}
 	}
+}
+
+// ehMeuValor (com m.mu travado): o valor é de um lance que o robô mandou nos últimos 30 s.
+func (m *motor) ehMeuValor(k string, v *float64) bool {
+	if v == nil {
+		return false
+	}
+	for _, x := range m.meusValores[k] {
+		if time.Since(x.em) < 30*time.Second && math.Abs(x.valor-*v) < 0.00005 {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *motor) esquecerMeuValor(k string, valor float64) {
@@ -1285,7 +1298,7 @@ func (m *motor) avaliar(k string) {
 	reacao := agora.Sub(it.atualizadoEm).Milliseconds()
 	m.mensagens[k] = mensagemItem{Texto: "Enviando " + reaisTexto(d.Valor, cfg.QuatroCasas) + "…"}
 	m.mu.Unlock()
-	marcarRobo("%s: enviando lance %s (%s)", rotuloItem(k), reaisTexto(d.Valor, cfg.QuatroCasas), d.Tipo)
+	marcarRoboT("enviando", 0, "%s: enviando lance %s (%s)", rotuloItem(k), reaisTexto(d.Valor, cfg.QuatroCasas), d.Tipo)
 	go m.enviarLance(c.chave, numero, k, d, e.Fase, cfg.QuatroCasas, reacao)
 }
 
@@ -1313,7 +1326,11 @@ func (m *motor) enviarLance(compra string, numero int, k string, d decisao, fase
 	if !ok {
 		resultado = "RECUSADO: " + msg
 	}
-	marcarRobo("%s: lance %s %s (%d) — pedido ao Compras.gov.br %d ms, %d ms desde o último aviso do item%s", rotuloItem(k), reaisTexto(d.Valor, quatro), resultado, status, time.Since(inicio).Milliseconds(), reacao+time.Since(inicio).Milliseconds(), ligou)
+	tipoEv := "lance-ok"
+	if !ok {
+		tipoEv = "lance-recusado"
+	}
+	marcarRoboT(tipoEv, time.Since(inicio).Milliseconds(), "%s: lance %s %s (%d, %s) — pedido ao Compras.gov.br %d ms, %d ms desde o último aviso do item%s", rotuloItem(k), reaisTexto(d.Valor, quatro), resultado, status, d.Tipo, time.Since(inicio).Milliseconds(), reacao+time.Since(inicio).Milliseconds(), ligou)
 	agora := time.Now()
 	m.mu.Lock()
 	m.seqLance++
@@ -1460,6 +1477,7 @@ func (m *motor) fimDaDisputa(compra string, numero int) {
 		}
 		m.mu.Unlock()
 		registrarLog("robô: disputa encerrada compra %s item %d: posição %d de %d", mascararNumeros(compra), numero, r.Posicao, r.Total)
+		salvarRelatorioDisputa(rotuloItem(k), r)
 	}()
 }
 

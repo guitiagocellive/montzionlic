@@ -584,6 +584,7 @@ func (p *ponte) atender(sessao, payload string) {
 		Atualizar bool                  `json:"atualizar"`
 		Config    map[string]configItem `json:"config"`
 		EnviadoEm int64                 `json:"enviadoEm"` // hora (ms) em que a página mandou o pedido
+		Relatorio string                `json:"relatorio"` // nome do arquivo do relatório da disputa
 		IDs       []int64               `json:"ids"`
 		Texto     string                `json:"texto"`
 		Pedido    pedidoCompras         `json:"pedido"`
@@ -624,6 +625,14 @@ func (p *ponte) atender(sessao, payload string) {
 		resposta = p.motor.Classificacao(pedido.Compra, pedido.Item)
 	case "fornecedor":
 		resposta = p.motor.PedidoCompras(pedido.Pedido)
+	case "relatorios":
+		resposta = mapa{"relatorios": listarRelatorios()}
+	case "relatorio":
+		if texto, err := lerRelatorio(pedido.Relatorio); err != nil {
+			resposta = mapa{"erro": err.Error()}
+		} else {
+			resposta = mapa{"texto": texto}
+		}
 	case "testarRobo":
 		resposta = p.motor.TestarRobo()
 	case "testarLeitura":

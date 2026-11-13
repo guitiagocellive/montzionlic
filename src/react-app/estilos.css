@@ -13978,3 +13978,50 @@ p.etapa-fechada {
     width: 100%;
   }
 }
+
+/* Disputas: relatórios das disputas (lista e texto). */
+.lista-relatorios {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.item-relatorio {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--borda, #e6e6eb);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.item-relatorio:hover {
+  border-color: var(--borda-forte, #c9c9d1);
+}
+.item-relatorio small {
+  color: var(--texto-fraco, #71717a);
+}
+.relatorio-disputa {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.texto-relatorio {
+  max-height: 60vh;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--borda, #e6e6eb);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

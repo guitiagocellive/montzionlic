@@ -1,4 +1,4 @@
-import { Check, ChevronDown, CircleX, ClipboardCopy, Download, Gauge, Info, ListOrdered, LogIn, Play, RefreshCw, Square, TriangleAlert, Volume2, VolumeX, Zap } from "lucide-react";
+import { Check, ChevronDown, CircleX, ClipboardCopy, Download, FileText, Gauge, Info, ListOrdered, LogIn, Play, RefreshCw, Square, TriangleAlert, Volume2, VolumeX, Zap } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { podeEditar, podeVer } from "../../shared/permissoes";
 import { type CompraDisputa, type ConfigItemRobo, FASES, ITEM_ROBO_PADRAO, type ItemDisputa, lerCompra, lerItemDisputa, precisaQuatroCasas, SEGUNDOS_FINAIS } from "../../shared/robo";
@@ -7,7 +7,7 @@ import { api, mensagemDeErro } from "../api";
 import { avisar, Modal, Vazio } from "../components/Ui";
 import { paraNumero } from "../formato";
 import { link } from "../rota";
-import { noAplicativo, type PainelRobo, ponte, type ResultadoTesteRobo, temPonte } from "../robo/ponte";
+import { noAplicativo, type PainelRobo, ponte, type RelatorioDisputa, type ResultadoTesteRobo, temPonte } from "../robo/ponte";
 import { BotaoRecarregarGovBr } from "../robo/ErroCompras";
 
 // Página Disputas: o robô roda dentro do aplicativo (recebe os lances em tempo real e responde na hora).
@@ -83,6 +83,7 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
   const [fechada, setFechada] = useState<Record<string, string>>({});
   const [enviandoFechada, setEnviandoFechada] = useState<string | null>(null);
   const [testeRobo, setTesteRobo] = useState(false);
+  const [verRelatorios, setVerRelatorios] = useState(false);
 
   // A ponte pode aparecer um pouco depois da página carregar.
   useEffect(() => {
@@ -794,15 +795,91 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
             <button className="botao secundario" onClick={() => setTesteRobo(true)} title="Mede a velocidade do caminho do lance, procura erros e sugere ajustes. Não envia lance.">
               <Gauge /> Testar o robô
             </button>
+            <button className="botao secundario" onClick={() => setVerRelatorios(true)} title="O aplicativo salva um relatório completo de cada disputa quando ela termina: resultado, tempos de reação e a linha do tempo inteira.">
+              <FileText /> Relatórios das disputas
+            </button>
           </div>
         </footer>
       )}
       {testeRobo && <JanelaTesteRobo aoFechar={() => setTesteRobo(false)} />}
+      {verRelatorios && <JanelaRelatorios aoFechar={() => setVerRelatorios(false)} />}
       {resultadosNaTela && resultadosNaTela.length > 0 && (
         <JanelaResultados resultados={resultadosNaTela} compras={compras} aoFechar={() => setResultadosNaTela(null)} />
       )}
       {classificacao && <JanelaClassificacao {...classificacao} quatro={(config[`${classificacao.compra}:${classificacao.item}`] ?? ITEM_ROBO_PADRAO).quatroCasas} aoFechar={() => setClassificacao(null)} />}
     </>
+  );
+}
+
+/** Relatórios das disputas: um por item, salvo pelo aplicativo quando a disputa termina. Abre e copia para o suporte. */
+function JanelaRelatorios({ aoFechar }: { aoFechar: () => void }) {
+  const [lista, setLista] = useState<RelatorioDisputa[] | null>(null);
+  const [erro, setErro] = useState("");
+  const [aberto, setAberto] = useState<{ nome: string; texto: string } | null>(null);
+  useEffect(() => {
+    ponte
+      .relatorios()
+      .then((r) => setLista(r.relatorios ?? []))
+      .catch((e) => {
+        const msg = mensagemDeErro(e);
+        setErro(/desconhecido/i.test(msg) ? "Atualize o aplicativo para ver os relatórios das disputas." : msg);
+      });
+  }, []);
+  async function abrir(nome: string) {
+    try {
+      const r = await ponte.relatorio(nome);
+      if (r.erro || !r.texto) throw new Error(r.erro || "Relatório vazio.");
+      setAberto({ nome, texto: r.texto });
+    } catch (e) {
+      avisar(mensagemDeErro(e), "erro");
+    }
+  }
+  async function copiar(texto: string) {
+    try {
+      await navigator.clipboard.writeText(texto);
+      avisar("Relatório copiado. Cole na conversa com o suporte.");
+    } catch (e) {
+      avisar(mensagemDeErro(e), "erro");
+    }
+  }
+  return (
+    <Modal titulo={aberto ? "Relatório da disputa" : "Relatórios das disputas"} aoFechar={aoFechar}>
+      {aberto ? (
+        <div className="relatorio-disputa">
+          <div className="linha-acoes">
+            <button className="botao secundario" onClick={() => setAberto(null)}>
+              ‹ Voltar
+            </button>
+            <button className="botao acento" onClick={() => copiar(aberto.texto)}>
+              <ClipboardCopy /> Copiar relatório
+            </button>
+          </div>
+          <pre className="texto-relatorio">{aberto.texto}</pre>
+        </div>
+      ) : erro ? (
+        <p className="alerta erro">{erro}</p>
+      ) : !lista ? (
+        <p className="texto-suave carregando-linha">
+          <RefreshCw className="girando" /> Lendo os relatórios…
+        </p>
+      ) : !lista.length ? (
+        <p className="texto-suave">
+          Nenhum relatório ainda. Quando a disputa de um item seu terminar, o aplicativo salva aqui o resultado, os tempos de reação do robô e a linha do tempo completa.
+        </p>
+      ) : (
+        <ul className="lista-relatorios">
+          {lista.map((r) => (
+            <li key={r.nome}>
+              <button className="item-relatorio" onClick={() => abrir(r.nome)}>
+                <strong>{r.titulo || r.nome}</strong>
+                <span>{r.resultado}</span>
+                <small>{new Date(r.em).toLocaleString("pt-BR")}</small>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Modal>
   );
 }
 
