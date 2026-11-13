@@ -23,12 +23,19 @@ export function Modal({
   largo?: boolean;
 }) {
   const fundo = useRef<HTMLDivElement>(null);
+  const fechar = useRef(aoFechar);
+  fechar.current = aoFechar;
   useEffect(() => {
-    // Com uma janela aberta por cima de outra, o Esc fecha só a de cima.
+    // Com uma janela aberta por cima de outra, o Esc fecha só a de cima — e só uma por tecla (a de cima pode sumir
+    // da tela antes de a de baixo receber a mesma tecla).
     const aoTeclar = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
+      const marcado = e as KeyboardEvent & { montzionModalFechou?: boolean };
+      if (e.key !== "Escape" || marcado.montzionModalFechou) return;
       const todas = document.querySelectorAll(".modal-fundo");
-      if (todas[todas.length - 1] === fundo.current) aoFechar();
+      if (todas[todas.length - 1] === fundo.current) {
+        marcado.montzionModalFechou = true;
+        fechar.current();
+      }
     };
     window.addEventListener("keydown", aoTeclar);
     document.body.style.overflow = "hidden";
@@ -36,7 +43,7 @@ export function Modal({
       window.removeEventListener("keydown", aoTeclar);
       if (!document.querySelector(".modal-fundo")) document.body.style.overflow = "";
     };
-  }, [aoFechar]);
+  }, []);
 
   // Renderiza direto no <body> para ficar sempre por cima do topo e do menu.
   return createPortal(

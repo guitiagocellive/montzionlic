@@ -1,5 +1,5 @@
 import { ErroCompras } from "../../robo/ErroCompras";
-import { BellRing, ChevronDown, Download, Eye, FileText, FileUp, Gavel, Loader2, MessageSquare, Paperclip, Send, ShieldQuestion, Trash2, UserRound, Users } from "lucide-react";
+import { BellRing, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Download, Eye, Mail, FileUp, Gavel, Loader2, MessageSquare, Paperclip, Send, Trash2 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   definirCodigoSolicitada,
@@ -340,13 +340,19 @@ export function ItemCompras({
   cnpj,
   abaInicial = "minha",
   participa = true,
+  anterior,
+  proximo,
+  aoVoltar,
 }: {
   compra: CompraAcomp;
   item: ItemAcomp;
   cnpj: string;
   abaInicial?: Aba;
-  /** Item sem proposta sua: mostra só os participantes e os lances. */
+  /** Item sem proposta sua: mostra só as propostas de todos e os lances. */
   participa?: boolean;
+  anterior?: () => void;
+  proximo?: () => void;
+  aoVoltar?: () => void;
 }) {
   const [aba, setAba] = useState<Aba>(participa ? abaInicial : "todos");
   const dados = useCarga(true, () => carregarPropostas(compra, item.numero, cnpj), chavePropostas(compra, item.numero));
@@ -358,7 +364,6 @@ export function ItemCompras({
   const colocacao = estado.colocacao ?? minha?.colocacao ?? item.colocacao;
   const analise = estado.analise;
   const conversa = conversaDoItem(compra.mensagens, item.numero, cnpj);
-  // Convocações abertas: as da lista de itens e as da sua proposta (sem repetir).
   const iniciaisCarga = useCarga(aba === "todos" && !!dados.dados && !dados.dados.iniciais, () => carregarIniciais(compra, item.numero), `iniciais:${compra.chave}:${item.numero}`);
   const extras = useMemo(() => {
     const presentes = new Set((dados.dados?.todas ?? []).map((p) => p.cnpj));
@@ -366,28 +371,91 @@ export function ItemCompras({
       .filter((p) => p.cnpj && !presentes.has(p.cnpj))
       .map((p) => ({ ...p, desclassificada: true, colocacao: null, situacao: p.situacao || "Desclassificada na análise das propostas" }));
   }, [iniciaisCarga.dados, dados.dados]);
+  // Convocações abertas: as da lista de itens e as da sua proposta (sem repetir).
   const pendencias = [...item.pendencias, ...(minha?.pendencias ?? [])].filter((p, i, l) => l.findIndex((x) => x.tipo === p.tipo) === i);
   const convocadoAnexos = pendencias.some((p) => p.tipo === "anexos");
   const emDiligencia = pendencias.some((p) => p.tipo === "diligencia");
+  const chat = useRef<HTMLDivElement>(null);
 
   return (
-    <div className="item-compras">
-      <div className="abas-compras" role="tablist">
+    <div className="item-compras cn-item-pagina">
+      <div className="cn-item-cabeca">
+        <div className="cn-item-desc">
+          <strong>
+            {item.numero} &nbsp;{item.descricao.toUpperCase()}
+          </strong>
+          <span className="cn-status">{estado.momento || item.etapa || item.situacao || "—"}</span>
+        </div>
+        <dl className="cn-item-qtd">
+          <dt>Qtde solicitada</dt>
+          <dd>{item.quantidade ?? "—"}</dd>
+          <dt>Valor estimado (unitário)</dt>
+          <dd>{item.valorEstimado != null ? moeda4(item.valorEstimado) : "Não informado"}</dd>
+        </dl>
+        <div className="cn-item-acoes">
+          {participa && (
+            <button
+              className="cn-icone"
+              title="Ir para o chat"
+              aria-label="Ir para o chat"
+              onClick={() => {
+                setAba("minha");
+                setTimeout(() => chat.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+              }}
+            >
+              <Mail size={15} />
+            </button>
+          )}
+          <button className="cn-icone" onClick={anterior} disabled={!anterior} aria-label="Item anterior" title="Item anterior">
+            <ChevronLeft size={16} />
+          </button>
+          <button className="cn-icone" onClick={proximo} disabled={!proximo} aria-label="Próximo item" title="Próximo item">
+            <ChevronRight size={16} />
+          </button>
+          {aoVoltar && (
+            <button className="cn-icone" onClick={aoVoltar} aria-label="Voltar para os itens" title="Voltar para os itens">
+              <ChevronUp size={16} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="abas-compras cn-abas" role="tablist">
         {participa && (
           <button role="tab" aria-selected={aba === "minha"} className={aba === "minha" ? "ativo" : ""} onClick={() => setAba("minha")}>
-            <UserRound size={15} /> Minha participação
+            Minha proposta
           </button>
         )}
         <button role="tab" aria-selected={aba === "todos"} className={aba === "todos" ? "ativo" : ""} onClick={() => setAba("todos")}>
-          <Users size={15} /> Todos os participantes{participantes ? ` (${participantes})` : ""}
+          Todas as propostas
         </button>
         <button role="tab" aria-selected={aba === "lances"} className={aba === "lances" ? "ativo" : ""} onClick={() => setAba("lances")}>
-          <Gavel size={15} /> Lances
+          Lances
         </button>
       </div>
 
       {aba === "minha" && (
-        <div className="painel-compras">
+        <div className="cn-painel">
+          <div className="cn-resumo resumo-minha-proposta">
+            <div>
+              <span>Classificação</span>
+              <strong>{colocacao != null ? `${colocacao}º${participantes ? ` de ${participantes} propostas` : ""}` : "—"}</strong>
+            </div>
+            <div>
+              <span>Declarações</span>
+              <strong>ME/EPP: {minha?.meEpp || compra.meEpp ? "Sim" : compra.meEpp === false || minha ? "Não" : "—"}</strong>
+            </div>
+            <div>
+              <span>UF do fornecedor</span>
+              <strong>{minha?.uf || compra.uf || "—"}</strong>
+            </div>
+            <div>
+              <span>Chance</span>
+              <span className={`chip ${COR_CHANCE[estado.chance]}`} title={estado.explicacao}>
+                {ROTULO_CHANCE[estado.chance]}
+              </span>
+            </div>
+          </div>
           {pendencias.length > 0 && (
             <div className="faixa-pendencias">
               <BellRing size={16} />
@@ -397,31 +465,7 @@ export function ItemCompras({
               </span>
             </div>
           )}
-          <div className="resumo-minha-proposta">
-            <div className="destaque">
-              <span>Classificação</span>
-              <strong>{colocacao != null ? `${colocacao}º` : "—"}</strong>
-              <small>{participantes ? `de ${participantes} propostas` : ""}</small>
-            </div>
-            <div>
-              <span>Chance</span>
-              <span className={`chip ${COR_CHANCE[estado.chance]}`}>{ROTULO_CHANCE[estado.chance]}</span>
-              <small>{estado.explicacao}</small>
-            </div>
-            <div>
-              <span>Situação</span>
-              <strong className={minha?.desclassificada ? "texto-vermelho" : estado.chance === "ganhou" ? "texto-verde" : ""}>{estado.momento || "—"}</strong>
-              {dados.dados?.situacaoItem && <small>Item: {dados.dados.situacaoItem}</small>}
-              {minha?.motivo && <small className="texto-vermelho">Motivo: {minha.motivo}</small>}
-            </div>
-            <div>
-              <span>Declarações</span>
-              <strong>ME/EPP: {minha?.meEpp || compra.meEpp ? "Sim" : compra.meEpp === false || minha ? "Não" : "—"}</strong>
-              <small>UF {minha?.uf || compra.uf || "—"}</small>
-            </div>
-          </div>
-
-          <ul className="analise-item">
+          <ul className="analise-item cn-analise">
             {analise?.souPrimeira && <li className="bom">Você é a 1ª proposta válida: é a próxima (ou a atual) a ser analisada pelo pregoeiro.</li>}
             {analise && !analise.souPrimeira && analise.aFrenteValidas > 0 && (
               <li>
@@ -441,45 +485,31 @@ export function ItemCompras({
                 {conversa.ultima ? `: “${resumir(conversa.ultima.texto, 110)}”` : "."}
               </li>
             )}
-            {!analise && dados.carregando && (
-              <li className="texto-fraco">
-                <Loader2 className="girando" size={13} /> Lendo as propostas do item…
-              </li>
-            )}
           </ul>
 
-          <section className="cartao-secao-compras">
-            <h4>
-              <FileText size={15} /> Minha proposta
-            </h4>
-            <Estado carregando={dados.carregando && !minha} erro={minha ? "" : dados.erro} recarregar={dados.recarregar}>
-              {minha ? <DadosProposta p={minha} quantidadeItem={item.quantidade} /> : <p className="texto-fraco">O Compras.gov.br ainda não mostra a sua proposta deste item{dados.dados?.aviso ? `: ${dados.dados.aviso}` : "."}</p>}
-            </Estado>
-          </section>
-
-          <div className="colunas-minha-participacao">
-            <section className="cartao-secao-compras">
-              <h4>
-                <MessageSquare size={15} /> Conversa com o pregoeiro
-              </h4>
-              <Chat compra={compra} item={item} cnpj={cnpj} nomes={nomes} participante={cnpj} podeEscrever />
-            </section>
-            <div className="pilha-secoes">
-              <section className="cartao-secao-compras">
-                <h4>
-                  <Paperclip size={15} /> Anexos que enviei
-                </h4>
-                <MeusAnexos compra={compra} item={item} cnpj={cnpj} convocado={convocadoAnexos} />
-              </section>
-              <section className="cartao-secao-compras">
-                <h4>
-                  <ShieldQuestion size={15} /> Diligências
-                </h4>
-                <Diligencias compra={compra} item={item} cnpj={cnpj} podeEnviar={emDiligencia} />
-              </section>
-            </div>
+          <div ref={chat} className="cn-secoes">
+            <Secao titulo="Chat" aberta>
+              {() => <Chat compra={compra} item={item} cnpj={cnpj} nomes={nomes} participante={cnpj} podeEscrever comTodas />}
+            </Secao>
+            <Secao titulo="Proposta" aberta={!!minha?.desclassificada}>
+              {() => (
+                <Estado carregando={dados.carregando && !minha} erro={minha ? "" : dados.erro} recarregar={dados.recarregar}>
+                  {minha ? (
+                    <DadosProposta p={minha} quantidadeItem={item.quantidade} />
+                  ) : (
+                    <p className="texto-fraco">O Compras.gov.br ainda não mostra a sua proposta deste item{dados.dados?.aviso ? `: ${dados.dados.aviso}` : "."}</p>
+                  )}
+                </Estado>
+              )}
+            </Secao>
+            <Secao titulo="Anexos" aberta={convocadoAnexos}>
+              {() => <MeusAnexos compra={compra} item={item} cnpj={cnpj} convocado={convocadoAnexos} />}
+            </Secao>
+            <Secao titulo="Diligências" aberta={emDiligencia}>
+              {() => <Diligencias compra={compra} item={item} cnpj={cnpj} podeEnviar={emDiligencia} />}
+            </Secao>
+            <Secao titulo="Recursos">{() => <Recursos compra={compra} item={item} cnpj={cnpj} nomes={nomes} />}</Secao>
           </div>
-          <Secao titulo="Recursos (intenção, recurso e contrarrazão)">{() => <Recursos compra={compra} item={item} cnpj={cnpj} nomes={nomes} />}</Secao>
         </div>
       )}
 
@@ -500,6 +530,14 @@ export function ItemCompras({
       )}
 
       {aba === "lances" && <Lances compra={compra} item={item} cnpj={cnpj} nomes={nomes} />}
+
+      {aoVoltar && (
+        <div className="cn-rodape-item">
+          <button className="botao secundario" onClick={aoVoltar}>
+            Voltar
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -557,6 +595,7 @@ function Chat({
   empresa,
   participante,
   podeEscrever,
+  comTodas,
 }: {
   compra: CompraAcomp;
   item: ItemAcomp;
@@ -565,8 +604,11 @@ function Chat({
   empresa?: PropostaEmpresa;
   participante?: string;
   podeEscrever?: boolean;
+  /** Botão "Visualizar todas as mensagens do item" (de todas as empresas), como na tela oficial. */
+  comTodas?: boolean;
 }) {
-  const de = participante ?? empresa?.cnpj ?? "";
+  const [todas, setTodas] = useState(false);
+  const de = todas ? "" : (participante ?? empresa?.cnpj ?? "");
   const carga = useCarga(
     true,
     async () => {
@@ -644,7 +686,7 @@ function Chat({
       </div>
       {podeEscrever && (
         <>
-          <div className="enviar-compras">
+          <div className="enviar-compras cn-enviar">
             <textarea
               value={texto}
               onChange={(e) => setTexto(e.target.value)}
@@ -655,9 +697,16 @@ function Chat({
                 if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) enviar();
               }}
             />
-            <button className="botao acento" onClick={enviar} disabled={enviando || !texto.trim()}>
-              {enviando ? <Loader2 className="girando" /> : <Send />} Enviar mensagem
-            </button>
+            <div className="cn-botoes-chat">
+              {comTodas && (
+                <button className="botao secundario" onClick={() => setTodas((v) => !v)}>
+                  {todas ? "Visualizar só as minhas mensagens" : "Visualizar todas as mensagens do item"}
+                </button>
+              )}
+              <button className="botao acento" onClick={enviar} disabled={enviando || !texto.trim()}>
+                {enviando ? <Loader2 className="girando" /> : <Send />} Enviar mensagem
+              </button>
+            </div>
           </div>
           <p className="texto-fraco pequeno">O Compras.gov.br só aceita mensagem quando o pregoeiro abre a conversa para você (por exemplo, numa convocação).</p>
         </>
@@ -1055,39 +1104,38 @@ function TodasPropostas({
           const aberto = aberta === chave;
           const n = anexos[p.cnpj] === "lendo" ? "lendo" : qtdAnexos(p);
           return (
-            <li key={chave} className={`${minha ? "minha" : ""} ${p.desclassificada ? "fora" : ""} ${aberto ? "aberta" : ""}`}>
-              <button className="linha-todas" onClick={() => setAberta(aberto ? null : chave)} aria-expanded={aberto}>
-                <span className="posicao-proposta">{posicao ?? `${p.colocacao ?? i + 1}º`}</span>
-                <span className="nome-todas">
-                  <span>
+            <li key={chave} className={`cn-proposta ${minha ? "minha" : ""} ${p.desclassificada ? "fora" : ""} ${aberto ? "aberta" : ""}`}>
+              <button className="linha-todas cn-linha-proposta" onClick={() => setAberta(aberto ? null : chave)} aria-expanded={aberto}>
+                <span className="cn-col-cnpj">
+                  <b>
+                    <span className="cn-posicao">{posicao ?? `${p.colocacao ?? i + 1}º`}</span> {cnpjFormatadoAcomp(p.cnpj)}
+                  </b>
+                  {p.meEpp && <small className="cn-meepp">ME/EPP</small>}
+                  {p.desclassificada ? (
+                    <small className="cn-status">{p.situacao || "Desclassificada"}</small>
+                  ) : p.situacao ? (
+                    <small className="cn-status ok">{p.situacao}</small>
+                  ) : null}
+                </span>
+                <span className="cn-col-nome">
+                  <b>
                     {p.empresa} {minha && <span className="chip azul">Você</span>}
-                  </span>
-                  <small>
-                    {cnpjFormatadoAcomp(p.cnpj)}
-                    {p.uf ? ` · ${p.uf}` : ""}
-                    {p.meEpp ? " · ME/EPP" : ""}
-                    {p.marca ? ` · ${p.marca}${p.modelo ? ` ${p.modelo}` : ""}` : ""}
-                  </small>
+                  </b>
+                  <small>{[p.uf, p.marca && `${p.marca}${p.modelo ? ` ${p.modelo}` : ""}`].filter(Boolean).join(" · ")}</small>
                   {p.desclassificada && p.motivo && <small className="texto-vermelho">Motivo: {resumir(p.motivo, 140)}</small>}
                   {conversa.ultima && (
                     <small className="previa-conversa">
-                      <MessageSquare size={11} /> Pregoeiro: “{resumir(conversa.ultima.texto, 120)}”
+                      <MessageSquare size={11} /> Pregoeiro: “{resumir(conversa.ultima.texto, 110)}”
                     </small>
                   )}
                 </span>
-                <span className="valores-todas">
-                  <span>
-                    <small>Ofertado</small> {moeda4(p.valorOfertado ?? p.valor)}
-                  </span>
-                  {p.valorNegociado != null && (
-                    <span>
-                      <small>Negociado</small> {moeda4(p.valorNegociado)}
-                    </span>
-                  )}
+                <span className="cn-col-valores">
+                  <small>Valor ofertado (unitário)</small>
+                  <b>{moeda4(p.valorOfertado ?? p.valor)}</b>
+                  <small>Valor negociado (unitário)</small>
+                  <b>{p.valorNegociado != null ? moeda4(p.valorNegociado) : "-"}</b>
                 </span>
                 <span className="chips-todas">
-                  {p.desclassificada && <span className="chip vermelho">{p.situacao || "Desclassificada"}</span>}
-                  {!p.desclassificada && p.situacao && <span className="chip verde">{p.situacao}</span>}
                   {p.pendencias.map((x) => (
                     <span key={x.tipo} className="chip amarelo">
                       {x.rotulo}
@@ -1100,44 +1148,30 @@ function TodasPropostas({
                   )}
                   {n === "lendo" && <Loader2 className="girando" size={13} />}
                   {n === 0 && <span className="chip vermelho">Sem anexos</span>}
-                  {typeof n === "number" && n > 0 && <span className="chip cinza">{n === 1 ? "1 anexo" : `${n} anexos`}</span>}
+                  {typeof n === "number" && n > 0 && (
+                    <span className="chip cinza">
+                      <Paperclip size={11} /> {n}
+                    </span>
+                  )}
                 </span>
                 <ChevronDown className="seta-todas" size={18} />
               </button>
               {aberto && (
-                <div className="detalhe-empresa">
-                  <section className="cartao-secao-compras">
-                    <h4>
-                      <FileText size={15} /> Proposta
-                    </h4>
-                    <DadosProposta p={p} quantidadeItem={item.quantidade} />
-                  </section>
-                  <div className="colunas-minha-participacao">
-                    <section className="cartao-secao-compras">
-                      <h4>
-                        <MessageSquare size={15} /> Conversa com o pregoeiro
-                      </h4>
-                      <Chat compra={compra} item={item} cnpj={cnpj} nomes={nomes} empresa={p} participante={p.cnpj} />
-                    </section>
-                    <div className="pilha-secoes">
-                      <section className="cartao-secao-compras">
-                        <h4>
-                          <Paperclip size={15} /> Anexos
-                        </h4>
-                        {minha ? (
-                          <MeusAnexos compra={compra} item={item} cnpj={cnpj} convocado={false} />
-                        ) : (
-                          <AnexosEmpresa compra={compra} item={item} empresa={p} aoContar={(c) => setAnexos((a) => (a[p.cnpj] === c ? a : { ...a, [p.cnpj]: c }))} />
-                        )}
-                      </section>
-                      <section className="cartao-secao-compras">
-                        <h4>
-                          <ShieldQuestion size={15} /> Diligências
-                        </h4>
-                        <Diligencias compra={compra} item={item} cnpj={p.cnpj} />
-                      </section>
-                    </div>
-                  </div>
+                <div className="detalhe-empresa cn-secoes">
+                  <Secao titulo="Chat" aberta>
+                    {() => <Chat compra={compra} item={item} cnpj={cnpj} nomes={nomes} empresa={p} participante={p.cnpj} />}
+                  </Secao>
+                  <Secao titulo="Proposta">{() => <DadosProposta p={p} quantidadeItem={item.quantidade} />}</Secao>
+                  <Secao titulo="Anexos">
+                    {() =>
+                      minha ? (
+                        <MeusAnexos compra={compra} item={item} cnpj={cnpj} convocado={false} />
+                      ) : (
+                        <AnexosEmpresa compra={compra} item={item} empresa={p} aoContar={(c) => setAnexos((a) => (a[p.cnpj] === c ? a : { ...a, [p.cnpj]: c }))} />
+                      )
+                    }
+                  </Secao>
+                  <Secao titulo="Diligências">{() => <Diligencias compra={compra} item={item} cnpj={p.cnpj} />}</Secao>
                 </div>
               )}
             </li>

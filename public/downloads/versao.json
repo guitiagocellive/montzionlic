@@ -1,9 +1,11 @@
 {
-  "versao": "3.1.25",
+  "versao": "3.1.26",
   "data": "2026-11-13",
   "novidades": [
-    "Anexos: botão de olho para ver o documento numa janela por cima, sem baixar (PDF, imagens, texto e .zip; outros formatos têm o botão Baixar ali mesmo). Clicar no nome do anexo também abre.",
-    "Licitação com a disputa encerrada e o julgamento ainda não iniciado: não aparece mais o erro \"A etapa de julgamento de propostas ainda não foi iniciada\". Mostra a sua proposta (das propostas iniciais), a posição e \"aguardando o pregoeiro iniciar o julgamento\".",
-    "Conversa sem mensagens (\"Nenhuma mensagem encontrada\") não aparece mais como erro."
+    "Acompanhamento: a licitação agora segue a estrutura do Compras.gov.br (com o visual do Montzion): cabeçalho com as etapas, \"Exibindo N registro(s)\" com o seletor de itens e uma linha por item com a situação, a quantidade e o valor estimado.",
+    "O \"+\" abre o item como no Compras: Classificação, Declarações e UF do fornecedor, e as seções Chat (com \"Visualizar todas as mensagens do item\"), Proposta, Anexos e Diligências; com anterior, próximo e Voltar.",
+    "\"Todas as propostas\" como no Compras: CNPJ, ME/EPP e situação; nome e UF; valor ofertado e negociado (unitário). Abrindo a empresa: Chat, Proposta, Anexos e Diligências.",
+    "O seletor também filtra: com convocação aberta, com chance boa, o pregoeiro falou comigo e desclassificados. A setinha da linha mostra um resumo sem abrir o item.",
+    "Com uma janela aberta por cima de outra, o Esc agora fecha só a de cima."
   ]
 }

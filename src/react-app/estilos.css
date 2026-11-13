@@ -13648,3 +13648,224 @@ p.etapa-fechada {
 .janela-anexo .visor-pdf {
   height: min(75vh, 900px);
 }
+
+/* ---------- Janela da licitação no desenho do Compras.gov.br (estrutura) com a identidade do Montzion ---------- */
+.cn-compra { gap: 14px; }
+.cn-cabeca {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 520px);
+  gap: 14px 24px;
+  align-items: start;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--borda);
+}
+.cn-titulo { display: grid; gap: 4px; min-width: 0; }
+.cn-titulo strong { font-size: 1.2rem; font-weight: 600; }
+.cn-titulo > span:nth-child(2) { font-size: 0.95rem; }
+.cn-cabeca-direita { display: grid; gap: 14px; justify-items: end; }
+.cn-cabeca-direita .passos-compra { width: 100%; }
+.cn-acoes-compra { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.cn-icone {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1.5px solid var(--acento);
+  background: transparent;
+  color: var(--acento-texto);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.cn-icone:hover:not(:disabled) { background: var(--acento); color: #fff; }
+.cn-icone:disabled { opacity: 0.35; cursor: default; }
+.cn-contador {
+  position: absolute;
+  top: -5px;
+  right: -6px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--vermelho);
+  color: #fff;
+  font-size: 0.64rem;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 17px;
+}
+.cn-lista {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--superficie-2);
+}
+.cn-lista-topo { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 2px 4px; }
+.cn-seletor {
+  width: auto;
+  min-width: 230px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1.5px solid var(--acento);
+  background: var(--superficie);
+  color: var(--texto);
+  font: inherit;
+  font-size: 0.88rem;
+}
+.cn-itens { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.cn-linha-item {
+  border-radius: 12px;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 12%);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.cn-linha-item:hover { border-color: color-mix(in oklab, var(--acento) 50%, var(--borda)); }
+.cn-linha-item.convocado { border-left: 3px solid var(--vermelho); }
+.cn-linha-item.nao-participa { opacity: 0.85; }
+.cn-linha {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 14px 16px;
+}
+.cn-item-desc {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--texto);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cn-item-desc strong { font-size: 0.9rem; font-weight: 600; }
+.cn-item-desc:hover strong { color: var(--acento-texto); }
+.cn-status { font-size: 0.8rem; color: #f97316; }
+.cn-status.ok { color: var(--verde); }
+.cn-etiquetas { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.cn-etiquetas .chip { display: inline-flex; align-items: center; gap: 4px; }
+.cn-item-qtd {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 3px 14px;
+  margin: 0;
+  font-size: 0.78rem;
+}
+.cn-item-qtd dt { color: var(--texto-fraco); }
+.cn-item-qtd dd { margin: 0; font-variant-numeric: tabular-nums; }
+.cn-item-acoes { display: flex; gap: 6px; align-items: center; }
+.cn-linha-item .cn-item-acoes button[aria-expanded="true"] svg { transform: rotate(180deg); }
+.cn-linha-resumo {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 0.7fr)) minmax(0, 1.6fr);
+  gap: 10px;
+  margin: 0;
+  padding: 12px 16px 14px;
+  border-top: 1px solid var(--borda);
+  background: var(--superficie-2);
+  border-radius: 0 0 12px 12px;
+  font-size: 0.84rem;
+}
+.cn-linha-resumo dt { font-size: 0.72rem; color: var(--texto-fraco); }
+.cn-linha-resumo dd { margin: 2px 0 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* Página do item */
+.cn-item-pagina { gap: 0; }
+.cn-item-cabeca {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 4px 4px 14px;
+  border-bottom: 1px solid var(--borda);
+}
+.cn-item-cabeca .cn-item-desc { cursor: default; }
+.cn-abas { margin-top: 10px; border-bottom: 0; }
+.cn-abas button { font-weight: 600; }
+.cn-painel {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 0 14px 14px 14px;
+  background: var(--superficie-2);
+}
+.cn-resumo.resumo-minha-proposta {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 4px 4px 12px;
+  background: none;
+  border-radius: 0;
+  border-bottom: 1px solid var(--borda);
+}
+.cn-resumo strong { font-size: 0.92rem; font-weight: 500; }
+.cn-analise li { background: var(--superficie); }
+.cn-secoes { display: grid; gap: 0; }
+.cn-secoes > .secao-compras {
+  border: 0;
+  border-top: 1px solid var(--borda);
+  border-radius: 0;
+  background: none;
+}
+.cn-secoes > .secao-compras:last-child { border-bottom: 1px solid var(--borda); }
+.cn-secoes .titulo-secao-compras {
+  background: none;
+  padding: 12px 8px;
+  color: var(--acento-texto);
+  font-weight: 500;
+}
+.cn-secoes .corpo-secao-compras { padding: 4px 8px 16px; }
+.cn-secoes .chat-compras { max-height: 300px; }
+.cn-enviar { grid-template-columns: 1fr; }
+.cn-enviar textarea { min-height: 46px; }
+.cn-botoes-chat { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.cn-rodape-item { display: flex; justify-content: flex-end; padding-top: 14px; }
+
+/* Todas as propostas */
+.cn-proposta { background: var(--superficie) !important; border: 1px solid var(--borda); box-shadow: 0 1px 3px rgb(0 0 0 / 12%); }
+.cn-linha-proposta { grid-template-columns: minmax(170px, 220px) minmax(0, 1fr) minmax(170px, 220px) auto 22px !important; align-items: start !important; }
+.cn-col-cnpj, .cn-col-nome, .cn-col-valores { display: grid; gap: 3px; min-width: 0; font-size: 0.82rem; }
+.cn-col-cnpj b, .cn-col-nome b { font-weight: 600; }
+.cn-col-nome b { overflow: hidden; text-overflow: ellipsis; }
+.cn-col-nome small { color: var(--texto-suave); font-size: 0.74rem; }
+.cn-meepp { color: var(--acento-texto); font-size: 0.72rem; }
+.cn-posicao {
+  display: inline-block;
+  min-width: 26px;
+  margin-right: 4px;
+  padding: 0 5px;
+  border-radius: 6px;
+  background: var(--superficie-2);
+  font-size: 0.74rem;
+  text-align: center;
+}
+.cn-col-valores { grid-template-columns: auto auto; gap: 2px 10px; font-variant-numeric: tabular-nums; }
+.cn-col-valores small { color: var(--texto-fraco); font-size: 0.72rem; align-self: center; }
+.cn-col-valores b { font-weight: 600; }
+.cn-proposta .detalhe-empresa { padding: 0 14px 12px; }
+
+@media (max-width: 900px) {
+  .cn-cabeca { grid-template-columns: 1fr; }
+  .cn-cabeca-direita { justify-items: stretch; }
+  .cn-acoes-compra { justify-content: flex-start; }
+  .cn-linha, .cn-item-cabeca { grid-template-columns: minmax(0, 1fr) auto; }
+  .cn-item-qtd { grid-column: 1 / -1; grid-row: 2; }
+  .cn-linha-resumo { grid-template-columns: 1fr 1fr; }
+  .cn-linha-resumo .largo { grid-column: 1 / -1; }
+  .cn-resumo.resumo-minha-proposta { grid-template-columns: 1fr 1fr; }
+  .cn-lista-topo { flex-wrap: wrap; }
+  .cn-seletor { min-width: 0; width: 100%; }
+  .cn-linha-proposta { grid-template-columns: minmax(0, 1fr) 22px !important; }
+  .cn-col-nome, .cn-col-valores, .cn-linha-proposta .chips-todas { grid-column: 1; }
+  .cn-linha-proposta .seta-todas { grid-column: 2; grid-row: 1; }
+  .cn-painel { padding: 10px; }
+}
+.cn-secoes .titulo-secao-compras svg { transform: none; }
+.cn-secoes > .secao-compras.aberta > .titulo-secao-compras svg { transform: rotate(180deg); }
+.cn-item-pagina { display: grid; grid-template-columns: minmax(0, 1fr); }
+.cn-painel, .cn-secoes, .cn-secoes .corpo-secao-compras { min-width: 0; }
+.cn-compra { grid-template-columns: minmax(0, 1fr); }

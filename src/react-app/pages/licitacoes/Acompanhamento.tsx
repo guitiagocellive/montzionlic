@@ -1,4 +1,4 @@
-import { Bell, BellRing, Gauge, Minus, Plus, ClipboardCopy, FilePlus2, Download, ExternalLink, LogIn, MessageSquare, Pencil, RefreshCw, Search, Send, Star, TriangleAlert } from "lucide-react";
+import { Bell, BellRing, ChevronDown, Gauge, Mail, Plus, ClipboardCopy, FilePlus2, Download, ExternalLink, LogIn, MessageSquare, Pencil, RefreshCw, Search, Send, Star, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type AvisoAcomp, avisosDe, idEmpresa, type CompraAcomp, dataDe, montarCompras, type PainelAcompanhamento, ROTULO_CHANCE } from "../../../shared/acompanhamento";
 import { api, mensagemDeErro } from "../../api";
@@ -30,7 +30,6 @@ function dataHora(s: string | null) {
   return new Date(t).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-const ordinal = (n: number | null) => (n == null ? "—" : `${n}º`);
 
 export function Acompanhamento() {
   const [ligada, setLigada] = useState(temPonte());
@@ -700,9 +699,13 @@ function LinhaCompra({
 const PASSOS = ["Propostas", "Disputa", "Seleção de fornecedores", "Remanescentes"];
 const passoDa = (c: CompraAcomp) => (["1", "2", "6"].includes(c.faseCodigo) ? 0 : ["3", "99"].includes(c.faseCodigo) ? 1 : c.faseCodigo === "4" ? 2 : c.encerrada ? 3 : -1);
 
-type FiltroItens = "todos" | "convocados" | "chance" | "pregoeiro" | "fora";
+type FiltroItens = "participo" | "todos" | "convocados" | "chance" | "pregoeiro" | "fora";
 
-/** Janela da licitação: cabeçalho, resumo com a análise e os itens em cartões; o "+" abre a participação no item. */
+/**
+ * Janela da licitação no mesmo desenho do "Acompanhamento seleção de fornecedores" do Compras.gov.br:
+ * cabeçalho com as etapas, "Exibindo N registro(s)" com o seletor de itens, uma linha por item e, ao abrir,
+ * a página do item (Minha proposta / Todas as propostas) com anterior, próximo e voltar.
+ */
 function JanelaCompra({
   compra: c,
   cnpj,
@@ -719,14 +722,15 @@ function JanelaCompra({
   aoCadastrar: () => void;
 }) {
   const [aberto, setAberto] = useState<number | null>(null);
-  const [filtro, setFiltro] = useState<FiltroItens>("todos");
-  const [modo, setModo] = useState<"meus" | "todos">("meus");
+  const [resumo, setResumo] = useState<number | null>(null);
+  const [filtro, setFiltro] = useState<FiltroItens>("participo");
+  const [verMensagens, setVerMensagens] = useState(false);
   const [, setLidas] = useState(0);
   const passo = passoDa(c);
   const lidos = !!c.lidaEm;
 
-  // Assim que os itens chegam, lê as propostas de cada item por trás (2 de cada vez): os cartões mostram quem
-  // está à frente e o "+" abre na hora. Só nas fases em que já existem propostas para comparar.
+  // Assim que os itens chegam, lê as propostas de cada item por trás (2 de cada vez): as linhas mostram a
+  // colocação e a situação, e o item abre na hora. Só nas fases em que já existem propostas para comparar.
   const numeros = c.itens.map((i) => i.numero).join(",");
   useEffect(() => {
     if (!lidos || !numeros || !conectado || ["1", "2", "6"].includes(c.faseCodigo)) return;
@@ -736,65 +740,90 @@ function JanelaCompra({
       parar = true;
     };
   }, [c.chave, lidos, c.lidaEm, numeros, cnpj, conectado]);
-  // Compra de um item só: já abre a participação.
-  useEffect(() => {
-    if (c.itens.length === 1 && aberto == null) setAberto(c.itens[0].numero);
-  }, [c.itens, aberto]);
 
-  const todosOsItens = modo === "todos" ? [...c.itens, ...c.outrosItens].sort((a, b) => a.numero - b.numero) : c.itens;
+  const todosOsItens = [...c.itens, ...c.outrosItens].sort((a, b) => a.numero - b.numero);
   const info = todosOsItens.map((it) => {
     const conversa = conversaDoItem(c.mensagens, it.numero, cnpj);
     const dados = jaLido<PropostasDoItem>(chavePropostas(c, it.numero));
     const estado = estadoDoItem(it, dados, cnpj);
-    const analise = estado.analise;
     const minha = dados?.minha ?? null;
     const convocado = it.pendencias.length > 0 || it.chatAberto || !!minha?.pendencias.length;
-    return { it, conversa, analise, estado, minha, convocado, boa: ["ganhou", "alta"].includes(estado.chance), fora: estado.chance === "fora" };
+    return { it, conversa, estado, minha, convocado, boa: it.participa && ["ganhou", "alta"].includes(estado.chance), fora: it.participa && estado.chance === "fora" };
   });
-  const contagem = {
+  const conta = {
+    participo: info.filter((x) => x.it.participa).length,
+    todos: info.length,
     convocados: info.filter((x) => x.convocado).length,
     chance: info.filter((x) => x.boa).length,
     pregoeiro: info.filter((x) => x.conversa.paraVoce > 0).length,
     fora: info.filter((x) => x.fora).length,
   };
-  const visiveis = info.filter((x) => (filtro === "convocados" ? x.convocado : filtro === "chance" ? x.boa : filtro === "pregoeiro" ? x.conversa.paraVoce > 0 : filtro === "fora" ? x.fora : true));
-  const geral = c.mensagens.filter((m) => !m.item);
+  const opcoes: [FiltroItens, string][] = [
+    ["participo", "Itens que participo"],
+    ...(c.outrosItens.length ? ([["todos", "Todos os itens"]] as [FiltroItens, string][]) : []),
+    ["convocados", "Com convocação aberta"],
+    ["chance", "Com chance boa"],
+    ["pregoeiro", "O pregoeiro falou comigo"],
+    ["fora", "Desclassificados"],
+  ];
+  const visiveis = info.filter((x) =>
+    filtro === "todos"
+      ? true
+      : filtro === "convocados"
+        ? x.convocado
+        : filtro === "chance"
+          ? x.boa
+          : filtro === "pregoeiro"
+            ? x.conversa.paraVoce > 0
+            : filtro === "fora"
+              ? x.fora
+              : x.it.participa,
+  );
+  const indice = visiveis.findIndex((x) => x.it.numero === aberto);
+  const itemAberto = indice >= 0 ? visiveis[indice].it : (todosOsItens.find((i) => i.numero === aberto) ?? null);
+  const doPregoeiro = c.mensagens.filter((m) => m.quem === "pregoeiro").length;
 
   return (
     <Modal titulo="Acompanhar licitação" aoFechar={aoFechar} largo>
       <style>{".modal.largo:has(.janela-compra){max-width:1180px}"}</style>
-      <div className="janela-compra">
-        <header className="cabeca-janela-compra">
-          <div className="titulo-janela-compra">
+      <div className="janela-compra cn-compra">
+        <header className="cn-cabeca">
+          <div className="cn-titulo">
             <strong>{nomeCompra(c)}</strong>
             <span>
-              UASG {c.uasg} · {c.orgao}
+              UASG {c.uasg} - {c.orgao}
             </span>
             {c.objeto && <span className="texto-suave objeto-janela">{c.objeto}</span>}
             <span className="texto-fraco pequeno">
               {[c.abertura && `Abertura ${dataHora(c.abertura)}`, c.lidaEm ? `Lida ${ha(c.lidaEm, agora)}` : "Lendo no Compras.gov.br…"].filter(Boolean).join(" · ")}
             </span>
           </div>
-          <div className="acoes-janela-compra">
-            {c.linkPncp && (
-              <a className="botao secundario pequeno" href={c.linkPncp} target="_blank" rel="noreferrer">
-                <ExternalLink size={14} /> Edital no PNCP
-              </a>
-            )}
-            {["1", "2", "6"].includes(c.faseCodigo) && (
-              <button className="botao acento pequeno" onClick={aoCadastrar}>
-                <FilePlus2 size={14} /> Cadastrar / alterar proposta
+          <div className="cn-cabeca-direita">
+            <div className="cn-acoes-compra">
+              <button className="cn-icone" onClick={() => setVerMensagens(true)} title="Mensagens da licitação" aria-label="Mensagens da licitação">
+                <Mail size={15} />
+                {doPregoeiro > 0 && <i className="cn-contador">{doPregoeiro}</i>}
               </button>
-            )}
+              {c.linkPncp && (
+                <a className="cn-icone" href={c.linkPncp} target="_blank" rel="noreferrer" title="Edital no PNCP" aria-label="Edital no PNCP">
+                  <ExternalLink size={15} />
+                </a>
+              )}
+              {["1", "2", "6"].includes(c.faseCodigo) && (
+                <button className="botao acento pequeno" onClick={aoCadastrar}>
+                  <FilePlus2 size={14} /> Cadastrar / alterar proposta
+                </button>
+              )}
+            </div>
+            <ol className="passos-compra">
+              {PASSOS.map((p, i) => (
+                <li key={p} className={i === passo ? "atual" : i < passo ? "feito" : ""}>
+                  <span>{p}</span>
+                  <i />
+                </li>
+              ))}
+            </ol>
           </div>
-          <ol className="passos-compra">
-            {PASSOS.map((p, i) => (
-              <li key={p} className={i === passo ? "atual" : i < passo ? "feito" : ""}>
-                <span>{p}</span>
-                <i />
-              </li>
-            ))}
-          </ol>
         </header>
 
         {!lidos ? (
@@ -802,7 +831,18 @@ function JanelaCompra({
             <RefreshCw className="girando" size={18} />
             <span>Lendo os itens, a sua participação e as mensagens desta licitação…</span>
           </div>
-        ) : c.itens.length === 0 ? (
+        ) : itemAberto ? (
+          <ItemCompras
+            key={itemAberto.numero}
+            compra={c}
+            item={itemAberto}
+            cnpj={cnpj}
+            participa={itemAberto.participa}
+            anterior={indice > 0 ? () => setAberto(visiveis[indice - 1].it.numero) : undefined}
+            proximo={indice >= 0 && indice < visiveis.length - 1 ? () => setAberto(visiveis[indice + 1].it.numero) : undefined}
+            aoVoltar={() => setAberto(null)}
+          />
+        ) : todosOsItens.length === 0 ? (
           c.erros.length ? (
             <p className="alerta aviso">
               Não consegui ler os itens desta compra agora ({c.erros.join(" · ")}). O aplicativo tenta de novo sozinho; se continuar, use “Copiar diagnóstico” no fim da
@@ -812,130 +852,117 @@ function JanelaCompra({
             <p className="texto-fraco">Nenhum item com proposta sua nesta compra.</p>
           )
         ) : (
-          <>
-            <div className="resumo-compra">
-              <button className={filtro === "todos" ? "ativo" : ""} onClick={() => setFiltro("todos")}>
-                <strong>{c.itens.length}</strong>
-                <span>{c.itens.length === 1 ? "item" : "itens"} com proposta sua</span>
-              </button>
-              <button className={`vermelho ${filtro === "convocados" ? "ativo" : ""}`} onClick={() => setFiltro("convocados")} disabled={!contagem.convocados}>
-                <strong>{contagem.convocados}</strong>
-                <span>com convocação aberta</span>
-              </button>
-              <button className={`verde ${filtro === "chance" ? "ativo" : ""}`} onClick={() => setFiltro("chance")} disabled={!contagem.chance}>
-                <strong>{contagem.chance}</strong>
-                <span>com chance boa</span>
-              </button>
-              <button className={`azul ${filtro === "pregoeiro" ? "ativo" : ""}`} onClick={() => setFiltro("pregoeiro")} disabled={!contagem.pregoeiro}>
-                <strong>{contagem.pregoeiro}</strong>
-                <span>o pregoeiro falou com você</span>
-              </button>
-              <button className={`cinza ${filtro === "fora" ? "ativo" : ""}`} onClick={() => setFiltro("fora")} disabled={!contagem.fora}>
-                <strong>{contagem.fora}</strong>
-                <span>fora (desclassificados)</span>
-              </button>
+          <section className="cn-lista">
+            <div className="cn-lista-topo">
+              <span className="texto-fraco pequeno">Exibindo {visiveis.length} registro(s)</span>
+              <select className="cn-seletor" value={filtro} onChange={(e) => setFiltro(e.target.value as FiltroItens)} aria-label="Quais itens mostrar">
+                {opcoes.map(([v, rotulo]) => (
+                  <option key={v} value={v} disabled={v !== "participo" && v !== "todos" && !conta[v]}>
+                    {rotulo} ({conta[v]})
+                  </option>
+                ))}
+              </select>
             </div>
-
-            {c.outrosItens.length > 0 && (
-              <div className="modo-itens" role="tablist" aria-label="Quais itens mostrar">
-                <button role="tab" aria-selected={modo === "meus"} className={modo === "meus" ? "ativo" : ""} onClick={() => setModo("meus")}>
-                  Itens que participo <b>{c.itens.length}</b>
-                </button>
-                <button role="tab" aria-selected={modo === "todos"} className={modo === "todos" ? "ativo" : ""} onClick={() => setModo("todos")}>
-                  Todos os itens da licitação <b>{c.itens.length + c.outrosItens.length}</b>
-                </button>
-              </div>
-            )}
-            <ul className="cartoes-itens">
-              {visiveis.map(({ it, conversa, analise, estado, minha, convocado }) => {
-                const expandido = aberto === it.numero;
+            {visiveis.length === 0 && <p className="texto-fraco pequeno">Nenhum item neste filtro.</p>}
+            <ul className="cn-itens">
+              {visiveis.map(({ it, conversa, estado, minha, convocado }) => {
+                const vendoResumo = resumo === it.numero;
+                const meuValor = minha ? (minha.valorNegociado ?? minha.valorOfertado ?? minha.valor) : it.meuValor;
                 return (
-                  <li key={it.numero} className={`cartao-item chance-${estado.chance} ${convocado ? "convocado" : ""} ${expandido ? "expandido" : ""} ${it.participa ? "" : "nao-participa"}`}>
-                    <button className="topo-cartao-item" onClick={() => setAberto(expandido ? null : it.numero)} aria-expanded={expandido}>
-                      <span className="colocacao-cartao">
-                        <strong>{it.participa ? ordinal(estado.colocacao) : "—"}</strong>
-                        <small>{!it.participa ? "sem proposta" : estado.total ? `de ${estado.total}` : "colocação"}</small>
-                      </span>
-                      <span className="corpo-cartao-item">
-                        <span className="nome-cartao-item">
-                          <b>Item {it.numero}</b> {it.descricao}
-                        </span>
-                        <span className="etiquetas-item">
+                  <li key={it.numero} className={`cn-linha-item chance-${estado.chance} ${convocado ? "convocado" : ""} ${it.participa ? "" : "nao-participa"} ${vendoResumo ? "com-resumo" : ""}`}>
+                    <div className="cn-linha">
+                      <button className="cn-item-desc" onClick={() => setAberto(it.numero)} title="Abrir o item">
+                        <strong>
+                          {it.numero} &nbsp;{it.descricao.toUpperCase()}
+                        </strong>
+                        <span className="cn-status">{(it.participa ? estado.momento : "") || it.etapa || it.situacao || "—"}</span>
+                        <span className="cn-etiquetas">
                           {it.participa ? (
                             <span className={`chip ${COR_CHANCE[estado.chance]}`} title={estado.explicacao}>
                               {ROTULO_CHANCE[estado.chance]}
+                              {estado.colocacao != null ? ` · ${estado.colocacao}º` : ""}
                             </span>
                           ) : (
                             <span className="chip cinza">Sem proposta sua</span>
                           )}
-                          {it.pendencias.map((p) => (
-                            <span key={p.tipo} className="chip vermelho">
-                              {p.rotulo}
-                            </span>
-                          ))}
+                          {!estado.momento.startsWith("Convocada") &&
+                            it.pendencias.map((p) => (
+                              <span key={p.tipo} className="chip vermelho">
+                                {p.rotulo}
+                              </span>
+                            ))}
                           {conversa.paraVoce > 0 && (
                             <span className="chip azul">
                               <MessageSquare size={11} /> Pregoeiro falou com você
                             </span>
                           )}
-                          {it.participa && estado.momento && !estado.momento.startsWith("Convocada") && <span className={`chip ${estado.chance === "ganhou" ? "verde" : estado.chance === "fora" ? "vermelho" : "cinza"}`}>{estado.momento}</span>}
                         </span>
-                        <span className="analise-cartao texto-suave">
-                          {[
-                            !it.participa || it.etapa !== estado.momento ? it.etapa : "",
-                            analise?.souPrimeira ? "Você é a 1ª válida" : analise && analise.aFrenteValidas > 0 ? `${analise.aFrenteValidas} válida${analise.aFrenteValidas > 1 ? "s" : ""} à sua frente` : "",
-                            analise?.desclassificadas ? `${analise.desclassificadas} desclassificada${analise.desclassificadas > 1 ? "s" : ""}` : "",
-                            analise?.aFrenteSemAnexos ? `${analise.aFrenteSemAnexos} à frente sem anexos` : "",
-                          ]
-                            .filter(Boolean)
-                            .join(" · ")}
-                        </span>
-                      </span>
-                      <span className="valores-cartao">
-                        {!it.participa && it.valorEstimado != null && (
-                          <span>
-                            <small>Valor estimado</small>
-                            <b>{formatarMoeda(it.valorEstimado)}</b>
-                          </span>
-                        )}
-                        {it.participa && (
-                        <span>
-                          <small>Sua proposta</small>
-                          <b>{(minha ? (minha.valorNegociado ?? minha.valorOfertado ?? minha.valor) : it.meuValor) != null ? formatarMoeda((minha ? (minha.valorNegociado ?? minha.valorOfertado ?? minha.valor) : it.meuValor) as number) : "—"}</b>
-                        </span>
-                        )}
-                        {it.melhorValor != null && it.melhorValor !== it.meuValor && (
-                          <span>
-                            <small>Melhor valor</small>
-                            <b>{formatarMoeda(it.melhorValor)}</b>
-                          </span>
-                        )}
-                        {it.quantidade != null && <small className="texto-fraco">Qtde {it.quantidade}</small>}
-                      </span>
-                      <span className="mais-cartao" aria-hidden>
-                        {expandido ? <Minus size={18} /> : <Plus size={18} />}
-                      </span>
-                    </button>
-                    {expandido && (
-                      <div className="participacao-cartao">
-                        <ItemCompras compra={c} item={it} cnpj={cnpj} participa={it.participa} />
+                      </button>
+                      <dl className="cn-item-qtd">
+                        <dt>Qtde solicitada</dt>
+                        <dd>{it.quantidade ?? "—"}</dd>
+                        <dt>Valor estimado (unitário)</dt>
+                        <dd>{it.valorEstimado != null ? formatarMoeda(it.valorEstimado) : "Não informado"}</dd>
+                      </dl>
+                      <div className="cn-item-acoes">
+                        <button className="cn-icone cn-abrir" onClick={() => setAberto(it.numero)} title="Abrir o item" aria-label={`Abrir o item ${it.numero}`}>
+                          <Plus size={15} />
+                        </button>
+                        <button
+                          className="cn-icone"
+                          onClick={() => setResumo(vendoResumo ? null : it.numero)}
+                          title={vendoResumo ? "Esconder o resumo" : "Ver o resumo"}
+                          aria-label={vendoResumo ? "Esconder o resumo" : "Ver o resumo"}
+                          aria-expanded={vendoResumo}
+                        >
+                          <ChevronDown size={16} />
+                        </button>
                       </div>
+                    </div>
+                    {vendoResumo && (
+                      <dl className="cn-linha-resumo">
+                        <div>
+                          <dt>Classificação</dt>
+                          <dd>{estado.colocacao != null ? `${estado.colocacao}º${estado.total ? ` de ${estado.total}` : ""}` : "—"}</dd>
+                        </div>
+                        <div>
+                          <dt>Sua proposta</dt>
+                          <dd>{it.participa && meuValor != null ? formatarMoeda(meuValor) : "—"}</dd>
+                        </div>
+                        <div>
+                          <dt>Melhor valor</dt>
+                          <dd>{it.melhorValor != null ? formatarMoeda(it.melhorValor) : "—"}</dd>
+                        </div>
+                        <div className="largo">
+                          <dt>Situação</dt>
+                          <dd>
+                            {[
+                              estado.momento || it.etapa,
+                              estado.analise?.souPrimeira
+                                ? "você é a 1ª válida"
+                                : estado.analise && estado.analise.aFrenteValidas > 0
+                                  ? `${estado.analise.aFrenteValidas} válida${estado.analise.aFrenteValidas > 1 ? "s" : ""} à sua frente`
+                                  : "",
+                              estado.analise?.desclassificadas ? `${estado.analise.desclassificadas} desclassificada${estado.analise.desclassificadas > 1 ? "s" : ""}` : "",
+                            ]
+                              .filter(Boolean)
+                              .join(" · ") || "—"}
+                          </dd>
+                        </div>
+                      </dl>
                     )}
                   </li>
                 );
               })}
             </ul>
-
-            <details className="mensagens-compra">
-              <summary>
-                <MessageSquare size={14} /> Mensagens da licitação ({c.mensagens.length})
-                {geral.length > 0 && geral.length !== c.mensagens.length ? <span className="texto-fraco"> · {geral.length} gerais</span> : null}
-              </summary>
-              <Conversa compra={c} cnpj={cnpj} />
-            </details>
-          </>
+          </section>
         )}
       </div>
+      {verMensagens && (
+        <Modal titulo={`Mensagens da licitação (${c.mensagens.length})`} aoFechar={() => setVerMensagens(false)} largo>
+          <Conversa compra={c} cnpj={cnpj} />
+        </Modal>
+      )}
     </Modal>
   );
 }
