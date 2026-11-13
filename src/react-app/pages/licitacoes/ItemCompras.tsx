@@ -793,7 +793,7 @@ function JanelaAnexo({ anexo, obter, aoFechar }: { anexo: AnexoCompras; obter: (
     <Modal titulo={anexo.nome} aoFechar={aoFechar} largo>
       <div className="janela-anexo">
         {erro ? (
-          <p className="alerta erro">{erro}</p>
+          <p className="alerta erro">Não consegui abrir este anexo agora. O Compras.gov.br respondeu: “{erro}”.</p>
         ) : !conteudo ? (
           <p className="texto-suave carregando-marcas">
             <Loader2 className="girando" size={16} /> Abrindo o arquivo do Compras.gov.br…

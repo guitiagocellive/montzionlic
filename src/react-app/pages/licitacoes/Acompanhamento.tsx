@@ -1,4 +1,4 @@
-import { Bell, BellRing, ChevronDown, Gauge, Mail, Plus, ClipboardCopy, FilePlus2, Download, ExternalLink, LogIn, MessageSquare, Pencil, RefreshCw, Search, Send, Star, TriangleAlert } from "lucide-react";
+import { Bell, BellRing, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Gauge, Mail, Plus, ClipboardCopy, FilePlus2, Download, ExternalLink, LogIn, MessageSquare, Pencil, RefreshCw, Search, Send, Star, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type AvisoAcomp, avisosDe, idEmpresa, type CompraAcomp, dataDe, montarCompras, type PainelAcompanhamento, ROTULO_CHANCE } from "../../../shared/acompanhamento";
 import { api, mensagemDeErro } from "../../api";
@@ -45,6 +45,7 @@ export function Acompanhamento() {
   const [verAvisos, setVerAvisos] = useState(false);
   const [testeLeitura, setTesteLeitura] = useState(false);
   const [busca, setBusca] = useState("");
+  const [pagina, setPagina] = useState(1);
   const [marcas, setMarcas] = useState<Record<string, { favorito: boolean; apelido: string }>>({});
   const [apelidando, setApelidando] = useState<CompraAcomp | null>(null);
 
@@ -90,8 +91,9 @@ export function Acompanhamento() {
               atual.problema !== p.problema ||
               atual.conectado !== p.conectado ||
               (p.cnpj && atual.cnpj !== p.cnpj) ||
-              JSON.stringify(atual.lendo ?? []) !== JSON.stringify(p.lendo ?? []))
-              ? { ...atual, buscando: p.buscando, em: p.em, fase: p.fase, problema: p.problema, conectado: p.conectado, cnpj: p.cnpj || atual.cnpj, lendo: p.lendo }
+              JSON.stringify(atual.lendo ?? []) !== JSON.stringify(p.lendo ?? []) ||
+              atual.lendoMais !== p.lendoMais)
+              ? { ...atual, buscando: p.buscando, em: p.em, fase: p.fase, problema: p.problema, conectado: p.conectado, cnpj: p.cnpj || atual.cnpj, lendo: p.lendo, lendoMais: p.lendoMais }
               : atual,
           );
         } else {
@@ -159,6 +161,7 @@ export function Acompanhamento() {
     }
   }
 
+  useEffect(() => setPagina(1), [aba, busca]);
   const fase = painel?.fase ?? "";
   // Já tem a última leitura guardada no computador: mostra a lista na hora e atualiza por trás.
   const temGuardado = (painel?.andamento?.length ?? 0) + (painel?.finalizadas?.length ?? 0) > 0;
@@ -175,6 +178,16 @@ export function Acompanhamento() {
     .filter((c) => !termo || [c.numero, c.uasg, c.orgao, c.objeto, marcas[c.chave]?.apelido ?? "", nomeCompra(c)].some((t) => t.toLowerCase().includes(termo)))
     .sort((a, b) => Number(!!marcas[b.chave]?.favorito) - Number(!!marcas[a.chave]?.favorito));
   const totalFinalizadas = Math.max(painel?.totalFinalizadas ?? 0, finalizadas.length);
+  // Páginas de 10, como no Compras.gov.br. Nas finalizadas, a página escolhida é lida na hora se ainda não veio.
+  const totalRegistros = aba === "finalizadas" && !termo ? totalFinalizadas : lista.length;
+  const totalPaginas = Math.max(1, Math.ceil(totalRegistros / POR_PAGINA));
+  const paginaAtual = Math.min(pagina, totalPaginas);
+  const daPagina = lista.slice((paginaAtual - 1) * POR_PAGINA, paginaAtual * POR_PAGINA);
+  const faltaLer = aba === "finalizadas" && !termo && daPagina.length < Math.min(POR_PAGINA, totalRegistros - (paginaAtual - 1) * POR_PAGINA);
+  const lendoMais = !!painel?.lendoMais;
+  useEffect(() => {
+    if (faltaLer && !lendoMais) ponte.acompanhamento("", false, 0, false, paginaAtual * POR_PAGINA).catch(() => {});
+  }, [faltaLer, lendoMais, paginaAtual]);
   const totalAndamento = Math.max(painel?.totalAndamento ?? 0, andamento.length);
   const urgentes = avisos.filter((a) => a.urgente).length;
   const compraAberta = [...andamento, ...finalizadas].find((c) => c.chave === aberta) ?? null;
@@ -343,17 +356,20 @@ export function Acompanhamento() {
             </select>
           </div>
           <span className="texto-fraco pequeno linha-contagem-acomp">
-            Exibindo {lista.length} registro(s) · {painel.buscando ? "lendo o Compras.gov.br…" : `atualizado ${ha(painel.em, agora)}`}
+            {totalRegistros > 0
+              ? `Exibindo ${(paginaAtual - 1) * POR_PAGINA + 1}–${Math.min(paginaAtual * POR_PAGINA, totalRegistros)} de ${totalRegistros} registro(s)`
+              : "Exibindo 0 registro(s)"}{" "}
+            · {painel.buscando ? "lendo o Compras.gov.br…" : `atualizado ${ha(painel.em, agora)}`}
           </span>
 
-          {lista.length === 0 ? (
+          {lista.length === 0 && !faltaLer ? (
             <p className="texto-fraco vazio-acomp">
               {aba === "finalizadas" ? "Nenhuma participação finalizada recente." : "Nenhuma participação aqui."} Se no Compras.gov.br aparecem participações, clique em
               Atualizar; se continuar vazio, use o Copiar diagnóstico abaixo.
             </p>
           ) : (
             <div className="lista-compras">
-              {lista.map((c) => (
+              {daPagina.map((c) => (
                 <LinhaCompra
                   key={c.chave}
                   compra={c}
@@ -367,15 +383,12 @@ export function Acompanhamento() {
               ))}
             </div>
           )}
-          {aba === "finalizadas" && !termo && finalizadas.length < totalFinalizadas && (
-            <button
-              className="botao secundario carregar-mais-acomp"
-              disabled={painel.buscando}
-              onClick={() => ponte.acompanhamento("", false, 0, true).then(() => avisar("Buscando mais finalizadas no Compras.gov.br…"), (e) => avisar(mensagemDeErro(e), "erro"))}
-            >
-              <RefreshCw className={painel.buscando ? "girando" : ""} /> Carregar mais ({totalFinalizadas - finalizadas.length} restantes)
-            </button>
+          {faltaLer && (
+            <p className="texto-suave carregando-marcas">
+              <RefreshCw className="girando" size={16} /> Buscando a página {paginaAtual} no Compras.gov.br…
+            </p>
           )}
+          {totalPaginas > 1 && <Paginacao pagina={paginaAtual} total={totalPaginas} aoMudar={(n) => { setPagina(n); window.scrollTo({ top: 0, behavior: "smooth" }); }} />}
           {verAvisos && (
             <Modal titulo={`Avisos (${avisos.length})`} aoFechar={() => setVerAvisos(false)}>
               {avisos.length ? (
@@ -609,6 +622,45 @@ const FILTROS: Record<Filtro, { rotulo: string; fases: string[] }> = {
   selecao: { rotulo: "Seleção de fornecedores", fases: ["4"] },
   finalizadas: { rotulo: "Finalizadas", fases: [] },
 };
+
+const POR_PAGINA = 10;
+
+/** Páginas como no Compras.gov.br: primeira, anterior, os números perto da atual, próxima e última. */
+function Paginacao({ pagina, total, aoMudar }: { pagina: number; total: number; aoMudar: (n: number) => void }) {
+  const numeros: (number | "…")[] = [];
+  const de = Math.max(1, Math.min(pagina - 2, total - 4));
+  const ate = Math.min(total, de + 4);
+  if (de > 1) numeros.push(1, ...(de > 2 ? (["…"] as const) : []));
+  for (let n = de; n <= ate; n++) numeros.push(n);
+  if (ate < total) numeros.push(...(ate < total - 1 ? (["…"] as const) : []), total);
+  return (
+    <nav className="paginacao-acomp" aria-label="Páginas">
+      <button className="cn-icone" onClick={() => aoMudar(1)} disabled={pagina === 1} aria-label="Primeira página" title="Primeira página">
+        <ChevronsLeft size={16} />
+      </button>
+      <button className="cn-icone" onClick={() => aoMudar(pagina - 1)} disabled={pagina === 1} aria-label="Página anterior" title="Página anterior">
+        <ChevronLeft size={16} />
+      </button>
+      {numeros.map((n, i) =>
+        n === "…" ? (
+          <span key={`r${i}`} className="reticencias-paginas">
+            …
+          </span>
+        ) : (
+          <button key={n} className={`numero-pagina ${n === pagina ? "atual" : ""}`} onClick={() => aoMudar(n)} aria-current={n === pagina ? "page" : undefined}>
+            {n}
+          </button>
+        ),
+      )}
+      <button className="cn-icone" onClick={() => aoMudar(pagina + 1)} disabled={pagina === total} aria-label="Próxima página" title="Próxima página">
+        <ChevronRight size={16} />
+      </button>
+      <button className="cn-icone" onClick={() => aoMudar(total)} disabled={pagina === total} aria-label="Última página" title="Última página">
+        <ChevronsRight size={16} />
+      </button>
+    </nav>
+  );
+}
 
 const NOME_MODALIDADE: Record<string, string> = { Pregão: "Pregão eletrônico", Dispensa: "Dispensa eletrônica", Concorrência: "Concorrência eletrônica", Cotação: "Cotação eletrônica" };
 const nomeCompra = (c: CompraAcomp) => `${NOME_MODALIDADE[c.modalidade] ?? c.modalidade} Nº ${c.numero}`;

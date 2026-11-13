@@ -1,4 +1,4 @@
-import { Save, Trophy } from "lucide-react";
+import { DownloadCloud, Loader2, Save, Trophy } from "lucide-react";
 import { useEffect, useState } from "react";
 import { MOTIVOS_PERDA, RESULTADOS_ITEM } from "../../../shared/negocio";
 import type { ItemLicitacao, Licitacao } from "../../../shared/tipos";
@@ -6,6 +6,8 @@ import { api, mensagemDeErro } from "../../api";
 import { Campo } from "../../components/Formulario";
 import { avisar, CampoArea, CampoSelect, Vazio } from "../../components/Ui";
 import { formatarMoeda, formatarNumero, paraNumero } from "../../formato";
+import { temPonte } from "../../robo/ponte";
+import { puxarDadosDaLicitacao } from "./puxarResultado";
 
 type Linha = {
   resultado: string;
@@ -40,6 +42,40 @@ export function AbaResultado({
   const [linhas, setLinhas] = useState<Record<number, Linha>>({});
   const [geral, setGeral] = useState({ data_resultado: "", motivo_perda: "", observacao_resultado: "" });
   const [salvando, setSalvando] = useState(false);
+  const [puxando, setPuxando] = useState(false);
+  const [puxados, setPuxados] = useState<Record<number, string>>({});
+
+  // Lê no Compras.gov.br (pelo aplicativo) a colocação, o seu valor e a situação de cada item e preenche o resultado.
+  async function puxar() {
+    setPuxando(true);
+    try {
+      const { porItem, semDados } = await puxarDadosDaLicitacao(licitacao, itens);
+      const ids = Object.keys(porItem).map(Number);
+      setLinhas((atual) => {
+        const novo = { ...atual };
+        for (const id of ids) {
+          const d = porItem[id];
+          novo[id] = {
+            ...novo[id],
+            resultado: d.resultado,
+            colocacao: d.colocacao == null ? "" : String(d.colocacao),
+            nosso_lance: d.nosso_lance == null ? "" : String(d.nosso_lance),
+            vencedor: d.vencedor,
+            valor_vencedor: d.valor_vencedor == null ? "" : String(d.valor_vencedor),
+            motivo_perda: d.motivo_perda,
+          };
+        }
+        return novo;
+      });
+      setPuxados(Object.fromEntries(ids.map((id) => [id, porItem[id].situacao])));
+      if (!ids.length) avisar(`O Compras.gov.br ainda não mostra a sua proposta nos itens${semDados.length ? ` ${semDados.join(", ")}` : ""}.`, "erro");
+      else avisar(`Dados do Compras.gov.br preenchidos em ${ids.length} item(ns)${semDados.length ? ` (sem dados: ${semDados.join(", ")})` : ""}. Confira e clique em Salvar resultado.`);
+    } catch (e) {
+      avisar(mensagemDeErro(e), "erro");
+    } finally {
+      setPuxando(false);
+    }
+  }
 
   useEffect(() => {
     setLinhas(Object.fromEntries(participando.map((i) => [i.id, paraLinha(i)])));
@@ -116,6 +152,16 @@ export function AbaResultado({
           <h2>
             <Trophy size={17} /> Resultado por item
           </h2>
+          {participando.length > 0 && podeEditar && (
+            <button
+              className="botao secundario pequeno"
+              onClick={puxar}
+              disabled={puxando || !temPonte()}
+              title={temPonte() ? "Lê no Compras.gov.br a sua colocação, o seu valor e a situação de cada item" : "Abra a plataforma pelo aplicativo Montzion para puxar do Compras.gov.br"}
+            >
+              {puxando ? <Loader2 className="girando" size={15} /> : <DownloadCloud size={15} />} {puxando ? "Puxando do Compras.gov.br…" : "Puxar dados da licitação"}
+            </button>
+          )}
         </div>
         <p className="descricao">Registre como foi a disputa. Isso alimenta o histórico de concorrentes e os relatórios.</p>
         {participando.length === 0 ? (
@@ -134,6 +180,7 @@ export function AbaResultado({
                       <small className="texto-fraco">
                         Qtd {formatarNumero(i.quantidade)} {i.unidade} · Ref. {formatarMoeda(i.valor_referencia)}
                       </small>
+                      {puxados[i.id] && <small className="puxado-compras">Compras.gov.br: {puxados[i.id]}</small>}
                     </span>
                     <div className="segmentado">
                       {RESULTADOS_ITEM.map((r) => (

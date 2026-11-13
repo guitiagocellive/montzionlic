@@ -1,11 +1,10 @@
 {
-  "versao": "3.1.26",
+  "versao": "3.1.27",
   "data": "2026-11-13",
   "novidades": [
-    "Acompanhamento: a licitação agora segue a estrutura do Compras.gov.br (com o visual do Montzion): cabeçalho com as etapas, \"Exibindo N registro(s)\" com o seletor de itens e uma linha por item com a situação, a quantidade e o valor estimado.",
-    "O \"+\" abre o item como no Compras: Classificação, Declarações e UF do fornecedor, e as seções Chat (com \"Visualizar todas as mensagens do item\"), Proposta, Anexos e Diligências; com anterior, próximo e Voltar.",
-    "\"Todas as propostas\" como no Compras: CNPJ, ME/EPP e situação; nome e UF; valor ofertado e negociado (unitário). Abrindo a empresa: Chat, Proposta, Anexos e Diligências.",
-    "O seletor também filtra: com convocação aberta, com chance boa, o pregoeiro falou comigo e desclassificados. A setinha da linha mostra um resumo sem abrir o item.",
-    "Com uma janela aberta por cima de outra, o Esc agora fecha só a de cima."
+    "Acompanhamento: depois de entrar com o gov.br, a lista atualiza sozinha (não precisa mais clicar em Atualizar).",
+    "Lista do Acompanhamento em páginas de 10, como no Compras.gov.br: números das páginas e atalhos para a primeira e a última. Nas finalizadas, a página escolhida é buscada na hora.",
+    "Anexos das outras empresas abrem e baixam (acabou o erro \"No message available\"): o arquivo é pedido pelo mesmo identificador que o site do Compras usa.",
+    "Quadro > Resultado: botão \"Puxar dados da licitação\". Lê no Compras.gov.br a sua colocação, o seu valor e a situação de cada item (ganho, perdido com o vencedor e o motivo, ou acompanhando) e preenche o resultado para você conferir e salvar."
   ]
 }

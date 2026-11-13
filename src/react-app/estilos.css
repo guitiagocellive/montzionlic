@@ -13869,3 +13869,31 @@ p.etapa-fechada {
 .cn-item-pagina { display: grid; grid-template-columns: minmax(0, 1fr); }
 .cn-painel, .cn-secoes, .cn-secoes .corpo-secao-compras { min-width: 0; }
 .cn-compra { grid-template-columns: minmax(0, 1fr); }
+
+/* Páginas da lista do Acompanhamento */
+.paginacao-acomp {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 18px 0 6px;
+}
+.numero-pagina {
+  min-width: 36px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid var(--borda);
+  background: var(--superficie);
+  color: var(--texto);
+  font: inherit;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.numero-pagina:hover { border-color: var(--acento); }
+.numero-pagina.atual { background: var(--acento); border-color: var(--acento); color: #fff; }
+.reticencias-paginas { padding: 0 4px; color: var(--texto-fraco); }
+
+.puxado-compras { display: block; margin-top: 2px; color: var(--acento-texto); font-size: 0.74rem; }

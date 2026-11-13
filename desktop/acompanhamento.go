@@ -215,7 +215,8 @@ func (m *motor) cicloAcompanhamento() {
 	for {
 		time.Sleep(5 * time.Second)
 		m.mu.Lock()
-		pronto := m.token != "" && m.fase == "pronto"
+		// Logado (a fase do robô pode estar em "buscando"/"erro-lista" das disputas: isso não impede ler as participações).
+		pronto := m.token != "" && m.fase != "sem-login" && m.fase != "aguardando-login" && m.fase != "entrando"
 		robo := false
 		for chave, c := range m.compras {
 			if m.roboNaCompra(chave) && m.compraEmDisputa(c) {
@@ -240,7 +241,8 @@ func (m *motor) cicloAcompanhamento() {
 		_ = faltam // as compras sem detalhe são lidas quando a pessoa abre (não forçam leitura de fundo)
 		precisa := a.forcar || desde > intervaloAcompanhamento || (a.doCache && desde > 20*time.Second)
 		// A pessoa está usando (abriu uma compra, cadastrando...): a leitura de fundo espera, salvo se ela pediu.
-		if !a.forcar && pessoaUsando() && a.andamento != nil {
+		// Mas a primeira leitura depois do login (a tela ainda mostra a leitura guardada) nunca espera.
+		if !a.forcar && !a.doCache && pessoaUsando() && a.andamento != nil {
 			precisa = false
 		}
 		// Durante a disputa com o robô ligado, só lê quando a pessoa pede (o captcha fica para a sala).
@@ -441,7 +443,7 @@ func (m *motor) aplicarLeitura(v leituraAcomp, comLista bool) error {
 }
 
 // Acompanhamento devolve o que já foi lido. compra: a página quer essa compra lida agora; atualizar: ler tudo já.
-func (m *motor) Acompanhamento(compra string, atualizar bool, desde int, mais bool) any {
+func (m *motor) Acompanhamento(compra string, atualizar bool, desde int, mais bool, ate int) any {
 	m.mu.Lock()
 	cnpjAgora := m.cnpj
 	m.mu.Unlock()
@@ -470,9 +472,16 @@ func (m *motor) Acompanhamento(compra string, atualizar bool, desde int, mais bo
 		a.paginasFinalizadas = max(1, a.paginasFinalizadas) + 3
 		go m.lerMaisFinalizadasAcomp()
 	}
+	// Página escolhida na lista de finalizadas: lê até ela (de uma vez, no tamanho de página que o Compras aceitar).
+	if ate > 0 && !a.lendoMais && len(listaDe(a.finalizadas)) < ate {
+		if quer := (min(ate, 2000) + 9) / 10; quer > a.paginasFinalizadas {
+			a.paginasFinalizadas = quer
+		}
+		go m.lerMaisFinalizadasAcomp()
+	}
 	buscando := a.buscando || a.forcar || len(a.detalhando) > 0
 	if desde > 0 && desde == a.versao {
-		resposta := mapa{"igual": true, "versao": a.versao, "buscando": buscando, "lendo": a.detalhando, "em": a.em.UnixMilli(), "agora": time.Now().UnixMilli(), "problema": a.erro}
+		resposta := mapa{"igual": true, "versao": a.versao, "buscando": buscando, "lendoMais": a.lendoMais, "lendo": a.detalhando, "em": a.em.UnixMilli(), "agora": time.Now().UnixMilli(), "problema": a.erro}
 		a.mu.Unlock()
 		m.mu.Lock()
 		resposta["conectado"] = m.token != ""
@@ -496,6 +505,7 @@ func (m *motor) Acompanhamento(compra string, atualizar bool, desde int, mais bo
 		"lendo":            a.detalhando,
 		"totalAndamento":   a.totalAndamento,
 		"totalFinalizadas": a.totalFinalizadas,
+		"lendoMais":        a.lendoMais,
 		"agora":            time.Now().UnixMilli(),
 	}
 	if a.em.IsZero() {
