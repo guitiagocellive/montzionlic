@@ -106,6 +106,9 @@ export function PainelEtapa({ licitacao: l, semCotacao, participando, execucoes,
   return (
     <section className={`painel-etapa entrar etapa-${l.etapa}`}>
       <div className="proximo-passo">
+        <span className="proximo-passo-icone" aria-hidden="true">
+          <ListChecks size={17} />
+        </span>
         <div className="proximo-passo-texto">
           <span className="sobretitulo">Próximo passo</span>
           <strong>{titulo}</strong>

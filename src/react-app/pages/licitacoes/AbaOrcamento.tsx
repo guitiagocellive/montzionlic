@@ -19,6 +19,7 @@ export function AbaOrcamento({ licitacao, itens, cotacoes, aoMudar }: Props) {
   const [imposto, setImposto] = useState(String(licitacao.imposto_percentual));
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
   const [modal, setModal] = useState<{ item: ItemLicitacao; cotacao: Cotacao | null } | null>(null);
+  const [editandoParametros, setEditandoParametros] = useState(false);
 
   useEffect(() => {
     api<{ fornecedores: Fornecedor[] }>("/fornecedores").then((r) => setFornecedores(r.fornecedores), () => {});
@@ -96,65 +97,44 @@ export function AbaOrcamento({ licitacao, itens, cotacoes, aoMudar }: Props) {
 
   return (
     <>
-      <section className="cartao parametros">
-        <div className="cartao-titulo">
-          <h2>
-            <Calculator size={18} color="#f0abfc" aria-hidden="true" /> Parâmetros do orçamento
-          </h2>
-        </div>
-        <div className="parametros-grade">
-          <Campo
-            rotulo="Lucro desejado (%)"
-            name="lucro"
-            type="number"
-            step="0.1"
-            min="0"
-            value={lucro}
-            onChange={(e) => setLucro(e.target.value)}
-          />
-          <Campo
-            rotulo="Impostos sobre a venda (%)"
-            name="imposto"
-            type="number"
-            step="0.01"
-            min="0"
-            value={imposto}
-            onChange={(e) => setImposto(e.target.value)}
-          />
-          <button className="botao" onClick={salvarParametros} disabled={!parametrosMudaram || invalido}>
-            Salvar parâmetros
+      {/* Parâmetros numa linha só; os números do orçamento ficam no cartão Financeiro e no rodapé. */}
+      <section className="cartao parametros parametros-compacto">
+        <div className="parametros-linha">
+          <Calculator size={17} aria-hidden="true" />
+          <span>
+            <strong>Orçamento</strong>
+            <span className="texto-fraco">
+              {" "}
+              · lucro {formatarNumero(licitacao.lucro_percentual)}% · impostos {formatarNumero(licitacao.imposto_percentual)}% · frete dividido pela quantidade
+            </span>
+          </span>
+          <span className="texto-fraco pequeno parametros-cotados">
+            {itensCotados}/{itensVisiveis.length} itens cotados
+          </span>
+          <button className="botao secundario pequeno" onClick={() => setEditandoParametros((v) => !v)} aria-expanded={editandoParametros}>
+            {editandoParametros ? "Fechar" : "Parâmetros"}
           </button>
         </div>
-        <p className="explicacao">
-          <Info aria-hidden="true" />
-          <span>
-            Preço de venda = custo unitário com frete ÷ (1 − impostos − lucro). O frete é dividido pela
-            quantidade do item. O <strong>preço mínimo</strong> só cobre custo e impostos (lucro zero).
-          </span>
-        </p>
-        {invalido && <Alerta>Impostos + lucro precisam somar menos de 100%.</Alerta>}
+        {editandoParametros && (
+          <>
+            <div className="parametros-grade">
+              <Campo rotulo="Lucro desejado (%)" name="lucro" type="number" step="0.1" min="0" value={lucro} onChange={(e) => setLucro(e.target.value)} />
+              <Campo rotulo="Impostos sobre a venda (%)" name="imposto" type="number" step="0.01" min="0" value={imposto} onChange={(e) => setImposto(e.target.value)} />
+              <button className="botao" onClick={salvarParametros} disabled={!parametrosMudaram || invalido}>
+                Salvar parâmetros
+              </button>
+            </div>
+            <p className="explicacao">
+              <Info aria-hidden="true" />
+              <span>
+                Preço de venda = custo unitário com frete ÷ (1 − impostos − lucro). O frete é dividido pela quantidade do item. O <strong>preço mínimo</strong>{" "}
+                só cobre custo e impostos (lucro zero).
+              </span>
+            </p>
+            {invalido && <Alerta>Impostos + lucro precisam somar menos de 100%.</Alerta>}
+          </>
+        )}
       </section>
-
-      <div className="resumo-linha">
-        <div className="mini-indicador">
-          <span>Itens cotados</span>
-          <strong>
-            {itensCotados}/{itensVisiveis.length}
-          </strong>
-        </div>
-        <div className="mini-indicador">
-          <span>Custo total</span>
-          <strong>{formatarMoeda(totalCusto)}</strong>
-        </div>
-        <div className="mini-indicador">
-          <span>Venda total (produtos da proposta)</span>
-          <strong className="texto-gradiente">{formatarMoeda(totalVenda)}</strong>
-        </div>
-        <div className="mini-indicador">
-          <span>Lucro previsto</span>
-          <strong className="texto-verde">{formatarMoeda(totalLucro)}</strong>
-        </div>
-      </div>
 
       {itensVisiveis.length === 0 ? (
         <section className="cartao">
@@ -217,6 +197,20 @@ export function AbaOrcamento({ licitacao, itens, cotacoes, aoMudar }: Props) {
             </section>
           );
         })
+      )}
+
+      {itensCotados > 0 && (
+        <div className="totais-orcamento">
+          <span>
+            Custo <strong>{formatarMoeda(totalCusto)}</strong>
+          </span>
+          <span>
+            Venda <strong className="texto-azul">{formatarMoeda(totalVenda)}</strong>
+          </span>
+          <span>
+            Lucro <strong className="texto-verde">{formatarMoeda(totalLucro)}</strong>
+          </span>
+        </div>
       )}
 
       {modal && (

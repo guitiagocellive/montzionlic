@@ -103,7 +103,6 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
   if (!ficha) return <Carregando />;
 
   const { licitacao: l, itens, cotacoes, arquivos } = ficha;
-  const etapa = ETAPAS_LICITACAO.find((e) => e.chave === l.etapa);
 
   const participando = itens.filter((i) => i.participar);
   const conta = (r: string) => participando.filter((i) => i.resultado === r).length;
@@ -138,18 +137,11 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
 
       <div className="cabecalho-ficha entrar">
         <div className="ficha-titulo">
-          <div className="card-etiquetas">
-            <span className="chip etapa-chip" style={{ ["--cor-etapa" as string]: etapa?.cor }}>
-              {etapa?.nome}
-            </span>
-            {l.modalidade && <span className="chip">{l.modalidade}</span>}
-            {l.registro_preco === 1 && <span className="chip destaque">Registro de preço</span>}
-          </div>
-          <h1>{l.numero ? `Licitação nº ${l.numero}` : "Licitação sem número"}</h1>
-          <p className="texto-suave">
-            {l.orgao || "Órgão não informado"}
-            {l.uasg && ` · UASG ${l.uasg}`}
-          </p>
+          <h1>
+            {l.numero ? `Nº ${l.numero}` : "Licitação sem número"}
+            <small>{[l.uasg && `UASG ${l.uasg}`, l.modalidade, l.registro_preco === 1 ? "Registro de preço" : ""].filter(Boolean).join(" · ")}</small>
+          </h1>
+          <p className="texto-suave">{l.orgao || "Órgão não informado"}</p>
         </div>
         <div className="ficha-acoes">
           <select
