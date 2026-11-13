@@ -33,6 +33,9 @@ type itemMotor struct {
 	bruto        map[string]any
 	recebidoEm   time.Time // quando o tempo restante chegou
 	atualizadoEm time.Time // último aviso/leitura (para medir o tempo de reação)
+	// O item passou por uma etapa de lances: o fim da disputa é reconhecido mesmo se ele passar antes por
+	// "Aguardando encerramento" (FE) ou outra fase intermediária (antes só valia etapa de lances → encerrada).
+	teveLances bool
 }
 
 type compraMotor struct {
@@ -660,7 +663,11 @@ func (m *motor) mesclar(c *compraMotor, novo map[string]any, agora time.Time) st
 	for k, v := range novo {
 		it.bruto[k] = v
 	}
-	if fasesDeLance[faseAntes] && textoDe(it.bruto["fase"]) == "E" {
+	faseAgora := textoDe(it.bruto["fase"])
+	if fasesDeLance[faseAntes] || fasesDeLance[faseAgora] {
+		it.teveLances = true
+	}
+	if faseAgora == "E" && faseAntes != "E" && it.teveLances {
 		m.fimDaDisputa(c.chave, int(*n))
 	}
 	if _, ok := novo["tempoRestanteEmSegundos"]; ok {
@@ -722,7 +729,7 @@ func (m *motor) lerItens(chave string) {
 		}
 		// Saiu da lista "em disputa": a disputa do item acabou.
 		for n, it := range c.itens {
-			if !presentes[n] && fasesDeLance[textoDe(it.bruto["fase"])] {
+			if f := textoDe(it.bruto["fase"]); !presentes[n] && f != "E" && (fasesDeLance[f] || it.teveLances) {
 				it.bruto["fase"] = "E"
 				m.fimDaDisputa(chave, n)
 			}
@@ -943,6 +950,11 @@ func (m *motor) esquecerMeuValor(k string, valor float64) {
 //     leituras e captchas em poucas horas, disputando captcha com quem estava na reta final.
 func ritmoClassificacao(e estadoItem, c *configItem) time.Duration {
 	switch {
+	case e.Fase == "LA" && e.RestanteSeg != nil && *e.RestanteSeg <= segundosFinais+1:
+		// Últimos 10 s: na briga por colocação os concorrentes de trás só aparecem na classificação (o tempo real
+		// só traz o 1º lugar). Disputa real de 13/11: um concorrente cobria o robô a cada 2–3 s; relendo a cada
+		// 0,4 s o robô vê e responde mais cedo. É uma rajada curta (~25 leituras) e o pool de captchas aguenta.
+		return 400 * time.Millisecond
 	case e.Fase == "LA" && e.RestanteSeg != nil && retaFinal(e, c):
 		return 700 * time.Millisecond
 	case e.Fase != "LA" || e.RestanteSeg == nil:
@@ -1711,11 +1723,17 @@ func (m *motor) pedirClassificacao(compra string, numero int, k string, interval
 			m.mu.Lock()
 			resumo := fmt.Sprint(ci.concorrentes)
 			n := len(ci.concorrentes)
+			posicao := ""
+			for i, p := range ci.todos {
+				if p.Nosso {
+					posicao = fmt.Sprintf(", você em %dº de %d", i+1, len(ci.todos))
+				}
+			}
 			m.mu.Unlock()
 			// Só registra quando a classificação mudou, demorou ou faltou captcha pronto (as leituras iguais, a cada
 			// segundo, enchiam o diagnóstico e escondiam o que importa).
-			if mudouClassificacao(k, resumo) || time.Since(inicio) > 400*time.Millisecond || prontos == 0 {
-				marcarRobo("%s: classificação lida em %d ms (captchas prontos antes: %d, %d concorrente(s))", rotuloItem(k), time.Since(inicio).Milliseconds(), prontos, n)
+			if mudouClassificacao(k, resumo+posicao) || time.Since(inicio) > 400*time.Millisecond || prontos == 0 {
+				marcarRoboT("classif", time.Since(inicio).Milliseconds(), "%s: classificação lida em %d ms (captchas prontos antes: %d, %d concorrente(s)%s)", rotuloItem(k), time.Since(inicio).Milliseconds(), prontos, n, posicao)
 			}
 		}
 		m.avaliar(k)

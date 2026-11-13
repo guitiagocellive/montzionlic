@@ -213,7 +213,8 @@ func TestRitmoClassificacao(t *testing.T) {
 		c    *configItem
 		quer time.Duration
 	}{
-		{"últimos segundos: 0,7 s", estadoItem{Fase: "LA", RestanteSeg: f(8)}, cfg, 700 * time.Millisecond},
+		{"últimos 10 s: 0,4 s (briga por colocação)", estadoItem{Fase: "LA", RestanteSeg: f(8)}, cfg, 400 * time.Millisecond},
+		{"entre 10 e 15 s: 0,7 s", estadoItem{Fase: "LA", RestanteSeg: f(14)}, cfg, 700 * time.Millisecond},
 		{"aleatório: 1 s", estadoItem{Fase: "AL"}, cfg, time.Second},
 		{"1,5 min do fim: 2 s", estadoItem{Fase: "LA", RestanteSeg: f(90)}, cfg, 2 * time.Second},
 		{"não esperar, 50 s do fim: 0,7 s", estadoItem{Fase: "LA", RestanteSeg: f(50)}, nao, 700 * time.Millisecond},
@@ -313,5 +314,39 @@ func TestQuatroCasasSozinho(t *testing.T) {
 	}
 	if precisaQuatroCasas(estadoItem{Variacao: f(0.5), TipoVariacao: "P"}) {
 		t.Error("intervalo em % não conta como casas decimais do valor")
+	}
+}
+
+func TestFimDaDisputaPassandoPorAguardandoEncerramento(t *testing.T) {
+	// Disputa real de 13/11: etapa aberta → "Aguardando encerramento" (FE) → encerrada. O fim tem que ser reconhecido.
+	m := &motor{compras: map[string]*compraMotor{}, fimVisto: map[string]bool{}, config: map[string]configItem{}}
+	c := &compraMotor{chave: "98765406000462026", itens: map[int]*itemMotor{}}
+	m.compras[c.chave] = c
+	agora := time.Now()
+	base := map[string]any{"numero": 3.0, "melhorValorGeral": map[string]any{"valorCalculado": 9789.39}, "melhorValorFornecedor": map[string]any{"valorCalculado": 15595.32}}
+	com := func(fase string) map[string]any {
+		x := map[string]any{"fase": fase}
+		for k, v := range base {
+			x[k] = v
+		}
+		return x
+	}
+	m.mesclar(c, com("LA"), agora)
+	m.mesclar(c, com("FE"), agora)
+	if m.fimVisto[chaveItem(c.chave, 3)] {
+		t.Fatal("em \"Aguardando encerramento\" a disputa ainda não acabou")
+	}
+	m.mesclar(c, com("E"), agora)
+	if !m.fimVisto[chaveItem(c.chave, 3)] {
+		t.Fatal("etapa aberta → aguardando encerramento → encerrada: o fim da disputa (resultado e relatório) tem que ser reconhecido")
+	}
+	// Item que já chega encerrado (sem ter visto a etapa de lances): não gera relatório.
+	c.itens[7] = nil
+	delete(c.itens, 7)
+	x := com("E")
+	x["numero"] = 7.0
+	m.mesclar(c, x, agora)
+	if m.fimVisto[chaveItem(c.chave, 7)] {
+		t.Fatal("item que já chegou encerrado não é fim de disputa acompanhada")
 	}
 }

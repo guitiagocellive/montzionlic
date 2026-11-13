@@ -19,6 +19,8 @@ func TestRelatorioDaDisputa(t *testing.T) {
 		{t0.Add(20*time.Second + 300*time.Millisecond), rotulo + ": enviando lance R$ 969,99 (lance)", "enviando", 0},
 		{t0.Add(20*time.Second + 380*time.Millisecond), rotulo + ": lance R$ 969,99 RECUSADO (422, lance)", "lance-recusado", 80},
 		{t0.Add(30 * time.Second), rotulo + ": melhor lance R$ 960,0000 (nosso R$ 969,9900)", "melhor-conc", 0},
+		{t0.Add(31 * time.Second), rotulo + ": classificação lida em 90 ms (captchas prontos antes: 2, 2 concorrente(s), você em 3º de 3)", "classif", 90},
+		{t0.Add(32 * time.Second), rotulo + ": classificação lida em 110 ms (captchas prontos antes: 2, 2 concorrente(s), você em 2º de 3)", "classif", 110},
 	}
 	st := calcularEstatisticas(ev)
 	if st.lancesConcorrentes != 3 || st.nossosOK != 1 || st.nossosRecusados != 1 || len(st.reacoes) != 2 || st.semResposta != 1 {
@@ -37,8 +39,11 @@ func TestRelatorioDaDisputa(t *testing.T) {
 		t.Fatalf("lista: %+v", lista)
 	}
 	texto, err := lerRelatorio(lista[0].Nome)
-	if err != nil || !strings.Contains(texto, "Reação do robô a lance de concorrente") || !strings.Contains(texto, "mediana 300 ms, pior 300 ms (2 respostas)") || !strings.Contains(texto, "Lances de concorrente sem resposta do robô: 1") {
+	if err != nil || !strings.Contains(texto, "Reação do robô a lance de concorrente") || !strings.Contains(texto, "mediana 300 ms, pior 300 ms (2 respostas)") || !strings.Contains(texto, "Respondidos pelo robô: 2 de 3") {
 		t.Fatalf("relatório: %v\n%s", err, texto)
+	}
+	if !strings.Contains(texto, "Sua posição pela classificação: começou em 3º de 3, terminou em 2º de 3") || !strings.Contains(texto, "Leituras da classificação registradas: 2") {
+		t.Fatalf("relatório sem a posição/leituras:\n%s", texto)
 	}
 	if _, err := lerRelatorio("../montzion.log"); err == nil {
 		t.Fatal("nome com caminho deveria ser recusado")

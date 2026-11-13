@@ -25,10 +25,14 @@ type estatisticasDisputa struct {
 	lancesConcorrentes int
 	nossosOK           int
 	nossosRecusados    int
-	reacoes            []int64 // ms do lance de concorrente até o robô enviar o nosso
-	semResposta        int     // lances de concorrente que o robô não respondeu (no mínimo, ganhar tempo, fora dos 10 s…)
-	pedidos            []int64 // ms do pedido ao Compras.gov.br em cada lance nosso
+	reacoes            []int64  // ms do lance de concorrente até o robô enviar o nosso
+	semResposta        int      // lances de concorrente que o robô não respondeu (no mínimo, ganhar tempo, fora dos 10 s…)
+	pedidos            []int64  // ms do pedido ao Compras.gov.br em cada lance nosso
+	leituras           []int64  // ms de cada leitura da classificação registrada
+	posicoes           []string // "Nº de M" em cada leitura da classificação (sua posição ao longo da disputa)
 }
+
+var posicaoNaLeitura = regexp.MustCompile(`você em (\d+º de \d+)`)
 
 func calcularEstatisticas(ev []eventoRobo) estatisticasDisputa {
 	var st estatisticasDisputa
@@ -59,6 +63,11 @@ func calcularEstatisticas(ev []eventoRobo) estatisticasDisputa {
 		case "lance-recusado":
 			st.nossosRecusados++
 			st.pedidos = append(st.pedidos, e.ms)
+		case "classif":
+			st.leituras = append(st.leituras, e.ms)
+			if m := posicaoNaLeitura.FindStringSubmatch(e.texto); m != nil {
+				st.posicoes = append(st.posicoes, m[1])
+			}
 		}
 	}
 	return st
@@ -118,13 +127,19 @@ func salvarRelatorioDisputa(rotulo string, r resultadoDisputa) {
 	}
 	fmt.Fprintf(&b, "Resultado: %s\n\n== Resumo ==\n", resultado)
 	fmt.Fprintf(&b, "Duração acompanhada: %s (de %s a %s)\n", agora.Sub(ev[0].em).Round(time.Second), ev[0].em.Format("15:04:05"), ev[len(ev)-1].em.Format("15:04:05"))
-	fmt.Fprintf(&b, "Lances de concorrentes vistos à nossa frente: %d\n", st.lancesConcorrentes)
+	fmt.Fprintf(&b, "Mudanças no 1º lugar com um concorrente à nossa frente: %d\n", st.lancesConcorrentes)
 	fmt.Fprintf(&b, "Nossos lances: %d aceitos, %d recusados\n", st.nossosOK, st.nossosRecusados)
 	if len(st.reacoes) > 0 {
 		fmt.Fprintf(&b, "Reação do robô a lance de concorrente (aviso → nosso lance sair): mediana %d ms, pior %d ms (%d respostas)\n", mediana(st.reacoes), maximo(st.reacoes), len(st.reacoes))
 	}
-	if st.semResposta > 0 {
-		fmt.Fprintf(&b, "Lances de concorrente sem resposta do robô: %d (fora dos 10 s finais, no mínimo, ganhando tempo ou robô desligado — veja a decisão na linha do tempo)\n", st.semResposta)
+	if st.lancesConcorrentes > 0 {
+		fmt.Fprintf(&b, "Respondidos pelo robô: %d de %d (os outros ficaram abaixo do seu mínimo, fora dos 10 s finais, ganhando tempo ou com o robô desligado — veja a decisão na linha do tempo)\n", len(st.reacoes), st.lancesConcorrentes)
+	}
+	if len(st.leituras) > 0 {
+		fmt.Fprintf(&b, "Leituras da classificação registradas: %d (mediana %d ms, pior %d ms)\n", len(st.leituras), mediana(st.leituras), maximo(st.leituras))
+	}
+	if len(st.posicoes) > 0 {
+		fmt.Fprintf(&b, "Sua posição pela classificação: começou em %s, terminou em %s\n", st.posicoes[0], st.posicoes[len(st.posicoes)-1])
 	}
 	if len(st.pedidos) > 0 {
 		fmt.Fprintf(&b, "Aceite do Compras.gov.br (pedido do lance → resposta): mediana %d ms, pior %d ms\n", mediana(st.pedidos), maximo(st.pedidos))
