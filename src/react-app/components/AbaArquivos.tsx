@@ -11,7 +11,7 @@ import {
   Trash2,
   UploadCloud,
 } from "lucide-react";
-import { type DragEvent, lazy, Suspense, useRef, useState } from "react";
+import { type DragEvent, lazy, Suspense, useEffect, useRef, useState } from "react";
 import { CATEGORIAS_ARQUIVO } from "../../shared/negocio";
 import type { Arquivo, Documento, Empresa } from "../../shared/tipos";
 import { api, enviarArquivo, mensagemDeErro } from "../api";
@@ -41,6 +41,9 @@ interface Props {
   rotuloHerdados?: string;
   /** Pode assinar PDFs com o certificado da empresa. */
   podeAssinar?: boolean;
+  /** Outro lugar da ficha pediu "Documentos de habilitação" (> 0): junta e anexa, depois avisa com aoAtenderHabilitacao. */
+  pedidoHabilitacao?: number;
+  aoAtenderHabilitacao?: () => void;
 }
 
 export function AbaArquivos({
@@ -50,6 +53,8 @@ export function AbaArquivos({
   aoMudar,
   rotuloHerdados,
   podeAssinar = false,
+  pedidoHabilitacao = 0,
+  aoAtenderHabilitacao,
 }: Props) {
   const [categoria, setCategoria] = useState(categoriaInicial);
   const [enviando, setEnviando] = useState<string | null>(null);
@@ -174,6 +179,15 @@ export function AbaArquivos({
       setJuntando("");
     }
   }
+
+  // Pedido vindo do cartão de arquivos da ficha: já junta e anexa.
+  useEffect(() => {
+    if (pedidoHabilitacao > 0) {
+      aoAtenderHabilitacao?.();
+      documentosHabilitacao();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pedidoHabilitacao]);
 
   const proprios = arquivos.filter((a) => !rotuloHerdados || a.execucao_id);
   const herdados = rotuloHerdados ? arquivos.filter((a) => !a.execucao_id) : [];

@@ -19,8 +19,8 @@ export interface ConexaoGovBr {
 
 export const TITULO_CONEXAO: Record<EstadoConexao, string> = {
   desconhecido: "",
-  desconectado: "Desconectado do gov.br. Clique para entrar.",
-  aguardando: "Esperando você entrar na janela do gov.br. Clique para ver.",
+  desconectado: "gov.br desconectado: clique para entrar",
+  aguardando: "Entre na janela do gov.br que abriu (clique para ver)",
   conectando: "Conectando ao Compras.gov.br…",
   conectado: "Conectado ao gov.br",
 };

@@ -1,4 +1,4 @@
-import { LogOut, MonitorDown, Moon, Settings, Sparkle, Sun, UserRound } from "lucide-react";
+import { LogOut, MonitorDown, Moon, Settings, ShieldCheck, Sparkle, Sun, UserRound } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { Usuario } from "../../shared/tipos";
 import { api } from "../api";
@@ -99,22 +99,27 @@ export function Layout({ usuario, caminho, aoSair, aoMudarUsuario, children }: P
         <nav className="rail-nav">
           {blocos.map((b) =>
             Array.isArray(b) ? (
-              <div key={`grupo-${b[0].caminho}`} className="rail-pilula" role="group" aria-label="Compras.gov.br (conta gov.br)">
-                {app &&
-                  (conexao.estado === "desconectado" || conexao.estado === "aguardando" ? (
-                    <button
-                      type="button"
-                      className={`rail-pilula-status ${conexao.estado}`}
-                      title={TITULO_CONEXAO[conexao.estado]}
-                      aria-label={TITULO_CONEXAO[conexao.estado]}
-                      onClick={abrirPopupGovBr}
-                    />
-                  ) : (
-                    conexao.estado !== "desconhecido" && (
-                      <span className={`rail-pilula-status ${conexao.estado}`} title={TITULO_CONEXAO[conexao.estado]} role="img" aria-label={TITULO_CONEXAO[conexao.estado]} />
-                    )
-                  ))}
+              <div
+                key={`grupo-${b[0].caminho}`}
+                className={`rail-pilula ${app && conexao.estado !== "conectado" && conexao.estado !== "desconhecido" ? "desconectada" : ""}`}
+                role="group"
+                aria-label="Compras.gov.br (conta gov.br)"
+              >
                 {b.map(itemRail)}
+                {/* Botão do gov.br: azul claro sozinho (pílula cinza) = precisa entrar; pílula toda azul = conectado. */}
+                {app && (
+                  <button
+                    type="button"
+                    className={`rail-item rail-govbr ${conexao.estado}`}
+                    aria-label={TITULO_CONEXAO[conexao.estado] || "Conta gov.br"}
+                    aria-disabled={conexao.estado === "conectado" || conexao.estado === "conectando"}
+                    onClick={() => conexao.estado !== "conectado" && conexao.estado !== "conectando" && abrirPopupGovBr()}
+                  >
+                    <ShieldCheck aria-hidden="true" />
+                    <span className={`rail-govbr-sinal ${conexao.estado}`} aria-hidden="true" />
+                    <span className="dica">{TITULO_CONEXAO[conexao.estado] || "Conta gov.br"}</span>
+                  </button>
+                )}
               </div>
             ) : (
               itemRail(b)

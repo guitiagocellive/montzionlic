@@ -1,6 +1,6 @@
-import { ArrowLeft, Calculator, CalendarClock, Check, ExternalLink, FileText, FolderOpen, Landmark, ListChecks, MessageSquare, Pencil, Trash2, Trophy, UserRound, Wallet } from "lucide-react";
+import { ArrowLeft, Calculator, FileArchive, CalendarClock, Check, ExternalLink, FileText, FolderOpen, Landmark, ListChecks, MessageSquare, Pencil, Trash2, Trophy, UserRound, Wallet } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { ETAPAS_EXECUCAO, ETAPAS_LICITACAO, nomeEtapa } from "../../../shared/negocio";
+import { cotacaoDaProposta, ETAPAS_EXECUCAO, ETAPAS_LICITACAO, nomeEtapa } from "../../../shared/negocio";
 import { podeEditar, podeVer } from "../../../shared/permissoes";
 import type { Arquivo, Cotacao, ItemLicitacao, Licitacao, Usuario } from "../../../shared/tipos";
 import { api, mensagemDeErro } from "../../api";
@@ -9,7 +9,7 @@ import { Avatar } from "../../components/Avatar";
 import { PainelAtividade } from "../../components/Atividade";
 import { avisar, Carregando, Modal } from "../../components/Ui";
 import { diasAte } from "../../../shared/negocio";
-import { formatarData, formatarMoeda, hojeIso, textoPrazo } from "../../formato";
+import { formatarData, formatarMoeda, formatarNumero, hojeIso, textoPrazo } from "../../formato";
 import { link, navegar } from "../../rota";
 import { AbaDados } from "./AbaDados";
 import { AbaItens } from "./AbaItens";
@@ -37,6 +37,7 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
   const [editando, setEditando] = useState(abaInicial === "dados");
   const [ganhando, setGanhando] = useState(new URLSearchParams(location.search).get("ganhar") === "1");
   const [comentarios, setComentarios] = useState(0);
+  const [pedidoHabilitacao, setPedidoHabilitacao] = useState(0);
   const [equipe, setEquipe] = useState<{ id: number; nome: string; cor: string | null; foto: string | null }[]>([]);
 
   useEffect(() => {
@@ -346,6 +347,8 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
                 arquivos={arquivos}
                 destino={{ licitacao_id: l.id }}
                 categoriaInicial="Edital"
+                pedidoHabilitacao={pedidoHabilitacao}
+                aoAtenderHabilitacao={() => setPedidoHabilitacao(0)}
                 aoMudar={carregar}
               />
             )}
@@ -360,6 +363,18 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
             )}
           </div>
         </div>
+
+        <aside className="ficha-direita entrar">
+          {podeVer(usuario.permissoes, "orcamento") && <CartaoFinanceiro licitacao={l} itens={participando} cotacoes={cotacoes} aoIrPara={escolherAba} />}
+          <CartaoArquivos
+            arquivos={arquivos}
+            aoIrPara={escolherAba}
+            aoHabilitacao={() => {
+              escolherAba("arquivos");
+              setPedidoHabilitacao((n) => n + 1);
+            }}
+          />
+        </aside>
       </div>
 
       {editando && (
@@ -396,5 +411,117 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
         aoContar={setComentarios}
       />
     </>
+  );
+}
+
+/** Coluna da direita: o dinheiro da licitação (estimado, nossa proposta, custo, impostos e lucro). */
+function CartaoFinanceiro({ licitacao: l, itens, cotacoes, aoIrPara }: { licitacao: Licitacao; itens: ItemLicitacao[]; cotacoes: Cotacao[]; aoIrPara: (aba: string) => void }) {
+  let venda = 0;
+  let custo = 0;
+  let lucro = 0;
+  let cotados = 0;
+  for (const item of itens) {
+    const c = cotacaoDaProposta(cotacoes, item, l.imposto_percentual, l.lucro_percentual);
+    if (!c) continue;
+    venda += c.calculo.totalVenda;
+    custo += c.calculo.totalCusto;
+    lucro += c.calculo.lucroTotal;
+    cotados++;
+  }
+  const impostos = venda * (l.imposto_percentual / 100);
+  const estimado = l.valor_estimado ?? 0;
+  const parte = estimado > 0 && venda > 0 ? Math.min(100, (venda / estimado) * 100) : 0;
+  return (
+    <section className="cartao cartao-financeiro">
+      <div className="cartao-titulo">
+        <h2>
+          <Wallet size={17} /> Financeiro
+        </h2>
+        <button className="botao-link sem-margem" onClick={() => aoIrPara("orcamento")}>
+          orçamento
+        </button>
+      </div>
+      <dl className="linhas-financeiro">
+        <div>
+          <dt>Valor estimado</dt>
+          <dd>{estimado > 0 ? formatarMoeda(estimado) : "—"}</dd>
+        </div>
+        <div>
+          <dt>Nossa proposta</dt>
+          <dd className="texto-azul">{venda > 0 ? formatarMoeda(venda) : "—"}</dd>
+        </div>
+      </dl>
+      {parte > 0 && (
+        <>
+          <div className="barra-financeiro">
+            <i style={{ width: `${parte}%` }} />
+          </div>
+          <span className="texto-fraco pequeno">proposta = {Math.round((venda / estimado) * 100)}% do estimado</span>
+        </>
+      )}
+      <dl className="linhas-financeiro">
+        <div>
+          <dt>Custo total</dt>
+          <dd>{custo > 0 ? formatarMoeda(custo) : "—"}</dd>
+        </div>
+        <div>
+          <dt>Impostos ({formatarNumero(l.imposto_percentual)}%)</dt>
+          <dd>{venda > 0 ? formatarMoeda(impostos) : "—"}</dd>
+        </div>
+        <div>
+          <dt>Itens orçados</dt>
+          <dd>
+            {cotados} de {itens.length}
+          </dd>
+        </div>
+      </dl>
+      <div className="lucro-financeiro">
+        <span>Lucro previsto</span>
+        <strong className={lucro > 0 ? "texto-verde" : ""}>
+          {venda > 0 ? formatarMoeda(lucro) : "—"} {venda > 0 && <small>{formatarNumero(l.lucro_percentual)}%</small>}
+        </strong>
+      </div>
+    </section>
+  );
+}
+
+/** Coluna da direita: os arquivos da licitação a um clique. */
+function CartaoArquivos({ arquivos, aoIrPara, aoHabilitacao }: { arquivos: Arquivo[]; aoIrPara: (aba: string) => void; aoHabilitacao: () => void }) {
+  return (
+    <section className="cartao cartao-arquivos-ficha">
+      <div className="cartao-titulo">
+        <h2>
+          <FolderOpen size={17} /> Arquivos ({arquivos.length})
+        </h2>
+        <button className="botao-link sem-margem" onClick={() => aoIrPara("arquivos")}>
+          + enviar
+        </button>
+      </div>
+      {arquivos.length === 0 ? (
+        <p className="texto-fraco pequeno" style={{ margin: 0 }}>
+          Nenhum arquivo ainda. Envie o edital, o termo de referência e os anexos.
+        </p>
+      ) : (
+        <ul className="lista-arquivos-ficha">
+          {arquivos.slice(0, 6).map((a) => (
+            <li key={a.id}>
+              <a href={`/api/arquivos/${a.id}`} target="_blank" rel="noreferrer noopener" title={a.nome}>
+                <FileText size={15} />
+                <span>{a.nome}</span>
+              </a>
+              {a.categoria && <span className="chip">{a.categoria}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+      {arquivos.length > 6 && (
+        <button className="botao-link sem-margem" onClick={() => aoIrPara("arquivos")}>
+          ver todos os {arquivos.length}
+        </button>
+      )}
+      <button className="botao secundario pequeno botao-largo" onClick={aoHabilitacao} title="Junta os documentos da aba Documentação num .zip, salva no computador e anexa aqui">
+        <FileArchive size={14} /> Documentos de habilitação
+      </button>
+    </section>
   );
 }

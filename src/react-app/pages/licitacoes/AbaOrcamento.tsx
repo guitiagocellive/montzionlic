@@ -1,4 +1,4 @@
-import { Calculator, Check, Copy, Crown, FileText, Info, Pencil, Plus, Trash2, TriangleAlert } from "lucide-react";
+import { Calculator, Copy, Crown, FileText, Info, Pencil, Plus, Trash2, TriangleAlert } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { calcularPreco, type CalculoPreco, cotacaoDaProposta } from "../../../shared/negocio";
 import type { Cotacao, Fornecedor, ItemLicitacao, Licitacao } from "../../../shared/tipos";
@@ -170,6 +170,8 @@ export function AbaOrcamento({ licitacao, itens, cotacoes, aoMudar }: Props) {
             ? calculos.reduce((a, b) => (b.calc.precoVenda < a.calc.precoVenda ? b : a)).c.id
             : null;
           const naProposta = cotacaoDaProposta(lista, item, impostoN, lucroN)?.cotacao.id ?? null;
+          // A que vai para a proposta (a mais vantajosa, ou a que você trocou) vem primeiro, com a coroa.
+          calculos.sort((a, b) => Number(b.c.id === naProposta) - Number(a.c.id === naProposta) || a.calc.precoVenda - b.calc.precoVenda);
           return (
             <section key={item.id} className="cartao item-orcamento">
               <div className="item-orcamento-topo">
@@ -201,7 +203,7 @@ export function AbaOrcamento({ licitacao, itens, cotacoes, aoMudar }: Props) {
                       key={c.id}
                       cotacao={c}
                       calculo={calc}
-                      melhor={c.id === melhor && calculos.length > 1}
+                      melhor={c.id === melhor}
                       naProposta={c.id === naProposta}
                       varias={calculos.length > 1}
                       aoUsarNaProposta={() => usarNaProposta(c)}
@@ -258,15 +260,19 @@ function LinhaCotacao({
   aoExcluir: () => void;
 }) {
   const acimaReferencia = referencia != null && calculo.precoVenda > referencia;
+  // Coroa: a cotação que vai para a proposta (a mais vantajosa por padrão). Nas outras, dá para trocar.
   return (
-    <div className={`linha-cotacao ${melhor ? "melhor" : ""}`}>
+    <div className={`linha-cotacao ${naProposta ? "coroa" : ""} ${varias && !naProposta ? "alternativa" : ""}`}>
       <div className="cotacao-produto">
-        <strong>
-          {melhor && <Crown aria-label="Melhor preço" />}
-          {c.produto || "Produto sem nome"}
-        </strong>
+        {naProposta && (
+          <span className="selo-coroa" title="A proposta usa a descrição, a marca e o preço deste produto">
+            <Crown size={13} /> {melhor ? "Mais vantajosa · vai na proposta" : "Escolhida para a proposta"}
+          </span>
+        )}
+        <strong>{c.produto || "Produto sem nome"}</strong>
         <span className="texto-fraco pequeno">
           {[c.marca, c.fornecedor_cadastrado || c.fornecedor_nome].filter(Boolean).join(" · ") || "Sem fornecedor"}
+          {!naProposta && melhor && <span className="texto-verde"> · menor preço</span>}
         </span>
         {c.descricao ? (
           <span className="cotacao-descritivo" title={c.descricao}>
@@ -277,16 +283,10 @@ function LinhaCotacao({
             <FileText size={12} /> Adicionar descritivo para a proposta
           </button>
         )}
-        {naProposta ? (
-          <span className="selo verde selo-proposta" title="A proposta usa a descrição, a marca e o preço deste produto">
-            <Check size={12} /> Na proposta
-          </span>
-        ) : (
-          varias && (
-            <button type="button" className="botao-link sem-margem" onClick={aoUsarNaProposta}>
-              <Check size={12} /> Usar na proposta
-            </button>
-          )
+        {!naProposta && (
+          <button type="button" className="botao-link sem-margem trocar-coroa" onClick={aoUsarNaProposta}>
+            <Crown size={12} /> Usar esta na proposta
+          </button>
         )}
       </div>
       <div className="cotacao-numeros">

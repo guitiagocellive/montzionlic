@@ -1,10 +1,12 @@
-import { ListChecks, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ListChecks, Pencil, Plus, Tag, Trash2, TrendingUp } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import type { ItemLicitacao } from "../../../shared/tipos";
 import { api, mensagemDeErro } from "../../api";
 import { Alerta, Campo } from "../../components/Formulario";
 import { avisar, CampoArea, Interruptor, Modal, Vazio } from "../../components/Ui";
 import { formatarMoeda, formatarNumero, paraNumero } from "../../formato";
+import { link } from "../../rota";
+import { MarcasDoItem, tituloDoItem } from "./MarcasDoItem";
 
 export function AbaItens({
   licitacaoId,
@@ -17,6 +19,8 @@ export function AbaItens({
 }) {
   const [editando, setEditando] = useState<ItemLicitacao | "novo" | null>(null);
   const [soParticipar, setSoParticipar] = useState(false);
+  const [aberto, setAberto] = useState<number | null>(null);
+  const [marcas, setMarcas] = useState<ItemLicitacao | null>(null);
 
   const lista = soParticipar ? itens.filter((i) => i.participar) : itens;
   const participando = itens.filter((i) => i.participar);
@@ -79,36 +83,83 @@ export function AbaItens({
             Adicione os itens manualmente ou importe do PNCP pela busca de licitações.
           </Vazio>
         ) : (
-          <div className="lista-itens">
-            {lista.map((item) => (
-              <article key={item.id} className={`linha-item ${item.participar ? "" : "fora"}`}>
-                <span className="numero-item">{item.numero || "—"}</span>
-                <div className="linha-item-texto">
-                  <p>{item.descricao || "Sem descrição"}</p>
-                  <div className="linha-item-meta">
-                    <span>
-                      Qtd: <strong>{formatarNumero(item.quantidade)}</strong> {item.unidade}
-                    </span>
-                    <span>
-                      Ref. unitária: <strong>{formatarMoeda(item.valor_referencia)}</strong>
+          // Cápsulas como no PNCP: título curto, quantidade e valor; ao clicar abre a descrição completa e as ações.
+          <div className="bolhas-itens">
+            {lista.map((item) => {
+              const estaAberto = aberto === item.id;
+              const total = (item.valor_referencia ?? 0) * (item.quantidade ?? 0);
+              return (
+                <div key={item.id} className={`bolha-item ${estaAberto ? "aberta" : ""} ${item.participar ? "" : "fora"}`}>
+                  <div className="bolha-linha">
+                    <button type="button" className="bolha-topo" onClick={() => setAberto(estaAberto ? null : item.id)} aria-expanded={estaAberto}>
+                      <span className="bolha-numero">{item.numero || "—"}</span>
+                      <span className="bolha-titulo">
+                        <strong>{item.descricao ? tituloDoItem(item.descricao) : "Sem descrição"}</strong>
+                        <span className="texto-fraco">
+                          Qtd. {formatarNumero(item.quantidade)}
+                          {item.unidade ? ` ${item.unidade}` : ""}
+                          {item.valor_referencia != null ? ` · ref. ${formatarMoeda(item.valor_referencia)} un` : ""}
+                          {total > 0 ? ` · ${formatarMoeda(total)}` : ""}
+                        </span>
+                      </span>
+                      <ChevronDown className="bolha-seta" size={18} aria-hidden="true" />
+                    </button>
+                    <span className="bolha-participar">
+                      <Interruptor rotulo="Participar" ligado={item.participar === 1} aoMudar={(v) => alternar(item, v)} />
                     </span>
                   </div>
+                  <div className="bolha-corpo">
+                    <div>
+                      <div className="bolha-numeros">
+                        <div>
+                          <span>Quantidade</span>
+                          <strong>
+                            {formatarNumero(item.quantidade)} {item.unidade ?? ""}
+                          </strong>
+                        </div>
+                        <div>
+                          <span>Unitário (ref.)</span>
+                          <strong>{formatarMoeda(item.valor_referencia)}</strong>
+                        </div>
+                        <div>
+                          <span>Total (ref.)</span>
+                          <strong>{total > 0 ? formatarMoeda(total) : "—"}</strong>
+                        </div>
+                        <div>
+                          <span>Participação</span>
+                          <strong className={item.participar ? "texto-verde" : ""}>{item.participar ? "Vamos participar" : "Fora"}</strong>
+                        </div>
+                      </div>
+                      <p className="bolha-descricao">{item.descricao || "Sem descrição"}</p>
+                      <span className="bolha-rotulo">Ações</span>
+                      <div className="bolha-acoes">
+                        <button type="button" className="botao secundario pequeno" onClick={() => setEditando(item)}>
+                          <Pencil size={14} /> Editar
+                        </button>
+                        {item.descricao && (
+                          <>
+                            <button type="button" className="botao secundario pequeno" onClick={() => setMarcas(item)}>
+                              <Tag size={14} /> Marcas
+                            </button>
+                            <a className="botao secundario pequeno" {...link(`/licitacoes/mercado?produto=${encodeURIComponent(tituloDoItem(item.descricao))}`)}>
+                              <TrendingUp size={14} /> Preços e concorrência
+                            </a>
+                          </>
+                        )}
+                        <button type="button" className="botao secundario pequeno perigo" onClick={() => excluir(item)}>
+                          <Trash2 size={14} /> Excluir
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div className="linha-item-acoes">
-                  <Interruptor rotulo="Participar" ligado={item.participar === 1} aoMudar={(v) => alternar(item, v)} />
-                  <button className="botao-icone" onClick={() => setEditando(item)} aria-label="Editar item">
-                    <Pencil />
-                  </button>
-                  <button className="botao-icone perigo" onClick={() => excluir(item)} aria-label="Excluir item">
-                    <Trash2 />
-                  </button>
-                </div>
-              </article>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
 
+      {marcas?.descricao && <MarcasDoItem descricao={marcas.descricao} codigoCatalogo={null} aoFechar={() => setMarcas(null)} />}
       {editando && (
         <ModalItem
           licitacaoId={licitacaoId}
