@@ -1,4 +1,4 @@
-import { Bell, BellRing, Gauge, Minus, Plus, ClipboardCopy, FilePlus2, Eye, Download, ExternalLink, LogIn, MessageSquare, Pencil, RefreshCw, Search, Send, Star, TriangleAlert } from "lucide-react";
+import { Bell, BellRing, Gauge, Minus, Plus, ClipboardCopy, FilePlus2, Download, ExternalLink, LogIn, MessageSquare, Pencil, RefreshCw, Search, Send, Star, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type AvisoAcomp, avisosDe, type CompraAcomp, dataDe, montarCompras, type PainelAcompanhamento, ROTULO_CHANCE } from "../../../shared/acompanhamento";
 import { api, mensagemDeErro } from "../../api";
