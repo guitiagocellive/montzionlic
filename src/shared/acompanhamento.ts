@@ -595,7 +595,8 @@ export function lerItemComPropostas(dados: unknown, meuCnpjBruto: string) {
 }
 
 /** Item com as propostas de todas as empresas ("propostasItem"), na ordem de classificação. */
-export function propostasDoItem(dados: unknown, numeroItem?: number): PropostaEmpresa[] {
+/** As propostas do item como vieram do Compras.gov.br (sem converter). */
+export function propostasBrutasDoItem(dados: unknown, numeroItem?: number): unknown[] {
   // Às vezes vem uma lista de itens, cada um com as propostas dentro (propostasIniciais / propostasItem).
   if (Array.isArray(dados) && dados.some((x) => Array.isArray(obj(x).propostasIniciais) || Array.isArray(obj(x).propostasItem))) {
     const comPropostas = dados.filter((x) => Array.isArray(obj(x).propostasIniciais) || Array.isArray(obj(x).propostasItem));
@@ -603,7 +604,14 @@ export function propostasDoItem(dados: unknown, numeroItem?: number): PropostaEm
   }
   const d = obj(dados);
   const lista = Array.isArray(dados) ? dados : Array.isArray(d.propostasItem) ? d.propostasItem : Array.isArray(d.propostas) ? d.propostas : Array.isArray(d.propostasIniciais) ? d.propostasIniciais : [];
-  return (lista as unknown[]).map(lerProposta).sort((a, b) => (a.colocacao ?? 999) - (b.colocacao ?? 999) || (a.valor ?? 0) - (b.valor ?? 0));
+  return lista as unknown[];
+}
+
+/** Item com as propostas de todas as empresas ("propostasItem"), na ordem de classificação. */
+export function propostasDoItem(dados: unknown, numeroItem?: number): PropostaEmpresa[] {
+  return propostasBrutasDoItem(dados, numeroItem)
+    .map(lerProposta)
+    .sort((a, b) => (a.colocacao ?? 999) - (b.colocacao ?? 999) || (a.valor ?? 0) - (b.valor ?? 0));
 }
 
 export interface AnexoCompras {

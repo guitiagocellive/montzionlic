@@ -1,5 +1,5 @@
 import { ErroCompras } from "../../robo/ErroCompras";
-import { BellRing, ChevronDown, Download, FileText, FileUp, Gavel, Loader2, MessageSquare, Paperclip, Send, ShieldQuestion, Trash2, UserRound, Users } from "lucide-react";
+import { BellRing, ChevronDown, Download, Eye, FileText, FileUp, Gavel, Loader2, MessageSquare, Paperclip, Send, ShieldQuestion, Trash2, UserRound, Users } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   definirCodigoSolicitada,
@@ -18,11 +18,13 @@ import {
   type MensagemAcomp,
   type PropostaEmpresa,
   propostasDoItem,
+  propostasBrutasDoItem,
   calcularChance,
   ROTULO_CHANCE,
 } from "../../../shared/acompanhamento";
 import { mensagemDeErro } from "../../api";
-import { avisar } from "../../components/Ui";
+import { avisar, Modal } from "../../components/Ui";
+import { type Conteudo, montarConteudo, Visor } from "../../components/PreviaArquivo";
 import { formatarMoeda } from "../../formato";
 import { type PedidoFornecedor, ponte } from "../../robo/ponte";
 
@@ -39,7 +41,9 @@ export async function pedir(p: PedidoFornecedor) {
   const r = await ponte.fornecedor(p);
   if (r.status >= 400 || r.status === 0) {
     const m = (r.mensagem ?? "").trim();
-    throw new Error(m && m !== "[]" && m !== "{}" ? m : `O Compras.gov.br respondeu ${r.status || "sem dados"}.`);
+    const erro = new Error(m && m !== "[]" && m !== "{}" ? m : `O Compras.gov.br respondeu ${r.status || "sem dados"}.`) as Error & { status?: number };
+    erro.status = r.status;
+    throw erro;
   }
   return r;
 }
@@ -50,7 +54,8 @@ async function consultar(caminhoV: string, opcoes: { captcha?: boolean; query?: 
   try {
     return (await pedir({ caminho: `${FE}${caminhoV}`, captcha, query })).dados;
   } catch (e) {
-    if (!/40[34]|não encontr|not found|no static resource/i.test(mensagemDeErro(e))) throw e;
+    const st = (e as { status?: number }).status;
+    if (st !== 403 && st !== 404 && !/40[34]|não encontr|not found|no static resource/i.test(mensagemDeErro(e))) throw e;
     return (await pedir({ caminho: `${FE}/public${caminhoV}`, captcha: true, query })).dados;
   }
 }
@@ -188,22 +193,32 @@ export function lerCodigoSolicitada(): Promise<boolean> {
 export async function carregarPropostas(compra: CompraAcomp, numeroItem: number, cnpj: string) {
   const base = `/v1/compras/${compra.chave}/itens/${numeroItem}`;
   // 1) tela da fase de seleção ("Todas as propostas" oficial); 2) item com as propostas; 3) propostas iniciais.
-  const naoExiste = (e: unknown) => /40[034]|não encontr|not found|sem dados/i.test(mensagemDeErro(e));
+  // "Não existe ainda" inclui as recusas por etapa: com a disputa encerrada e o julgamento ainda não iniciado, o
+  // Compras.gov.br recusa a tela da seleção ("A etapa de julgamento de propostas ainda não foi iniciada").
+  const naoExiste = (e: unknown) => [400, 403, 404, 409, 422].includes((e as { status?: number }).status ?? 0) || /40[0349]|422|não encontr|not found|sem dados|não permite|nao permite|não foi iniciad|ainda não/i.test(mensagemDeErro(e));
+  let aviso = "";
   try {
     const d = await consultar(`/v1/compras/${compra.chave}/em-selecao-fornecedores/itens/${numeroItem}/propostas`, { query: "ordenacao-propostas=P", captcha: false });
     const lido = lerItemComPropostas(d, cnpj);
-    if (lido.todas.length) return { ...lido, iniciais: false };
+    if (lido.todas.length) return { ...lido, iniciais: false, aviso };
   } catch (e) {
     if (!naoExiste(e)) throw e;
+    aviso = mensagemDeErro(e);
   }
   try {
-    return { ...lerItemComPropostas(await consultar(`${base}/propostas`), cnpj), iniciais: false };
+    const lido = lerItemComPropostas(await consultar(`${base}/propostas`), cnpj);
+    if (lido.todas.length) return { ...lido, iniciais: false, aviso };
   } catch (e) {
     if (!naoExiste(e)) throw e;
-    const d = await consultar(`${base}/propostas-iniciais`).catch(() => {
-      throw e;
-    });
-    return { ...lerItemComPropostas({ propostasItem: propostasDoItem(d, numeroItem) }, cnpj), iniciais: true };
+    aviso ||= mensagemDeErro(e);
+  }
+  // Antes do julgamento: as propostas iniciais (com a sua) — se nem elas vierem, mostra sem erro, com o motivo.
+  try {
+    const d = await consultar(`${base}/propostas-iniciais`, { captcha: false });
+    return { ...lerItemComPropostas({ propostasItem: propostasBrutasDoItem(d, numeroItem) }, cnpj), iniciais: true, aviso };
+  } catch (e) {
+    if (!naoExiste(e)) throw e;
+    return { ...lerItemComPropostas({ propostasItem: [] }, cnpj), iniciais: true, aviso: aviso || mensagemDeErro(e) };
   }
 }
 export type PropostasDoItem = Awaited<ReturnType<typeof carregarPropostas>>;
@@ -277,8 +292,16 @@ export function estadoDoItem(item: ItemAcomp, dados: PropostasDoItem | null, cnp
   const analise = analisarPropostas(dados, cnpj);
   const minha = dados?.minha ?? null;
   const situacaoItem = dados?.situacaoItem ?? "";
+  const aguardandoJulgamento = !!dados?.aviso && /julgamento/i.test(dados.aviso);
   if (!minha) {
-    return { chance: item.chance, explicacao: item.explicacao, momento: item.situacao || item.etapa || "", colocacao: item.colocacao, total: item.participantes, analise };
+    return {
+      chance: item.chance,
+      explicacao: aguardandoJulgamento ? "A disputa acabou; a classificação final sai quando o pregoeiro iniciar o julgamento." : item.explicacao,
+      momento: aguardandoJulgamento ? "Disputa encerrada — aguardando o pregoeiro iniciar o julgamento" : item.situacao || item.etapa || "",
+      colocacao: item.colocacao,
+      total: item.participantes,
+      analise,
+    };
   }
   const pendencias = minha.pendencias.length ? minha.pendencias : item.pendencias;
   const { chance, explicacao } = calcularChance(
@@ -297,6 +320,7 @@ export function estadoDoItem(item: ItemAcomp, dados: PropostasDoItem | null, cnp
   else if (analise?.souPrimeira) momento = "1ª colocada — aguardando o pregoeiro analisar a sua proposta";
   else if (analise?.posicaoValida) momento = `Na fila: ${analise.posicaoValida}ª entre as propostas válidas`;
   else momento = minha.situacao || situacaoItem || item.etapa || "";
+  if (aguardandoJulgamento && !minha.desclassificada && !pendencias.length && !["3", "4", "6"].includes(minha.codigo)) momento = "Disputa encerrada — aguardando o pregoeiro iniciar o julgamento";
   return { chance, explicacao, momento, colocacao: analise?.minhaColocacao ?? minha.colocacao, total: analise?.total ?? item.participantes, analise };
 }
 
@@ -429,7 +453,7 @@ export function ItemCompras({
               <FileText size={15} /> Minha proposta
             </h4>
             <Estado carregando={dados.carregando && !minha} erro={minha ? "" : dados.erro} recarregar={dados.recarregar}>
-              {minha ? <DadosProposta p={minha} quantidadeItem={item.quantidade} /> : <p className="texto-fraco">O Compras.gov.br ainda não mostra a sua proposta deste item.</p>}
+              {minha ? <DadosProposta p={minha} quantidadeItem={item.quantidade} /> : <p className="texto-fraco">O Compras.gov.br ainda não mostra a sua proposta deste item{dados.dados?.aviso ? `: ${dados.dados.aviso}` : "."}</p>}
             </Estado>
           </section>
 
@@ -549,7 +573,7 @@ function Chat({
       const query = `size=300&page=0&legadoAsp=false${de ? `&identificadorParticipante=${de}` : ""}`;
       // O Compras.gov.br responde 404 quando não há mensagens com essa empresa no item.
       const r = await pedir({ caminho: `/comprasnet-mensagem/v2/chat/${compra.chave}/itens/${item.numero}`, query, captcha: true }).catch((e) => {
-        if (/404|não encontr|not found/i.test(mensagemDeErro(e))) return { dados: [] };
+        if ((e as { status?: number }).status === 404 || /404|não encontr|not found|nenhuma mensagem/i.test(mensagemDeErro(e))) return { dados: [] };
         throw e;
       });
       const lista = Array.isArray(r.dados) ? r.dados : [];
@@ -644,8 +668,19 @@ function Chat({
 
 // ---------- Anexos ----------
 
-function ListaAnexos({ anexos, baixar, excluir, vazio = "Nenhum anexo enviado." }: { anexos: AnexoCompras[]; baixar: (a: AnexoCompras) => Promise<void>; excluir?: (a: AnexoCompras) => Promise<void>; vazio?: string }) {
+function ListaAnexos({
+  anexos,
+  obter,
+  excluir,
+  vazio = "Nenhum anexo enviado.",
+}: {
+  anexos: AnexoCompras[];
+  obter: (a: AnexoCompras) => Promise<ArquivoCompras>;
+  excluir?: (a: AnexoCompras) => Promise<void>;
+  vazio?: string;
+}) {
   const [ocupado, setOcupado] = useState("");
+  const [vendo, setVendo] = useState<AnexoCompras | null>(null);
   if (!anexos.length) return <p className="texto-fraco pequeno">{vazio}</p>;
   const fazer = async (a: AnexoCompras, f: (a: AnexoCompras) => Promise<void>) => {
     setOcupado(a.id || a.url);
@@ -658,22 +693,67 @@ function ListaAnexos({ anexos, baixar, excluir, vazio = "Nenhum anexo enviado." 
     }
   };
   return (
-    <ul className="anexos-compras">
-      {anexos.map((a) => (
-        <li key={a.id || a.url}>
-          <span className="nome-anexo-compras">{a.nome}</span>
-          <span className="texto-fraco pequeno">{dataHora(a.dataHora)}</span>
-          <button className="botao-icone" aria-label={`Baixar ${a.nome}`} disabled={!!ocupado} onClick={() => fazer(a, baixar)}>
-            {ocupado === (a.id || a.url) ? <Loader2 className="girando" size={15} /> : <Download size={15} />}
-          </button>
-          {excluir && (
-            <button className="botao-icone" aria-label={`Excluir ${a.nome}`} disabled={!!ocupado} onClick={() => fazer(a, excluir)}>
-              <Trash2 size={15} />
+    <>
+      <ul className="anexos-compras">
+        {anexos.map((a) => (
+          <li key={a.id || a.url}>
+            <button className="nome-anexo-compras botao-link sem-margem" onClick={() => setVendo(a)} title={`Ver ${a.nome}`}>
+              {a.nome}
             </button>
-          )}
-        </li>
-      ))}
-    </ul>
+            <span className="texto-fraco pequeno">{dataHora(a.dataHora)}</span>
+            <button className="botao-icone" aria-label={`Ver ${a.nome}`} title="Ver sem baixar" disabled={!!ocupado} onClick={() => setVendo(a)}>
+              <Eye size={15} />
+            </button>
+            <button className="botao-icone" aria-label={`Baixar ${a.nome}`} title="Baixar" disabled={!!ocupado} onClick={() => fazer(a, async (x) => salvarArquivo(await obter(x), x.nome))}>
+              {ocupado === (a.id || a.url) ? <Loader2 className="girando" size={15} /> : <Download size={15} />}
+            </button>
+            {excluir && (
+              <button className="botao-icone" aria-label={`Excluir ${a.nome}`} disabled={!!ocupado} onClick={() => fazer(a, excluir)}>
+                <Trash2 size={15} />
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {vendo && <JanelaAnexo anexo={vendo} obter={obter} aoFechar={() => setVendo(null)} />}
+    </>
+  );
+}
+
+/** Mostra o anexo numa janela por cima (PDF, imagem, texto e .zip); os outros formatos dá para baixar dali. */
+function JanelaAnexo({ anexo, obter, aoFechar }: { anexo: AnexoCompras; obter: (a: AnexoCompras) => Promise<ArquivoCompras>; aoFechar: () => void }) {
+  const [conteudo, setConteudo] = useState<Conteudo | null>(null);
+  const [erro, setErro] = useState("");
+  useEffect(() => {
+    const urls: string[] = [];
+    let vivo = true;
+    obter(anexo)
+      .then((r) => {
+        if (!r.base64) throw new Error("O Compras.gov.br não devolveu o arquivo.");
+        const bytes = Uint8Array.from(atob(r.base64), (c) => c.charCodeAt(0));
+        const nome = r.nome && r.nome !== "arquivo" ? r.nome : anexo.nome;
+        if (vivo) setConteudo(montarConteudo(nome, bytes, urls));
+      })
+      .catch((e) => vivo && setErro(mensagemDeErro(e)));
+    return () => {
+      vivo = false;
+      urls.forEach((u) => URL.revokeObjectURL(u));
+    };
+  }, [anexo, obter]);
+  return (
+    <Modal titulo={anexo.nome} aoFechar={aoFechar} largo>
+      <div className="janela-anexo">
+        {erro ? (
+          <p className="alerta erro">{erro}</p>
+        ) : !conteudo ? (
+          <p className="texto-suave carregando-marcas">
+            <Loader2 className="girando" size={16} /> Abrindo o arquivo do Compras.gov.br…
+          </p>
+        ) : (
+          <Visor conteudo={conteudo} />
+        )}
+      </div>
+    </Modal>
   );
 }
 
@@ -720,15 +800,17 @@ async function anexosDaEmpresa(compra: CompraAcomp, numeroItem: number, cnpjEmpr
   }
 }
 
-const baixarAnexo = async (compra: CompraAcomp, item: ItemAcomp, cnpjEmpresa: string, a: AnexoCompras, minha: boolean) => {
-  if (a.url) return salvarArquivo(await pedir({ url: a.url }), a.nome);
-  void minha;
+type ArquivoCompras = { base64?: string; nome?: string; tipo?: string };
+
+/** Busca o arquivo de um anexo (para ver ou baixar). */
+const obterAnexo = async (compra: CompraAcomp, item: ItemAcomp, cnpjEmpresa: string, a: AnexoCompras): Promise<ArquivoCompras> => {
+  if (a.url) return pedir({ url: a.url });
   const id = encodeURIComponent(a.id);
   // O site logado baixa o anexo de qualquer empresa por "participacao/{cnpj}"; a tela pública (com captcha) é a reserva.
   const r = await pedir({ caminho: `${FE}/v2/compras/${compra.chave}/itens/${item.numero}/participacao/${cnpjEmpresa}/anexos/${id}`, captcha: false, baixar: true }).catch(() =>
     pedir({ caminho: `${FE}/public/v2/compras/${compra.chave}/itens/${item.numero}/participacoes/${cnpjEmpresa}/anexos/${id}`, captcha: true, baixar: true }),
   );
-  salvarArquivo(r, a.nome);
+  return r;
 };
 
 function MeusAnexos({ compra, item, cnpj, convocado }: { compra: CompraAcomp; item: ItemAcomp; cnpj: string; convocado: boolean }) {
@@ -780,7 +862,7 @@ function MeusAnexos({ compra, item, cnpj, convocado }: { compra: CompraAcomp; it
       <Estado carregando={carga.carregando} erro={carga.erro} recarregar={carga.recarregar}>
         <ListaAnexos
           anexos={carga.dados ?? []}
-          baixar={(a) => baixarAnexo(compra, item, cnpj, a, true)}
+          obter={(a) => obterAnexo(compra, item, cnpj, a)}
           excluir={
             convocado
               ? async (a) => {
@@ -804,7 +886,7 @@ function AnexosEmpresa({ compra, item, empresa, aoContar }: { compra: CompraAcom
   }, [carga.dados, aoContar]);
   return (
     <Estado carregando={carga.carregando} erro={carga.erro} recarregar={carga.recarregar}>
-      <ListaAnexos anexos={carga.dados ?? []} baixar={(a) => baixarAnexo(compra, item, empresa.cnpj, a, false)} />
+      <ListaAnexos anexos={carga.dados ?? []} obter={(a) => obterAnexo(compra, item, empresa.cnpj, a)} />
     </Estado>
   );
 }
@@ -886,9 +968,10 @@ function Diligencias({ compra, item, cnpj, podeEnviar }: { compra: CompraAcomp; 
 function DetalheDiligencia({ base, compra, item, cnpj, id }: { base: string; compra: CompraAcomp; item: ItemAcomp; cnpj: string; id: string }) {
   const carga = useCarga(true, async () => obj((await pedir({ caminho: `${base}/${id}`, captcha: true })).dados), `${base}/${id}`);
   const d = carga.dados ?? {};
-  const baixar = (origem: "governo" | "participante") => async (a: AnexoCompras) => {
+  const obter = (origem: "governo" | "participante") => async (a: AnexoCompras): Promise<ArquivoCompras> => {
+    if (a.url) return pedir({ url: a.url });
     const caminho = `${FE}/v2/compras/${compra.chave}/itens/${item.numero}/participacoes/${cnpj}/diligencias/anexos-${origem}/${encodeURIComponent(a.id)}`;
-    salvarArquivo(await pedir({ caminho, captcha: true, baixar: true }), a.nome);
+    return pedir({ caminho, captcha: true, baixar: true });
   };
   return (
     <div className="detalhe-diligencia">
@@ -904,9 +987,9 @@ function DetalheDiligencia({ base, compra, item, cnpj, id }: { base: string; com
           </p>
         )}
         <span className="texto-suave pequeno">Arquivos do pregoeiro</span>
-        <ListaAnexos anexos={lerAnexos(d.anexosGoverno ?? [])} baixar={baixar("governo")} vazio="Nenhum arquivo do pregoeiro." />
+        <ListaAnexos anexos={lerAnexos(d.anexosGoverno ?? [])} obter={obter("governo")} vazio="Nenhum arquivo do pregoeiro." />
         <span className="texto-suave pequeno">Arquivos que você enviou</span>
-        <ListaAnexos anexos={lerAnexos(d.anexosParticipante ?? [])} baixar={baixar("participante")} vazio="Nenhum arquivo enviado." />
+        <ListaAnexos anexos={lerAnexos(d.anexosParticipante ?? [])} obter={obter("participante")} vazio="Nenhum arquivo enviado." />
       </Estado>
     </div>
   );

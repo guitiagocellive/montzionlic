@@ -1,9 +1,9 @@
 {
-  "versao": "3.1.24",
+  "versao": "3.1.25",
   "data": "2026-11-13",
   "novidades": [
-    "Anexos: o envio só é liberado quando o pregoeiro realmente solicitou anexos (como no Compras: situação \"SOLICITADA\"). Chat aberto, negociação ou diligência não liberam mais o envio de anexos.",
-    "Todos os participantes: agora aparecem também as empresas desclassificadas antes da disputa (na análise das propostas), com o motivo.",
-    "Na lista de participantes, cada empresa mostra quantas mensagens o pregoeiro trocou com ela no item e a última mensagem, sem precisar abrir; abrindo, aparecem a conversa completa, a proposta, os anexos (para baixar) e as diligências."
+    "Anexos: botão de olho para ver o documento numa janela por cima, sem baixar (PDF, imagens, texto e .zip; outros formatos têm o botão Baixar ali mesmo). Clicar no nome do anexo também abre.",
+    "Licitação com a disputa encerrada e o julgamento ainda não iniciado: não aparece mais o erro \"A etapa de julgamento de propostas ainda não foi iniciada\". Mostra a sua proposta (das propostas iniciais), a posição e \"aguardando o pregoeiro iniciar o julgamento\".",
+    "Conversa sem mensagens (\"Nenhuma mensagem encontrada\") não aparece mais como erro."
   ]
 }

@@ -13632,3 +13632,19 @@ p.etapa-fechada {
   align-items: center;
   gap: 3px;
 }
+
+.cartao-secao-compras .anexos-compras li {
+  grid-template-columns: minmax(0, 1fr) auto auto auto auto;
+}
+.nome-anexo-compras.botao-link {
+  text-align: left;
+  color: var(--texto);
+  font-weight: 500;
+}
+.nome-anexo-compras.botao-link:hover {
+  color: var(--acento-texto);
+  text-decoration: underline;
+}
+.janela-anexo .visor-pdf {
+  height: min(75vh, 900px);
+}
