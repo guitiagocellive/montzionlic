@@ -288,6 +288,11 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
   // vem com o intervalo do edital (ex.: R$ 0,01 ou 0,5%); a pessoa pode aumentar.
   function descontoDoItem(k: string, i: ItemDisputa, cfg: ConfigItemRobo) {
     const temEdital = i.variacaoMinima != null && i.variacaoMinima > 0;
+    // Robô ligado com um desconto salvo de outro tipo (ligado numa versão antiga): mostra o que o robô está usando.
+    if (cfg.ligado && cfg.desconto > 0 && temEdital && (cfg.tipoDesconto ?? "P") !== (i.tipoVariacao === "P" ? "P" : "V")) {
+      const t = cfg.tipoDesconto ?? "P";
+      return { tipo: t, texto: textoNumero(cfg.desconto), valor: cfg.desconto, temEdital };
+    }
     const tipo: "P" | "V" = temEdital ? (i.tipoVariacao === "P" ? "P" : "V") : (cfg.tipoDesconto ?? "P");
     const salvo = (cfg.tipoDesconto ?? "P") === tipo && cfg.desconto > 0 ? cfg.desconto : null;
     const padrao = salvo ?? (temEdital ? (i.variacaoMinima as number) : 0);
@@ -512,6 +517,23 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
                       </button>
                     </div>
                     <div className="item-disputa-opcoes">
+                      {c.modalidade === "dispensa" && (
+                        <label
+                          title={
+                            precisaQuatroCasas(i) && !cfg.quatroCasas
+                              ? "O intervalo do edital ou os lances deste item têm mais de 2 casas decimais: o robô já usa 4 casas sozinho."
+                              : "Lances com 4 casas decimais (ex.: R$ 979,9875) em vez de centavos."
+                          }
+                        >
+                          <input
+                            type="checkbox"
+                            checked={q4}
+                            disabled={precisaQuatroCasas(i) && !cfg.quatroCasas}
+                            onChange={(e) => mudarItem(k, { quatroCasas: e.target.checked })}
+                          />{" "}
+                          Permitir lances com 4 casas decimais
+                        </label>
+                      )}
                       {c.modalidade !== "dispensa" && (
                         <label title="Em qualquer posição: nos 10 segundos finais o robô dá um lance só do intervalo mínimo abaixo do SEU próprio lance e não cobre os concorrentes. O cronômetro do pregão é prorrogado e a disputa se estende — quem está na frente acha que já ganhou e para de acompanhar. Quando quiser atacar, desmarque: o robô volta a disputar na hora. Para no seu mínimo. (Lances com 4 casas decimais agora são automáticos quando o edital pede.)">
                           <input type="checkbox" checked={!!cfg.ganharTempo} onChange={(e) => mudarItem(k, { ganharTempo: e.target.checked })} /> Ganhar tempo (só o intervalo mínimo sobre o seu lance nos 10 s finais, sem cobrir ninguém — desmarque para atacar)
