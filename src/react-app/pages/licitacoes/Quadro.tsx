@@ -373,14 +373,20 @@ function CardLicitacao({ l, hoje, mudou, aoMover }: { l: LicitacaoResumo; hoje: 
   const dias = data ? diasAte(data, hoje) : null;
   const classePrazo = !ativa || dias == null ? "" : dias < 0 ? "passou" : dias === 0 ? "urgente" : dias === 1 ? "amanha" : "";
   const meta = [modalidadeCurta(l.modalidade), l.registro_preco === 1 ? "SRP" : ""].filter(Boolean).join(" · ");
-  // Todos os itens com resultado fechado: sugere a etapa (sem mover sozinho).
+  // Sugere a etapa, sem mover sozinho. Ganhas só com todos os itens fechados e algum ganho (julgado e habilitado ou
+  // adjudicado); itens ainda em julgamento depois da sessão: "Boa colocação" (acompanhar).
   const fechados = l.itens_ganhos + l.itens_perdidos;
+  const sessaoPassou = !!data && data < hoje;
   const sugestao =
-    ativa && aoMover && l.total_itens > 0 && l.itens_acompanhando === 0 && fechados >= l.total_itens
-      ? l.itens_ganhos > 0
-        ? { etapa: "ganha", texto: "Mover para Ganhas?" }
-        : { etapa: "perdida", texto: "Mover para Perdidas?" }
-      : null;
+    !ativa || !aoMover || l.total_itens === 0
+      ? null
+      : l.itens_acompanhando === 0 && fechados >= l.total_itens
+        ? l.itens_ganhos > 0
+          ? { etapa: "ganha", texto: "Mover para Ganhas?" }
+          : { etapa: "perdida", texto: "Mover para Perdidas?" }
+        : l.itens_acompanhando > 0 && sessaoPassou && ["estudar", "fazer", "orcamento"].includes(l.etapa)
+          ? { etapa: "boa_colocacao", texto: "Mover para Boa colocação (acompanhar)?" }
+          : null;
 
   return (
     <>

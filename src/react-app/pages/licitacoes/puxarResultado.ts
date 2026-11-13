@@ -67,9 +67,14 @@ export async function puxarDadosDaLicitacao(l: Licitacao, itens: ItemLicitacao[]
             : analise?.posicaoValida
               ? `${analise.posicaoValida}ª entre as propostas válidas`
               : "Em andamento");
+    // Ganho só depois de julgado e habilitado (4) ou adjudicado (6). Proposta só aceita (3), 1ª colocada esperando o
+    // pregoeiro etc. continuam "acompanhando".
     if (minha.codigo === "6") {
       resultado = "ganho";
       situacao = "Adjudicada para você";
+    } else if (minha.codigo === "4" && !(adjudicada && adjudicada.cnpj !== cnpj)) {
+      resultado = "ganho";
+      situacao = "Julgada e habilitada";
     } else if (minha.desclassificada || minha.codigo === "5") {
       resultado = "perdido";
       motivo = minha.codigo === "5" ? "Inabilitação (documentação)" : "Desclassificação técnica";
