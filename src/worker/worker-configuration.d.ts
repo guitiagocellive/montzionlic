@@ -4,7 +4,6 @@
 interface __BaseEnv_Env {
 	ARQUIVOS: R2Bucket;
 	DB: D1Database;
-	AI: Ai;
 	CHAVE_CERTIFICADO: string;
 }
 declare namespace Cloudflare {

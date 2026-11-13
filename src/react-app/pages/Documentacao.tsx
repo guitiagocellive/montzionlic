@@ -3,7 +3,8 @@ import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { CATEGORIAS_DOCUMENTO, diasAte, HABILITACOES, habilitacaoDaCategoria } from "../../shared/negocio";
 import { podeEditar } from "../../shared/permissoes";
 import type { Documento, Empresa, Usuario } from "../../shared/tipos";
-import { baixarZip, nomeDeArquivo } from "../documentos/zip";
+import { baixarZip } from "../documentos/zip";
+import { zipDaHabilitacao } from "../documentos/habilitacao";
 import { api, enviarArquivo, mensagemDeErro } from "../api";
 import { Alerta, Campo } from "../components/Formulario";
 import { avisar, CampoArea, CampoSelect, Carregando, Modal, Vazio } from "../components/Ui";
@@ -70,35 +71,14 @@ export function Documentacao({ usuario }: { usuario: Usuario }) {
 
   /** Baixa num .zip os arquivos dos documentos, com uma pasta por habilitação. */
   async function zipar(chave: string, itens: Documento[]) {
-    const comArquivo = itens.filter((d) => d.arquivo_nome);
-    if (comArquivo.length === 0) {
+    const { nome, arquivos, vencidos } = zipDaHabilitacao(itens, empresas, hoje, { empresaId: empresaFiltro, habilitacao: chave !== "tudo" ? chave : undefined });
+    if (arquivos.length === 0) {
       avisar("Nenhum documento com arquivo para baixar.", "erro");
       return;
     }
     setZipando(chave);
     try {
-      const vencidos = comArquivo.filter((d) => situacao(d, hoje).tipo === "vencido").length;
-      await baixarZip(
-        [
-          "Documentos de habilitação",
-          empresaFiltro !== "todas" ? nomeEmpresa(empresaFiltro) : "",
-          chave !== "tudo" ? HABILITACOES.find((h) => h.chave === chave)?.nome : "",
-          formatarData(hoje).replaceAll("/", "-"),
-        ]
-          .filter(Boolean)
-          .join(" - "),
-        comArquivo.map((d) => {
-          const h = habilitacaoDaCategoria(d.categoria);
-          const pasta = `${HABILITACOES.indexOf(h) + 1} - ${h.nome}`;
-          const extensao = d.arquivo_nome?.match(/\.[a-z0-9]{2,5}$/i)?.[0] ?? "";
-          const empresa = empresaFiltro === "todas" && empresas.length > 1 ? nomeEmpresa(d.empresa_id) : "";
-          const vencido = situacao(d, hoje).tipo === "vencido" ? " (VENCIDO)" : "";
-          return {
-            caminho: `${empresa ? `${nomeDeArquivo(empresa)}/` : ""}${pasta}/${nomeDeArquivo(d.nome)}${vencido}${extensao}`,
-            url: `/api/documentos/${d.id}/arquivo?baixar=1`,
-          };
-        }),
-      );
+      await baixarZip(nome, arquivos);
       avisar(vencidos ? `Zip baixado. Atenção: ${vencidos} documento(s) vencido(s) foram incluídos e marcados.` : "Zip baixado.", vencidos ? "erro" : "sucesso");
     } catch (err) {
       avisar(mensagemDeErro(err), "erro");

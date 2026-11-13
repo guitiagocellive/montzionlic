@@ -408,7 +408,7 @@ rotasLicitacoes.post("/:id/itens", async (c) => {
   const corpo = await lerJson(c);
   if (!corpo) return c.json({ erro: "Requisição inválida." }, 400);
 
-  // Aceita um item ou uma lista em "itens" (importação pela IA).
+  // Aceita um item ou uma lista em "itens" (importação em lote).
   const lista = Array.isArray(corpo.itens) ? (corpo.itens as Record<string, unknown>[]) : [corpo];
   if (lista.length === 0 || lista.length > 500) return c.json({ erro: "Lista de itens inválida." }, 400);
 

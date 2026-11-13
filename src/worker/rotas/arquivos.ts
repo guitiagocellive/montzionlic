@@ -4,7 +4,6 @@ import { type Modulo, podeEditar, podeVer } from "../../shared/permissoes";
 import type { Usuario } from "../../shared/tipos";
 import { type Ambiente, exigirLogin } from "../auth";
 import { buscar } from "../banco";
-import { analisarDocumento, type TipoAnalise } from "../ia";
 import { registrarEvento } from "../atividades";
 import { comandoUsarPedido, pedidoValido } from "../pedidosAssinatura";
 import { idDaRota } from "../validacao";
@@ -23,18 +22,6 @@ const VISUALIZAVEIS = new Set([
   "image/gif",
   "image/webp",
   "text/plain",
-]);
-
-// Tipos que a IA consegue ler.
-const ANALISAVEIS = new Set([
-  "application/pdf",
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "text/plain",
-  "text/html",
 ]);
 
 interface Arquivo {
@@ -189,61 +176,5 @@ rotasArquivos.delete("/:id", async (c) => {
   await c.env.ARQUIVOS.delete(registro.chave);
   await c.env.DB.prepare("DELETE FROM arquivos WHERE id = ?").bind(id).run();
   return c.json({ ok: true });
-});
-
-// Última análise salva (evita gastar a cota da IA de novo).
-rotasArquivos.get("/:id/analise", async (c) => {
-  const id = idDaRota(c.req.param("id"));
-  if (!id) return c.json({ erro: "Arquivo inválido." }, 400);
-  const dono = await c.env.DB.prepare("SELECT execucao_id FROM arquivos WHERE id = ?").bind(id).first<{ execucao_id: number | null }>();
-  if (!dono) return c.json({ erro: "Arquivo não encontrado." }, 404);
-  if (semAcesso(c.get("usuario"), dono, false)) return c.json({ erro: "Você não tem acesso a este arquivo." }, 403);
-  const analise = await c.env.DB.prepare(
-    "SELECT tipo, resultado, criado_em FROM analises_ia WHERE arquivo_id = ? ORDER BY id DESC LIMIT 1",
-  )
-    .bind(id)
-    .first<{ tipo: string; resultado: string; criado_em: string }>();
-  if (!analise) return c.json({ analise: null });
-  return c.json({ analise: { ...analise, resultado: JSON.parse(analise.resultado) } });
-});
-
-// Pede para a IA ler o arquivo. ?tipo=edital (padrão) ou ?tipo=empenho
-rotasArquivos.post("/:id/analisar", async (c) => {
-  const id = idDaRota(c.req.param("id"));
-  if (!id) return c.json({ erro: "Arquivo inválido." }, 400);
-  const tipo: TipoAnalise = c.req.query("tipo") === "empenho" ? "empenho" : "edital";
-
-  const registro = await buscar<Arquivo>(c.env.DB, "arquivos", id);
-  if (!registro) return c.json({ erro: "Arquivo não encontrado." }, 404);
-  if (semAcesso(c.get("usuario"), registro, true)) return c.json({ erro: "Você não tem acesso a este arquivo." }, 403);
-  const tipoMime = registro.tipo_mime ?? "";
-  if (!ANALISAVEIS.has(tipoMime)) {
-    return c.json({ erro: "A IA lê PDF, imagens (PNG, JPG, WEBP), Word (.docx) e Excel (.xlsx)." }, 400);
-  }
-  const objeto = await c.env.ARQUIVOS.get(registro.chave);
-  if (!objeto) return c.json({ erro: "Arquivo não encontrado no armazenamento." }, 404);
-
-  try {
-    const resultado = await analisarDocumento(c.env.AI, tipo, {
-      nome: registro.nome,
-      dados: await objeto.arrayBuffer(),
-      tipoMime,
-    });
-    await c.env.DB.prepare("INSERT INTO analises_ia (arquivo_id, tipo, resultado) VALUES (?, ?, ?)")
-      .bind(id, tipo, JSON.stringify(resultado))
-      .run();
-    return c.json({ analise: { tipo, resultado } });
-  } catch (err) {
-    console.error("Falha na IA", err);
-    const mensagem = err instanceof Error ? err.message : "";
-    if (/neuron|limit|quota|capacity|429/i.test(mensagem)) {
-      return c.json(
-        { erro: "O limite diário gratuito da IA acabou. Ele renova todo dia às 21h (horário de Brasília)." },
-        429,
-      );
-    }
-    if (mensagem.startsWith("A IA")) return c.json({ erro: mensagem }, 502);
-    return c.json({ erro: "A IA não conseguiu analisar o arquivo agora. Tente novamente." }, 502);
-  }
 });
 

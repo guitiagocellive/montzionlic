@@ -1072,19 +1072,6 @@ button.rail-pilula-status {
   font-size: 0.82rem;
 }
 
-.botao.ia {
-  height: 34px;
-  padding: 0 14px;
-  font-size: 0.82rem;
-  background: var(--acento);
-  color: #fff;
-}
-
-.botao.ia.secundario {
-  background: var(--acento-suave);
-  color: var(--acento-texto);
-  border-color: transparent;
-}
 
 .largura-total {
   width: 100%;
@@ -11354,12 +11341,6 @@ code {
 .propostas-compras > li.fora {
   opacity: 0.65;
 }
-.linha-proposta {
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) 150px auto;
-  gap: 12px;
-  align-items: center;
-}
 .posicao-proposta {
   font-size: 1.25rem;
   font-weight: 700;
@@ -11379,12 +11360,6 @@ code {
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
-}
-.valor-proposta {
-  display: grid;
-  gap: 2px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
 }
 .texto-vermelho {
   color: var(--vermelho);
@@ -11517,17 +11492,6 @@ label.botao.desativado {
   pointer-events: none;
 }
 @media (max-width: 860px) {
-  .linha-proposta {
-    grid-template-columns: 36px minmax(0, 1fr);
-  }
-  .valor-proposta {
-    grid-column: 2;
-    text-align: left;
-  }
-  .linha-proposta > .botao {
-    grid-column: 2;
-    justify-self: start;
-  }
   .anexos-empresa {
     margin-left: 0;
   }
@@ -14316,4 +14280,134 @@ p.etapa-fechada {
 
 .dica-cadastradas {
   margin: 2px 0 8px;
+}
+
+.acoes-arquivos {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+
+.acoes-arquivos select {
+  width: auto;
+  min-width: 170px;
+}
+
+.lista-escolha-empresa {
+  display: grid;
+  gap: 8px;
+}
+
+.lista-escolha-empresa .botao {
+  justify-content: flex-start;
+}
+
+/* ---------- Menu do botão direito (próprio do sistema) ---------- */
+.menu-contexto {
+  position: fixed;
+  z-index: 80;
+  min-width: 230px;
+  max-width: 300px;
+  padding: 5px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--superficie-solida) 88%, transparent);
+  border: 1px solid var(--borda);
+  box-shadow: var(--sombra-flutuante);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  animation: abrir-menu 0.14s var(--curva);
+  outline: none;
+  user-select: none;
+}
+
+.menu-contexto-linha {
+  position: relative;
+}
+
+.menu-contexto-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: var(--texto);
+  font: inherit;
+  font-size: 0.86rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menu-contexto-item.foco,
+.menu-contexto-item:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.menu-contexto-item:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.menu-contexto-item.perigo {
+  color: var(--vermelho);
+}
+
+.menu-contexto-item.perigo.foco,
+.menu-contexto-item.perigo:hover {
+  background: var(--vermelho-fundo);
+}
+
+.menu-contexto-icone {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  color: var(--texto-suave);
+  flex-shrink: 0;
+}
+
+.menu-contexto-item.perigo .menu-contexto-icone {
+  color: inherit;
+}
+
+.menu-contexto-rotulo {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.menu-contexto-dica {
+  font-size: 0.75rem;
+  color: var(--texto-fraco);
+}
+
+.menu-contexto-seta {
+  color: var(--texto-fraco);
+}
+
+.menu-contexto-separador {
+  height: 1px;
+  margin: 5px 8px;
+  background: var(--borda);
+}
+
+.menu-contexto-titulo {
+  padding: 6px 10px 3px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--texto-fraco);
+}
+
+.bolinha-etapa {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
 }

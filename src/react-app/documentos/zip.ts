@@ -13,7 +13,8 @@ export const nomeDeArquivo = (texto: string) =>
     .trim()
     .slice(0, 120) || "arquivo";
 
-export async function baixarZip(nomeZip: string, arquivos: ArquivoZip[], aoProgredir?: (feitos: number, total: number) => void) {
+/** Junta os arquivos num .zip (sem baixar). */
+export async function montarZip(arquivos: ArquivoZip[], aoProgredir?: (feitos: number, total: number) => void): Promise<Blob> {
   const PizZip = (await import("pizzip")).default;
   const zip = new PizZip();
   const usados = new Set<string>();
@@ -29,12 +30,20 @@ export async function baixarZip(nomeZip: string, arquivos: ArquivoZip[], aoProgr
     aoProgredir?.(++feitos, arquivos.length);
   }
   // PDFs e imagens já vêm comprimidos: guardar sem recomprimir é mais rápido.
-  const blob = zip.generate({ type: "blob", compression: "STORE", mimeType: "application/zip" });
+  return zip.generate({ type: "blob", compression: "STORE", mimeType: "application/zip" });
+}
+
+/** Salva um arquivo no computador (pasta de downloads). */
+export function salvarNoComputador(blob: Blob, nome: string) {
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
-  link.download = `${nomeDeArquivo(nomeZip)}.zip`;
+  link.download = nome;
   document.body.appendChild(link);
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(link.href), 30_000);
+}
+
+export async function baixarZip(nomeZip: string, arquivos: ArquivoZip[], aoProgredir?: (feitos: number, total: number) => void) {
+  salvarNoComputador(await montarZip(arquivos, aoProgredir), `${nomeDeArquivo(nomeZip)}.zip`);
 }

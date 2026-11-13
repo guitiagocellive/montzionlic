@@ -2,6 +2,8 @@
 // valor e a situação de cada item, e devolve o que preencher no resultado (quem salva é a pessoa).
 import { type CompraAcomp, idEmpresa, type PropostaEmpresa } from "../../../shared/acompanhamento";
 import type { ItemLicitacao, Licitacao } from "../../../shared/tipos";
+import { api } from "../../api";
+import { formatarMoeda } from "../../formato";
 import { ponte } from "../../robo/ponte";
 import { buscarCompras, chaveDoLink } from "./comprasCadastro";
 import { analisarPropostas, carregarPropostas, pedir } from "./ItemCompras";
@@ -89,4 +91,60 @@ export async function puxarDadosDaLicitacao(l: Licitacao, itens: ItemLicitacao[]
     };
   }
   return { porItem, semDados };
+}
+
+const AUTO = "Puxado do Compras.gov.br";
+
+/**
+ * Puxa do Compras.gov.br e já salva: o resultado de cada item e o resumo da disputa (data do resultado, motivo
+ * principal e uma observação com o que veio de cada item). Não apaga o que a pessoa escreveu: a data e o motivo só
+ * são preenchidos se estiverem vazios, e a observação só é trocada se estiver vazia ou tiver sido puxada antes.
+ */
+export async function puxarESalvarResultado(l: Licitacao, itens: ItemLicitacao[]): Promise<{ preenchidos: number; semDados: string[]; situacoes: Record<number, string> }> {
+  const { porItem, semDados } = await puxarDadosDaLicitacao(l, itens);
+  const ids = Object.keys(porItem).map(Number);
+  if (!ids.length) return { preenchidos: 0, semDados, situacoes: {} };
+  for (const id of ids) {
+    const d = porItem[id];
+    await api(`/licitacoes/itens/${id}`, {
+      metodo: "PATCH",
+      corpo: {
+        resultado: d.resultado,
+        colocacao: d.colocacao,
+        nosso_lance: d.nosso_lance,
+        vencedor: d.resultado === "perdido" ? d.vencedor || null : null,
+        valor_vencedor: d.resultado === "perdido" ? d.valor_vencedor : null,
+        motivo_perda: d.resultado === "perdido" ? d.motivo_perda || null : null,
+      },
+    });
+  }
+  const lista = ids.map((id) => ({ item: itens.find((i) => i.id === id)!, d: porItem[id] }));
+  const definidos = lista.filter((x) => x.d.resultado !== "acompanhando");
+  const perdidos = lista.filter((x) => x.d.resultado === "perdido");
+  // Motivo principal: o mais comum entre os itens perdidos (só se todos os itens já tiverem resultado).
+  const contagem = new Map<string, number>();
+  for (const x of perdidos) if (x.d.motivo_perda) contagem.set(x.d.motivo_perda, (contagem.get(x.d.motivo_perda) ?? 0) + 1);
+  const motivo = [...contagem.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
+  const hoje = new Date();
+  const hojeTexto = hoje.toLocaleDateString("pt-BR");
+  const linhas = lista
+    .sort((a, b) => String(a.item.numero).localeCompare(String(b.item.numero), "pt-BR", { numeric: true }))
+    .map(({ item, d }) => {
+      const partes = [`Item ${item.numero}: ${d.colocacao ? `${d.colocacao}º` : "sem colocação"}`];
+      if (d.nosso_lance != null) partes.push(`nosso valor ${formatarMoeda(d.nosso_lance)}`);
+      if (d.resultado === "perdido" && d.vencedor) partes.push(`vencedor ${d.vencedor}${d.valor_vencedor != null ? ` (${formatarMoeda(d.valor_vencedor)})` : ""}`);
+      partes.push(d.situacao);
+      return partes.join(" · ");
+    });
+  const geral: Record<string, unknown> = {};
+  if (!l.observacao_resultado || l.observacao_resultado.startsWith(AUTO)) {
+    geral.observacao_resultado = `${AUTO} em ${hojeTexto}${semDados.length ? ` (sem dados nos itens ${semDados.join(", ")})` : ""}:\n${linhas.join("\n")}`;
+  }
+  const todosDefinidos = definidos.length === itens.filter((i) => i.participar).length;
+  if (!l.data_resultado && todosDefinidos) {
+    geral.data_resultado = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-${String(hoje.getDate()).padStart(2, "0")}`;
+  }
+  if (!l.motivo_perda && todosDefinidos && motivo && perdidos.length === lista.length) geral.motivo_perda = motivo;
+  if (Object.keys(geral).length) await api(`/licitacoes/${l.id}`, { metodo: "PATCH", corpo: geral });
+  return { preenchidos: ids.length, semDados, situacoes: Object.fromEntries(ids.map((id) => [id, porItem[id].situacao])) };
 }

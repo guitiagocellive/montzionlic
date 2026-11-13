@@ -60,10 +60,8 @@ Não existe cadastro público: só um administrador adiciona pessoas.
 **Seção 1 — Licitações (antes de ganhar)**
 - **Quadro Kanban** com as etapas Para estudar → Para fazer → Orçamento → Boa colocação → Perdidas / Ganhas
   (arrastar e soltar; nomes das etapas em `src/shared/negocio.ts`).
-- **Ficha da licitação** em 4 etapas: Dados, Itens, Arquivos e IA, Orçamento.
+- **Ficha da licitação** na ordem do trabalho: Itens → Orçamento → Proposta → Resultado, e Arquivos.
 - **Orçamento automático:** preço de venda = custo com frete ÷ (1 − impostos − lucro).
-- **IA gratuita (Workers AI):** lê edital/termo de referência (PDF, imagem, Word, Excel), resume,
-  preenche os dados e importa os itens. Limite grátis diário (~8 a 10 editais).
 - **Análise de empresas:** Licitações → Análise de empresas (como no Siga Pregão). Digite o CNPJ de um concorrente (ou
   o seu) e o período (últimos 12 meses por padrão): cadastro (razão social, cidade, porte, CNAE, se pode licitar),
   **vitórias** (itens vencidos, licitações, órgãos, cancelados), **valores** (homologado, compras diretas e registrado
@@ -238,7 +236,7 @@ Não existe cadastro público: só um administrador adiciona pessoas.
 - Etapas: Aguardando empenho → Empenho recebido → Material comprado → Aguardando entrega →
   Entrega realizada → Solicitar atestado → Concluído.
 - Prazo de entrega calculado em dias corridos ou úteis; itens ganhos com lucro; dados de faturamento;
-  arquivos e leitura do empenho pela IA.
+  arquivos do empenho.
 - **Atas vigentes** com vigência, alerta de vencimento, prazo e produtos registrados.
 - **Saldo das atas automático:** no empenho, escolha a ata e o item da ata; o saldo é descontado
   sozinho e o sistema não deixa empenhar acima do saldo. Alerta quando o saldo passa de 80% do registrado.
@@ -246,7 +244,8 @@ Não existe cadastro público: só um administrador adiciona pessoas.
 **Ficha da licitação**
 - Duas colunas: à esquerda os **dados principais** (sessão ou reabertura, órgão, UASG, registro de preço,
   modalidade, portal, valor, responsável, objeto — editar abre numa janela) e a contagem dos itens; à direita o
-  próximo passo e as abas Itens, Resultado, Orçamento, Proposta, Arquivos e IA.
+  próximo passo e as abas Itens, Orçamento, Proposta, Resultado e Arquivos (com o botão "Documentos de
+  habilitação", que junta os documentos da aba Documentação num .zip, salva no computador e anexa à licitação).
 - **Resultado por item:** ganho, acompanhando, perdido ou cancelado. Em "Ganhamos" (ou ao arrastar para Ganhas)
   abre "Quais itens ganhamos?": só os itens ganhos vão para o empenho, já com o valor final.
 - **Próximo passo** da etapa com botões: "Vamos participar" / "Não vamos participar", "Ir para Orçamento",
@@ -337,9 +336,6 @@ npm run dev
 
 Para testar a assinatura no computador, crie um arquivo `.dev.vars` (não vai para o Git) com
 `CHAVE_CERTIFICADO="um-texto-longo-e-aleatorio"`.
-
-A IA só funciona conectada à conta Cloudflare. Para testar sem login, rode `SEM_IA=1 npm run dev`
-(tudo funciona, menos o botão "Analisar com IA").
 
 Abra http://localhost:5173.
 

@@ -1,16 +1,37 @@
-import { CalendarClock, FileText, Gavel, ListChecks, Plus, Search } from "lucide-react";
+import {
+  ArrowRightLeft,
+  Calculator,
+  CalendarClock,
+  Copy,
+  DownloadCloud,
+  ExternalLink,
+  FileText,
+  FolderOpen,
+  Gavel,
+  ListChecks,
+  Pencil,
+  Plus,
+  Search,
+  SquareArrowOutUpRight,
+  Trash2,
+  Trophy,
+  Zap,
+} from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { diasAte, ETAPAS_LICITACAO, MODALIDADES } from "../../../shared/negocio";
 import { podeEditar } from "../../../shared/permissoes";
-import type { LicitacaoResumo, Usuario } from "../../../shared/tipos";
+import type { ItemLicitacao, Licitacao, LicitacaoResumo, Usuario } from "../../../shared/tipos";
 import { api, mensagemDeErro } from "../../api";
 import { Avatar } from "../../components/Avatar";
 import { Alerta, Campo } from "../../components/Formulario";
 import { Kanban } from "../../components/Kanban";
+import { type ItemMenu, MenuContexto } from "../../components/MenuContexto";
+import { temPonte } from "../../robo/ponte";
 import { avisar, Carregando, CampoSelect, Modal } from "../../components/Ui";
 import { formatarDataCurta, formatarMoeda, hojeIso, textoPrazo } from "../../formato";
 import { navegar } from "../../rota";
-import { BotaoUmClique, ehDoCompras } from "./CadastroUmClique";
+import { BotaoUmClique, CadastroUmClique, ehDoCompras } from "./CadastroUmClique";
+import { puxarESalvarResultado } from "./puxarResultado";
 
 export function QuadroLicitacoes({ usuario }: { usuario: Usuario }) {
   const editar = podeEditar(usuario.permissoes, "licitacoes");
@@ -23,6 +44,9 @@ export function QuadroLicitacoes({ usuario }: { usuario: Usuario }) {
     history.replaceState(null, "", "/licitacoes");
     return editar ? "estudar" : null;
   });
+
+  const [menu, setMenu] = useState<{ l: LicitacaoResumo; x: number; y: number } | null>(null);
+  const [cadastrando, setCadastrando] = useState<number | null>(null);
 
   async function carregar() {
     try {
@@ -75,6 +99,89 @@ export function QuadroLicitacoes({ usuario }: { usuario: Usuario }) {
 
   const hoje = hojeIso();
 
+  async function puxarResultado(l: LicitacaoResumo) {
+    try {
+      avisar("Puxando o resultado do Compras.gov.br…");
+      const ficha = await api<{ licitacao: Licitacao; itens: ItemLicitacao[] }>(`/licitacoes/${l.id}`);
+      const { preenchidos, semDados } = await puxarESalvarResultado(ficha.licitacao, ficha.itens);
+      if (!preenchidos) avisar(`O Compras.gov.br ainda não mostra a sua proposta nos itens${semDados.length ? ` ${semDados.join(", ")}` : ""}.`, "erro");
+      else avisar(`Resultado salvo em ${preenchidos} item(ns), com o resumo da disputa. Veja na aba Resultado.`);
+      await carregar();
+    } catch (err) {
+      avisar(mensagemDeErro(err), "erro");
+    }
+  }
+
+  async function excluir(l: LicitacaoResumo) {
+    if (!confirm(`Excluir a licitação ${l.numero ?? ""} do quadro, com itens, cotações, arquivos e empenhos? Isso não pode ser desfeito.`)) return;
+    try {
+      await api(`/licitacoes/${l.id}`, { metodo: "DELETE" });
+      avisar("Licitação excluída.");
+      await carregar();
+    } catch (err) {
+      avisar(mensagemDeErro(err), "erro");
+    }
+  }
+
+  /** Ações do botão direito: mudam conforme a etapa (cadastrar, alterar ou puxar o resultado do Compras.gov.br). */
+  function itensDoMenu(l: LicitacaoResumo): ItemMenu[] {
+    const abrir = (aba = "") => navegar(`/licitacoes/${l.id}${aba ? `?aba=${aba}` : ""}`);
+    const ativa = !["perdida", "ganha"].includes(l.etapa);
+    const data = l.data_reabertura && l.data_reabertura >= hoje ? l.data_reabertura : l.data_sessao;
+    const jaAconteceu = !ativa || l.etapa === "boa_colocacao" || (!!data && data < hoje);
+    const doCompras = ehDoCompras(l);
+    const semApp = !temPonte();
+    const itens: ItemMenu[] = [
+      { rotulo: "Abrir ficha", icone: <SquareArrowOutUpRight size={15} />, aoClicar: () => abrir() },
+      { rotulo: "Ver itens", icone: <ListChecks size={15} />, dica: String(l.total_itens), aoClicar: () => abrir("itens") },
+      { rotulo: "Orçamento", icone: <Calculator size={15} />, aoClicar: () => abrir("orcamento") },
+      { rotulo: "Proposta", icone: <FileText size={15} />, aoClicar: () => abrir("proposta") },
+      { rotulo: "Resultado", icone: <Trophy size={15} />, aoClicar: () => abrir("resultado") },
+      { rotulo: "Ver anexos", icone: <FolderOpen size={15} />, dica: l.total_arquivos ? String(l.total_arquivos) : undefined, aoClicar: () => abrir("arquivos") },
+    ];
+    if (doCompras && editar) {
+      itens.push({ separador: true }, { titulo: "Compras.gov.br" });
+      if (jaAconteceu) {
+        itens.push({
+          rotulo: "Puxar resultado da disputa",
+          icone: <DownloadCloud size={15} />,
+          desativado: semApp,
+          motivo: "Abra a plataforma pelo aplicativo Montzion",
+          aoClicar: () => puxarResultado(l),
+        });
+      } else if (l.compras_cadastrado_em) {
+        itens.push({ rotulo: "Alterar proposta", icone: <Pencil size={15} />, dica: `${l.compras_itens ?? 0} itens`, aoClicar: () => setCadastrando(l.id) });
+      } else {
+        itens.push({ rotulo: "Cadastrar proposta", icone: <Zap size={15} />, aoClicar: () => setCadastrando(l.id) });
+      }
+    }
+    itens.push({ separador: true });
+    if (editar) {
+      itens.push({
+        rotulo: "Mover para",
+        icone: <ArrowRightLeft size={15} />,
+        submenu: ETAPAS_LICITACAO.filter((e) => e.chave !== l.etapa).map((e) => ({
+          rotulo: e.nome,
+          icone: <span className="bolinha-etapa" style={{ background: e.cor }} />,
+          aoClicar: () => mover(l, e.chave, 0),
+        })),
+      });
+    }
+    if (l.link) itens.push({ rotulo: "Abrir no portal", icone: <ExternalLink size={15} />, aoClicar: () => window.open(l.link!, "_blank", "noopener") });
+    if (l.numero || l.uasg) {
+      itens.push({
+        rotulo: "Copiar número e UASG",
+        icone: <Copy size={15} />,
+        aoClicar: () =>
+          navigator.clipboard
+            .writeText([l.numero && `Nº ${l.numero}`, l.uasg && `UASG ${l.uasg}`].filter(Boolean).join(" · "))
+            .then(() => avisar("Copiado."), () => avisar("Não consegui copiar.", "erro")),
+      });
+    }
+    if (usuario.papel === "admin") itens.push({ separador: true }, { rotulo: "Excluir do quadro", icone: <Trash2 size={15} />, perigo: true, aoClicar: () => excluir(l) });
+    return itens;
+  }
+
   return (
     <>
       <div className="cabecalho-pagina entrar">
@@ -126,8 +233,20 @@ export function QuadroLicitacoes({ usuario }: { usuario: Usuario }) {
               return total > 0 ? <div className="coluna-rodape">{formatarMoeda(total)} estimados</div> : null;
             }}
             renderCard={(l) => <CardLicitacao l={l} hoje={hoje} aoMudar={carregar} />}
+            aoMenu={(l, x, y) => setMenu({ l, x, y })}
           />
         </div>
+      )}
+
+      {menu && <MenuContexto x={menu.x} y={menu.y} itens={itensDoMenu(menu.l)} aoFechar={() => setMenu(null)} />}
+      {cadastrando != null && (
+        <CadastroUmClique
+          licitacaoId={cadastrando}
+          aoFechar={() => {
+            setCadastrando(null);
+            carregar();
+          }}
+        />
       )}
 
       {novaEm && (
@@ -246,7 +365,7 @@ function ModalNovaLicitacao({
       <form className="formulario" onSubmit={enviar}>
         <Alerta>{erro}</Alerta>
         <p className="texto-suave pequeno" style={{ margin: 0 }}>
-          Preencha o básico agora. Os outros dados (ou a leitura do edital pela IA) ficam na ficha.
+          Preencha o básico agora. Os outros dados ficam na ficha.
         </p>
         <div className="grade-2">
           <Campo rotulo="Número da licitação" name="numero" icone={Gavel} placeholder="90012/2026" autoFocus />

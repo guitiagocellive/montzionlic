@@ -96,6 +96,7 @@ export const CATEGORIAS_ARQUIVO = [
   "Nota fiscal",
   "Atestado",
   "Ata",
+  "Habilitação",
   "Outro",
 ];
 

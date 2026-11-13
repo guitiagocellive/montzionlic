@@ -1,4 +1,4 @@
-import { Ban, Bot, Calculator, Check, Eye, EyeOff, FileText, ListChecks, Medal, PackageCheck, Save, ThumbsDown, ThumbsUp, Trophy } from "lucide-react";
+import { Ban, Calculator, Check, Eye, EyeOff, FileText, FolderOpen, ListChecks, Medal, PackageCheck, Save, ThumbsDown, ThumbsUp, Trophy } from "lucide-react";
 import { useEffect, useState } from "react";
 import { SITUACOES_DISPUTA } from "../../../shared/negocio";
 import type { Licitacao } from "../../../shared/tipos";
@@ -40,10 +40,10 @@ export function PainelEtapa({ licitacao: l, semCotacao, participando, execucoes,
   switch (l.etapa) {
     case "estudar":
       titulo = "Estudar o edital";
-      texto = "Leia o edital (a IA ajuda a resumir) e decida se vale participar.";
+      texto = "Leia o edital e decida se vale participar.";
       botoes = (
         <>
-          {acao("Analisar edital com IA", <Bot />, () => aoIrPara("arquivos"), "link")}
+          {acao("Ver o edital", <FolderOpen />, () => aoIrPara("arquivos"), "link")}
           {acao("Não vamos participar", <Ban />, () => aoMudarEtapa("perdida", { motivo_perda: "Desistência" }))}
           {acao("Vamos participar", <ThumbsUp />, () => aoMudarEtapa("fazer"), "acento")}
         </>

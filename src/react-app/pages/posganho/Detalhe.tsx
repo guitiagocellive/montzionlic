@@ -161,7 +161,7 @@ export function DetalheExecucao({ id, usuario }: { id: number; usuario: Usuario 
     { chave: "empenho", titulo: "Empenho e prazo", descricao: e.data_limite ? `Entrega até ${formatarData(e.data_limite)}` : "Número, data e prazo", icone: CalendarCheck, completo: !!(e.numero_empenho && e.data_limite) },
     { chave: "itens", titulo: "Itens ganhos", descricao: `${itens.length} item(ns) · ${formatarMoeda(valorTotal)}`, icone: Package, completo: itens.length > 0 && itens.every((i) => i.valor_unitario != null) },
     { chave: "faturamento", titulo: "Faturamento", descricao: e.data_pagamento ? "Recebido" : e.nota_fiscal ? `NF ${e.nota_fiscal}` : "Nota fiscal e órgão", icone: Building, completo: !!(e.fat_razao_social && e.fat_cnpj) },
-    { chave: "arquivos", titulo: "Arquivos e IA", descricao: `${arquivos.length} arquivo(s)`, icone: FolderOpen, completo: arquivos.some((a) => a.execucao_id) },
+    { chave: "arquivos", titulo: "Arquivos", descricao: `${arquivos.length} arquivo(s)`, icone: FolderOpen, completo: arquivos.some((a) => a.execucao_id) },
   ];
 
   return (
@@ -222,21 +222,9 @@ export function DetalheExecucao({ id, usuario }: { id: number; usuario: Usuario 
             podeAssinar={podeEditar(usuario.permissoes, "assinatura")}
             arquivos={arquivos}
             destino={{ execucao_id: e.id }}
-            tipoAnalise="empenho"
+            categoriaInicial="Empenho"
             rotuloHerdados="Arquivos da licitação"
             aoMudar={carregar}
-            aoAplicarDados={async (dados) => {
-              await api(`/execucoes/${e.id}`, { metodo: "PATCH", corpo: dados });
-              await carregar();
-            }}
-            aoImportarItens={async (lista) => {
-              const novos = lista.map((i) => {
-                const doEdital = ficha.itensLicitacao.find((x) => x.numero && x.numero === i.item_numero);
-                return { ...i, item_id: doEdital?.id ?? null };
-              });
-              await api(`/execucoes/${e.id}`, { metodo: "PATCH", corpo: { itens: [...itens, ...novos] } });
-              await carregar();
-            }}
           />
         )}
       </div>

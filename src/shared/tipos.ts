@@ -451,14 +451,3 @@ export interface Ata {
   total_empenhos?: number;
   itens: AtaItem[];
 }
-
-export interface AnaliseIA {
-  tipo: "edital" | "empenho";
-  resultado: Record<string, unknown> & {
-    resumo?: string;
-    itens?: Record<string, unknown>[];
-    pontos_atencao?: string[];
-    documentos_habilitacao?: string[];
-    documento_cortado?: boolean;
-  };
-}

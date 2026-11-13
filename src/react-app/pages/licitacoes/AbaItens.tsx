@@ -76,7 +76,7 @@ export function AbaItens({
 
         {lista.length === 0 ? (
           <Vazio icone={<ListChecks />} titulo="Nenhum item ainda">
-            Adicione os itens manualmente ou envie o edital na etapa "Arquivos e IA" para a IA importar.
+            Adicione os itens manualmente ou importe do PNCP pela busca de licitações.
           </Vazio>
         ) : (
           <div className="lista-itens">

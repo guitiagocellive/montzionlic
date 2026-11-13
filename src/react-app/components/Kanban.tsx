@@ -18,6 +18,8 @@ interface Props<T extends CardBase> {
   rodapeColuna?: (etapa: string, cards: T[]) => ReactNode;
   /** Sem arrastar (para quem só pode ver). */
   somenteLeitura?: boolean;
+  /** Botão direito (ou tecla de menu) num card: abre o menu de ações na posição (x, y). */
+  aoMenu?: (card: T, x: number, y: number) => void;
 }
 
 /** Quadro em colunas com arrastar e soltar (estilo ClickUp). */
@@ -30,6 +32,7 @@ export function Kanban<T extends CardBase>({
   aoNovo,
   rodapeColuna,
   somenteLeitura = false,
+  aoMenu,
 }: Props<T>) {
   const [arrastando, setArrastando] = useState<number | null>(null);
   const [alvo, setAlvo] = useState<{ etapa: string; indice: number } | null>(null);
@@ -128,6 +131,16 @@ export function Kanban<T extends CardBase>({
                       setAlvo(null);
                     }}
                     onClick={() => aoAbrir(card)}
+                    onContextMenu={(e) => {
+                      if (!aoMenu) return;
+                      e.preventDefault();
+                      // Botão direito: na posição do mouse; tecla de menu (Shift+F10): no canto do card.
+                      if (e.clientX || e.clientY) aoMenu(card, e.clientX, e.clientY);
+                      else {
+                        const r = e.currentTarget.getBoundingClientRect();
+                        aoMenu(card, r.left + 16, r.top + 24);
+                      }
+                    }}
                     onKeyDown={(e) => e.key === "Enter" && aoAbrir(card)}
                   >
                     {renderCard(card)}

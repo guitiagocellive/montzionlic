@@ -7,7 +7,7 @@ import { Campo } from "../../components/Formulario";
 import { avisar, CampoArea, CampoSelect, Vazio } from "../../components/Ui";
 import { formatarMoeda, formatarNumero, paraNumero } from "../../formato";
 import { temPonte } from "../../robo/ponte";
-import { puxarDadosDaLicitacao } from "./puxarResultado";
+import { puxarESalvarResultado } from "./puxarResultado";
 
 type Linha = {
   resultado: string;
@@ -45,31 +45,21 @@ export function AbaResultado({
   const [puxando, setPuxando] = useState(false);
   const [puxados, setPuxados] = useState<Record<number, string>>({});
 
-  // Lê no Compras.gov.br (pelo aplicativo) a colocação, o seu valor e a situação de cada item e preenche o resultado.
+  // Lê no Compras.gov.br (pelo aplicativo) a colocação, o seu valor e a situação de cada item e já salva, junto com o
+  // resumo da disputa (data, motivo e observação). Nada para preencher na mão.
   async function puxar() {
+    if (alteradas.length > 0 || geralMudou) {
+      if (!confirm("Você tem alterações não salvas no resultado. Puxar do Compras.gov.br troca os itens pelo que está lá. Continuar?")) return;
+    }
     setPuxando(true);
     try {
-      const { porItem, semDados } = await puxarDadosDaLicitacao(licitacao, itens);
-      const ids = Object.keys(porItem).map(Number);
-      setLinhas((atual) => {
-        const novo = { ...atual };
-        for (const id of ids) {
-          const d = porItem[id];
-          novo[id] = {
-            ...novo[id],
-            resultado: d.resultado,
-            colocacao: d.colocacao == null ? "" : String(d.colocacao),
-            nosso_lance: d.nosso_lance == null ? "" : String(d.nosso_lance),
-            vencedor: d.vencedor,
-            valor_vencedor: d.valor_vencedor == null ? "" : String(d.valor_vencedor),
-            motivo_perda: d.motivo_perda,
-          };
-        }
-        return novo;
-      });
-      setPuxados(Object.fromEntries(ids.map((id) => [id, porItem[id].situacao])));
-      if (!ids.length) avisar(`O Compras.gov.br ainda não mostra a sua proposta nos itens${semDados.length ? ` ${semDados.join(", ")}` : ""}.`, "erro");
-      else avisar(`Dados do Compras.gov.br preenchidos em ${ids.length} item(ns)${semDados.length ? ` (sem dados: ${semDados.join(", ")})` : ""}. Confira e clique em Salvar resultado.`);
+      const { preenchidos, semDados, situacoes } = await puxarESalvarResultado(licitacao, itens);
+      if (!preenchidos) avisar(`O Compras.gov.br ainda não mostra a sua proposta nos itens${semDados.length ? ` ${semDados.join(", ")}` : ""}.`, "erro");
+      else {
+        await aoMudar();
+        setPuxados(situacoes);
+        avisar(`Resultado puxado do Compras.gov.br e salvo: ${preenchidos} item(ns)${semDados.length ? ` (sem dados: ${semDados.join(", ")})` : ""}, com o resumo da disputa.`);
+      }
     } catch (e) {
       avisar(mensagemDeErro(e), "erro");
     } finally {

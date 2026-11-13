@@ -106,8 +106,11 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
 
   const participando = itens.filter((i) => i.participar);
   const conta = (r: string) => participando.filter((i) => i.resultado === r).length;
+  // Na ordem do trabalho: olhar os itens, orçar, fazer a proposta e, por último, o resultado. Arquivos no fim.
   const abas = [
     { chave: "itens", titulo: "Itens", icone: ListChecks, info: `${participando.length}`, completo: participando.length > 0 },
+    { chave: "orcamento", titulo: "Orçamento", icone: Calculator, info: cotacoes.length ? `${cotacoes.length}` : "", completo: participando.length > 0 && participando.every((i) => cotacoes.some((c) => c.item_id === i.id)) },
+    { chave: "proposta", titulo: "Proposta", icone: FileText, info: `${arquivos.filter((a) => a.categoria === "Proposta").length || ""}`, completo: arquivos.some((a) => a.categoria === "Proposta") },
     {
       chave: "resultado",
       titulo: "Resultado",
@@ -115,9 +118,7 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
       info: participando.some((i) => i.resultado) ? `${participando.filter((i) => i.resultado).length}/${participando.length}` : "",
       completo: participando.length > 0 && participando.every((i) => i.resultado && i.resultado !== "acompanhando"),
     },
-    { chave: "orcamento", titulo: "Orçamento", icone: Calculator, info: cotacoes.length ? `${cotacoes.length}` : "", completo: participando.length > 0 && participando.every((i) => cotacoes.some((c) => c.item_id === i.id)) },
-    { chave: "proposta", titulo: "Proposta", icone: FileText, info: `${arquivos.filter((a) => a.categoria === "Proposta").length || ""}`, completo: arquivos.some((a) => a.categoria === "Proposta") },
-    { chave: "arquivos", titulo: "Arquivos e IA", icone: FolderOpen, info: arquivos.length ? `${arquivos.length}` : "", completo: arquivos.length > 0 },
+    { chave: "arquivos", titulo: "Arquivos", icone: FolderOpen, info: arquivos.length ? `${arquivos.length}` : "", completo: arquivos.length > 0 },
   ].filter((p) => !["orcamento", "proposta"].includes(p.chave) || podeVer(usuario.permissoes, "orcamento"));
 
   const hoje = hojeIso();
@@ -344,16 +345,8 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
                 podeAssinar={podeEditar(usuario.permissoes, "assinatura")}
                 arquivos={arquivos}
                 destino={{ licitacao_id: l.id }}
-                tipoAnalise="edital"
+                categoriaInicial="Edital"
                 aoMudar={carregar}
-                aoAplicarDados={async (dados) => {
-                  await api(`/licitacoes/${l.id}`, { metodo: "PATCH", corpo: dados });
-                  await carregar();
-                }}
-                aoImportarItens={async (lista) => {
-                  await api(`/licitacoes/${l.id}/itens`, { corpo: { itens: lista } });
-                  await carregar();
-                }}
               />
             )}
             {aba === "orcamento" && (

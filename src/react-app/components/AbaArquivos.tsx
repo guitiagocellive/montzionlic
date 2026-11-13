@@ -1,6 +1,6 @@
 import {
-  Bot,
   Download,
+  FileArchive,
   Eye,
   FileImage,
   FileSpreadsheet,
@@ -8,32 +8,22 @@ import {
   FolderOpen,
   PenLine,
   ShieldCheck,
-  Sparkles,
   Trash2,
   UploadCloud,
 } from "lucide-react";
 import { type DragEvent, lazy, Suspense, useRef, useState } from "react";
 import { CATEGORIAS_ARQUIVO } from "../../shared/negocio";
-import type { AnaliseIA, Arquivo } from "../../shared/tipos";
+import type { Arquivo, Documento, Empresa } from "../../shared/tipos";
 import { api, enviarArquivo, mensagemDeErro } from "../api";
-import { formatarData, formatarTamanho } from "../formato";
-import { ResultadoIA } from "./ResultadoIA";
+import { zipDaHabilitacao } from "../documentos/habilitacao";
+import { montarZip, nomeDeArquivo, salvarNoComputador } from "../documentos/zip";
+import { formatarData, formatarTamanho, hojeIso } from "../formato";
 import { avisar, Modal, SeloAssinado, Vazio } from "./Ui";
 import { PreviaArquivo } from "./PreviaArquivo";
 
 const ModalAssinar = lazy(() => import("../assinatura/ModalAssinar").then((m) => ({ default: m.ModalAssinar })));
 
 const VISUALIZAVEIS = ["application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp", "text/plain", "application/zip", "application/x-zip-compressed"];
-const ANALISAVEIS = [
-  "application/pdf",
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "text/plain",
-  "text/html",
-];
 
 function IconeArquivo({ tipo }: { tipo: string | null }) {
   if (tipo?.startsWith("image/")) return <FileImage />;
@@ -44,10 +34,9 @@ function IconeArquivo({ tipo }: { tipo: string | null }) {
 interface Props {
   arquivos: Arquivo[];
   destino: { licitacao_id: number } | { execucao_id: number };
-  tipoAnalise: "edital" | "empenho";
+  /** Categoria já escolhida para o próximo envio (ex.: "Edital" na licitação, "Empenho" no pós-ganho). */
+  categoriaInicial: string;
   aoMudar: () => Promise<void> | void;
-  aoAplicarDados: (dados: Record<string, unknown>) => Promise<void>;
-  aoImportarItens: (itens: Record<string, unknown>[]) => Promise<void>;
   /** Texto que explica de onde vêm os arquivos herdados (ex.: da licitação). */
   rotuloHerdados?: string;
   /** Pode assinar PDFs com o certificado da empresa. */
@@ -57,20 +46,18 @@ interface Props {
 export function AbaArquivos({
   arquivos,
   destino,
-  tipoAnalise,
+  categoriaInicial,
   aoMudar,
-  aoAplicarDados,
-  aoImportarItens,
   rotuloHerdados,
   podeAssinar = false,
 }: Props) {
-  const [categoria, setCategoria] = useState(tipoAnalise === "edital" ? "Edital" : "Empenho");
+  const [categoria, setCategoria] = useState(categoriaInicial);
   const [enviando, setEnviando] = useState<string | null>(null);
   const [sobre, setSobre] = useState(false);
   const [vendo, setVendo] = useState<Arquivo | null>(null);
-  const [analisando, setAnalisando] = useState<number | null>(null);
+  const [juntando, setJuntando] = useState("");
+  const [escolherEmpresa, setEscolherEmpresa] = useState<{ docs: Documento[]; empresas: Empresa[] } | null>(null);
   const [assinando, setAssinando] = useState<Arquivo | null>(null);
-  const [analise, setAnalise] = useState<{ arquivo: Arquivo; dados: AnaliseIA } | null>(null);
   const entrada = useRef<HTMLInputElement>(null);
 
   async function enviar(lista: FileList | File[]) {
@@ -136,25 +123,55 @@ export function AbaArquivos({
     await aoMudar();
   }
 
-  async function analisar(a: Arquivo, refazer = false) {
-    setAnalisando(a.id);
+  // "Documentos de habilitação": junta num .zip os documentos da aba Documentação (uma pasta por habilitação),
+  // salva no computador e já anexa o .zip aos arquivos da licitação.
+  async function documentosHabilitacao(empresaId?: number | "todas", dados?: { docs: Documento[]; empresas: Empresa[] }) {
+    if (!("licitacao_id" in destino)) return;
+    setJuntando("Buscando os documentos…");
     try {
-      if (!refazer && a.analisado) {
-        const { analise } = await api<{ analise: AnaliseIA | null }>(`/arquivos/${a.id}/analise`);
-        if (analise) {
-          setAnalise({ arquivo: a, dados: analise });
-          return;
-        }
+      let lidos = dados;
+      if (!lidos) {
+        const [d, e] = await Promise.all([
+          api<{ documentos: Documento[] }>("/documentos"),
+          api<{ empresas: Empresa[] }>("/empresas").catch(() => ({ empresas: [] as Empresa[] })),
+        ]);
+        lidos = { docs: d.documentos, empresas: e.empresas };
       }
-      const { analise } = await api<{ analise: AnaliseIA }>(`/arquivos/${a.id}/analisar?tipo=${tipoAnalise}`, {
-        corpo: {},
-      });
-      setAnalise({ arquivo: a, dados: analise });
+      const { docs, empresas } = lidos;
+      // Mais de uma empresa com documentos: pergunta de qual.
+      const comDocs = empresas.filter((e) => docs.some((d) => d.arquivo_nome && d.empresa_id === e.id));
+      if (empresaId === undefined && comDocs.length > 1) {
+        setEscolherEmpresa({ docs, empresas: comDocs });
+        return;
+      }
+      const hoje = hojeIso();
+      const pacote = zipDaHabilitacao(docs, empresas, hoje, { empresaId: empresaId ?? (comDocs.length === 1 ? comDocs[0].id : "todas") });
+      if (!pacote.arquivos.length) {
+        avisar("Nenhum documento com arquivo na aba Documentação. Cadastre os documentos de habilitação lá primeiro.", "erro");
+        return;
+      }
+      const blob = await montarZip(pacote.arquivos, (feitos, total) => setJuntando(`Juntando ${feitos} de ${total}…`));
+      const nome = `${nomeDeArquivo(pacote.nome)}.zip`;
+      salvarNoComputador(blob, nome);
+      if (blob.size > 50 * 1024 * 1024) {
+        avisar("Zip salvo no computador. Ele passa de 50 MB, então não deu para anexar aqui: envie as partes separadas.", "erro");
+        return;
+      }
+      setJuntando("Anexando à licitação…");
+      const envio = new FormData();
+      envio.set("arquivo", new File([blob], nome, { type: "application/zip" }));
+      envio.set("categoria", "Habilitação");
+      envio.set("licitacao_id", String(destino.licitacao_id));
+      await enviarArquivo("/arquivos", envio);
+      avisar(
+        `${pacote.arquivos.length} documento(s) salvos no computador e anexados à licitação.${pacote.vencidos ? ` Atenção: ${pacote.vencidos} vencido(s), marcados no nome.` : ""}`,
+        pacote.vencidos ? "erro" : "sucesso",
+      );
       await aoMudar();
     } catch (err) {
       avisar(mensagemDeErro(err), "erro");
     } finally {
-      setAnalisando(null);
+      setJuntando("");
     }
   }
 
@@ -165,7 +182,6 @@ export function AbaArquivos({
     <div className="lista-arquivos">
       {lista.map((a) => {
         const visualizavel = VISUALIZAVEIS.includes(a.tipo_mime ?? "");
-        const analisavel = ANALISAVEIS.includes(a.tipo_mime ?? "");
         return (
           <article key={a.id} className="linha-arquivo">
             <span className={`icone-brilho ${a.assinado_em ? "verde" : ""}`}>
@@ -192,23 +208,6 @@ export function AbaArquivos({
               ))}
             </select>
             <div className="arquivo-acoes">
-              {analisavel && (
-                <button
-                  className={`botao ia ${a.analisado ? "secundario" : ""}`}
-                  onClick={() => analisar(a)}
-                  disabled={analisando !== null}
-                >
-                  {analisando === a.id ? (
-                    <>
-                      <span className="anel mini" /> Lendo…
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles aria-hidden="true" /> {a.analisado ? "Ver análise" : "Analisar com IA"}
-                    </>
-                  )}
-                </button>
-              )}
               {podeAssinar && a.tipo_mime === "application/pdf" && !a.assinado_em && (
                 <button className="botao secundario" onClick={() => setAssinando(a)} title="Assinar com o certificado digital da empresa">
                   <PenLine aria-hidden="true" /> Assinar
@@ -241,11 +240,23 @@ export function AbaArquivos({
           <h2>
             <FolderOpen size={18} color="#f0abfc" aria-hidden="true" /> Arquivos
           </h2>
-          <select value={categoria} onChange={(e) => setCategoria(e.target.value)} aria-label="Categoria do envio">
-            {CATEGORIAS_ARQUIVO.map((c) => (
-              <option key={c}>{c}</option>
-            ))}
-          </select>
+          <div className="acoes-arquivos">
+            {"licitacao_id" in destino && (
+              <button
+                className="botao secundario pequeno"
+                onClick={() => documentosHabilitacao()}
+                disabled={!!juntando}
+                title="Junta os documentos da aba Documentação num .zip, salva no computador e anexa aqui"
+              >
+                <FileArchive aria-hidden="true" /> {juntando || "Documentos de habilitação"}
+              </button>
+            )}
+            <select value={categoria} onChange={(e) => setCategoria(e.target.value)} aria-label="Categoria do envio">
+              {CATEGORIAS_ARQUIVO.map((c) => (
+                <option key={c}>{c}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div
@@ -284,15 +295,6 @@ export function AbaArquivos({
           />
         </div>
 
-        <div className="dica-ia">
-          <Bot aria-hidden="true" />
-          <span>
-            Clique em <strong>Analisar com IA</strong> em um {tipoAnalise === "edital" ? "edital ou termo de referência" : "empenho"}{" "}
-            para a IA ler o documento, resumir e preencher os dados e itens. A IA gratuita tem um limite diário
-            (cerca de 8 a 10 editais por dia).
-          </span>
-        </div>
-
         {proprios.length === 0 ? (
           <Vazio icone={<FolderOpen />} titulo="Nenhum arquivo enviado" />
         ) : (
@@ -325,19 +327,27 @@ export function AbaArquivos({
         </Suspense>
       )}
 
-      {analise && (
-        <ResultadoIA
-          nomeArquivo={analise.arquivo.nome}
-          analise={analise.dados}
-          aoFechar={() => setAnalise(null)}
-          aoRefazer={() => {
-            const a = analise.arquivo;
-            setAnalise(null);
-            analisar(a, true);
-          }}
-          aoAplicarDados={aoAplicarDados}
-          aoImportarItens={aoImportarItens}
-        />
+      {escolherEmpresa && (
+        <Modal titulo="De qual empresa?" aoFechar={() => setEscolherEmpresa(null)}>
+          <p className="texto-suave" style={{ marginTop: 0 }}>
+            Escolha a empresa dos documentos de habilitação que vão para esta licitação.
+          </p>
+          <div className="lista-escolha-empresa">
+            {escolherEmpresa.empresas.map((e) => (
+              <button
+                key={e.id}
+                className="botao secundario"
+                onClick={() => {
+                  const dados = escolherEmpresa;
+                  setEscolherEmpresa(null);
+                  documentosHabilitacao(e.id, dados);
+                }}
+              >
+                {e.nome}
+              </button>
+            ))}
+          </div>
+        </Modal>
       )}
     </>
   );
