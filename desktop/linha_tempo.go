@@ -215,6 +215,9 @@ func (m *motor) estadoRoboTexto() string {
 	}
 	fmt.Fprintf(&b, "Fase: %s · logado: %v · tempo real: %v · pedidos: %s · captchas prontos: %d (deixar prontos agora: %v)\n",
 		m.fase, m.token != "", m.tempoReal, modo, prontos, precisa)
+	if r := freioRestante(); r > 0 {
+		fmt.Fprintf(&b, "Freio do 429 ligado por mais %.0f s (só lance e reta final)\n", r.Seconds())
+	}
 	testeGovBr.mu.Lock()
 	if !testeGovBr.em.IsZero() {
 		g := testeGovBr.resultado

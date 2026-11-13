@@ -1,13 +1,8 @@
 {
-  "versao": "3.1.35",
+  "versao": "3.1.36",
   "data": "2026-11-13",
   "novidades": [
-    "Reta final: lance recusado (dois lances no mesmo instante, valor igual ao de outra empresa) é refeito em ~0,2 s com o item relido. Antes o robô ficava 700 ms parado.",
-    "Reta final: se o Compras.gov.br demora mais de 0,6 s para responder um lance e um concorrente cobre nesse meio-tempo, o robô manda o lance menor sem esperar a resposta. Antes podia ficar até 5 s parado.",
-    "O robô reconhece os próprios lances: o aviso do tempo real só diz o novo melhor lance, sem dizer de quem é. Um melhor lance igual a um valor que o robô acabou de mandar é tratado como nosso (nunca cobre a si mesmo).",
-    "Disputa por colocação: nos segundos finais a classificação é relida a cada 0,7 s (1 s no aleatório) e logo depois de cada lance, com 3 captchas prontos.",
-    "Menos desperdício: com \"Não esperar\" e horas pela frente, a classificação é relida a cada 15 s em vez de 2 s (eram milhares de leituras e captchas por dia).",
-    "Segundos finais com tempo real: o item é conferido também a cada 1 s, como rede de segurança se um aviso atrasar.",
-    "Diagnóstico mais limpo: só aparecem os captchas lentos e as classificações que mudaram."
+    "Freio automático: quando o Compras.gov.br responde \"429 – pedidos demais\", o aplicativo pausa o que não é urgente (leitura de fundo do Acompanhamento, classificação de itens longe do fim) por 20 s, 40 s… até 2 min. O lance e a reta final nunca param. O diagnóstico mostra quando o freio está ligado.",
+    "Captcha logo depois do login: quando a página ainda está montando o captcha (\"missing-captcha\"), espera até ele ficar pronto em vez de gastar as tentativas em 1 segundo. O primeiro captcha sai assim que a página permite."
   ]
 }

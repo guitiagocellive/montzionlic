@@ -39,16 +39,26 @@ const scriptCaptchaModelo = `(async () => {
   while (!pronto() && Date.now() < fim) await new Promise((r) => setTimeout(r, 100));
   if (!pronto()) return "__sem_captcha__";
   const tempo = new Promise((r) => setTimeout(() => r("__tempo__"), LIMITE));
-  try {
-    if (window.hcaptcha && hcaptcha.execute) {
-      const r = await Promise.race([hcaptcha.execute({ async: true }), tempo]);
-      if (r === "__tempo__") { try { hcaptcha.reset(); } catch (e) {} return r; }
-      return (r && r.response) || "";
+  // "missing-captcha" / "invalid-captcha-id": o hCaptcha já carregou, mas o widget da página ainda não foi
+  // montado (logo depois do login). Tenta de novo a cada 0,3 s por até 6 s, em vez de desistir na hora.
+  const fimWidget = Date.now() + 6000;
+  for (;;) {
+    try {
+      if (window.hcaptcha && hcaptcha.execute) {
+        const r = await Promise.race([hcaptcha.execute({ async: true }), tempo]);
+        if (r === "__tempo__") { try { hcaptcha.reset(); } catch (e) {} return r; }
+        return (r && r.response) || "";
+      }
+      const r = await Promise.race([grecaptcha.execute(), tempo]);
+      return r || "";
+    } catch (e) {
+      const msg = String((e && e.message) || e);
+      if (/missing-captcha|invalid-captcha-id|captcha-id/i.test(msg) && Date.now() < fimWidget) {
+        await new Promise((r) => setTimeout(r, 300));
+        continue;
+      }
+      return "__erro__:" + msg.slice(0, 80);
     }
-    const r = await Promise.race([grecaptcha.execute(), tempo]);
-    return r || "";
-  } catch (e) {
-    return "__erro__:" + String((e && e.message) || e).slice(0, 80);
   }
 })()`
 
@@ -255,6 +265,9 @@ func (m *motor) requisicao(metodo, caminho, query string, captcha string, corpo 
 	}
 	defer r.Body.Close()
 	dados, _ := io.ReadAll(io.LimitReader(r.Body, 40<<20))
+	if r.StatusCode == 429 {
+		acionarFreio(caminho)
+	}
 	if len(dados) > 0 && !json.Valid(dados) && bytes.Contains(bytes.ToLower(dados), []byte("<html")) {
 		// Página HTML no lugar da resposta da API (login, bloqueio): quem chamou usa a página oficial.
 		return respostaDireta{}, fmt.Errorf("bloqueado (%d, resposta não-JSON)", r.StatusCode)

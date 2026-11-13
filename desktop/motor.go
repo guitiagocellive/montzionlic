@@ -450,6 +450,9 @@ func (m *motor) pedir(metodo, caminho string, corpo any) (int, []byte, error) {
 		if err == nil {
 			dados, _ := io.ReadAll(io.LimitReader(r.Body, 8<<20))
 			r.Body.Close()
+			if r.StatusCode == 429 {
+				acionarFreio(caminho)
+			}
 			bloqueado := (r.StatusCode == 403 || r.StatusCode == 0) && !json.Valid(dados)
 			if !bloqueado {
 				return r.StatusCode, dados, nil
@@ -1217,7 +1220,8 @@ func (m *motor) avaliar(k string) {
 	marcarDecisao(k, d)
 	// Mantém a classificação em dia sempre que não dá para ser 1º acima do mínimo, já antes dos 10 s finais,
 	// para o lance sair na hora certa e no valor certo (nunca o mínimo às cegas).
-	if intervalo := intervaloClassificacao(e, &cfg, d, r != nil && !r.em.IsZero()); intervalo > 0 {
+	// Com o freio do 429 ligado, só a reta final relê a classificação.
+	if intervalo := intervaloClassificacao(e, &cfg, d, r != nil && !r.em.IsZero()); intervalo > 0 && (!freado() || retaFinal(e, &cfg)) {
 		m.pedirClassificacao(compra, numero, k, intervalo)
 	}
 	if !d.Enviar {

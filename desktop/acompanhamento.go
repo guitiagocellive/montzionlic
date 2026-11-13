@@ -264,6 +264,10 @@ func (m *motor) cicloAcompanhamento() {
 		if !a.forcar && !a.doCache && pessoaUsando() && a.andamento != nil {
 			precisa = false
 		}
+		// Freio do 429: a leitura de fundo espera (a que a pessoa pediu continua).
+		if !a.forcar && len(a.pedidos) == 0 && freado() {
+			precisa = false
+		}
 		// Durante a disputa com o robô ligado, só lê quando a pessoa pede (o captcha fica para a sala).
 		if robo && !a.forcar && len(a.pedidos) == 0 && a.andamento != nil && !a.doCache {
 			precisa = false
