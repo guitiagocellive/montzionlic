@@ -774,6 +774,17 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
           )}
         </>
       )}
+      {ligada && (
+        <footer className="rodape-diagnostico">
+          <span className="texto-fraco pequeno">
+            Enquanto o robô está sendo aprimorado: o diagnóstico traz o que o robô viu e fez, com a hora em milissegundos (ligar, captcha, classificação,
+            lance). Copie e mande para o suporte. Não tem senhas, chaves nem CPF/CNPJ.
+          </span>
+          <button className="botao secundario" onClick={copiarDiagnostico}>
+            <ClipboardCopy /> Copiar diagnóstico
+          </button>
+        </footer>
+      )}
       {resultadosNaTela && resultadosNaTela.length > 0 && (
         <JanelaResultados resultados={resultadosNaTela} compras={compras} aoFechar={() => setResultadosNaTela(null)} />
       )}

@@ -30,3 +30,18 @@ func TestPaginaGovForaDoAr(t *testing.T) {
 		t.Fatal("sobrou marcador sem trocar")
 	}
 }
+
+func TestPaginaGovForaComProxy(t *testing.T) {
+	d := diagnosticoGovBr{Respondeu: true, Segundos: 0.4, Proxy: "servidor proxy 10.0.0.1:8080"}
+	if p := paginaGovForaDoAr(2, 7, d, "https://x"); strings.Contains(p, "proxy") {
+		t.Error("na 2ª tentativa ainda não fala do proxy")
+	}
+	p := paginaGovForaDoAr(3, 7, d, "https://x")
+	if !strings.Contains(p, "<b>proxy</b>") || !strings.Contains(p, "10.0.0.1:8080") {
+		t.Error("a partir da 3ª tentativa, com o aplicativo chegando ao gov.br, mostra o proxy do Windows")
+	}
+	d.Proxy = ""
+	if p := paginaGovForaDoAr(3, 7, d, "https://x"); !strings.Contains(p, "Edge ou no Chrome") {
+		t.Error("sem proxy: sugere testar no Edge/Chrome e mandar o diagnóstico")
+	}
+}

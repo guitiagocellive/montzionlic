@@ -151,7 +151,9 @@ func (m *motor) carregarConfig() {
 
 func (m *motor) Configurar(itens map[string]configItem) {
 	m.mu.Lock()
+	antes := m.config
 	m.config = itens
+	marcarMudancasConfig(antes, itens)
 	for k, c := range itens {
 		if !c.Ligado {
 			delete(m.fechadaOK, k)
@@ -641,6 +643,7 @@ func (m *motor) mesclar(c *compraMotor, novo map[string]any, agora time.Time) st
 		it.recebidoEm = agora
 	}
 	it.atualizadoEm = agora
+	marcarMelhor(chaveItem(c.chave, int(*n)), it)
 	return chaveItem(c.chave, int(*n))
 }
 
@@ -1092,6 +1095,7 @@ func (m *motor) avaliar(k string) {
 	}
 	e.PassoNoConcorrente = m.passoConc[k]
 	d := decidir(e, &cfg)
+	marcarDecisao(k, d)
 	// Mantém a classificação em dia sempre que não dá para ser 1º acima do mínimo, já antes dos 10 s finais,
 	// para o lance sair na hora certa e no valor certo (nunca o mínimo às cegas).
 	if intervalo := intervaloClassificacao(e, &cfg, d, r != nil && !r.em.IsZero()); intervalo > 0 {
@@ -1113,6 +1117,7 @@ func (m *motor) avaliar(k string) {
 	reacao := agora.Sub(it.atualizadoEm).Milliseconds()
 	m.mensagens[k] = mensagemItem{Texto: "Enviando " + reaisTexto(d.Valor, cfg.QuatroCasas) + "…"}
 	m.mu.Unlock()
+	marcarRobo("%s: enviando lance %s (%s)", rotuloItem(k), reaisTexto(d.Valor, cfg.QuatroCasas), d.Tipo)
 	go m.enviarLance(c.chave, numero, k, d, e.Fase, cfg.QuatroCasas, reacao)
 }
 
@@ -1132,6 +1137,15 @@ func (m *motor) enviarLance(compra string, numero int, k string, d decisao, fase
 		}
 	}
 	registrarLog("robô: lance compra %s item %d valor %.4f -> %d em %d ms (%s) %s", compra, numero, d.Valor, status, time.Since(inicio).Milliseconds(), d.Tipo, msg)
+	ligou := ""
+	if ms := desdeLigar(k); ms >= 0 {
+		ligou = fmt.Sprintf(", %d ms desde ligar o robô", ms)
+	}
+	resultado := "aceito"
+	if !ok {
+		resultado = "RECUSADO: " + msg
+	}
+	marcarRobo("%s: lance %s %s (%d) — pedido ao Compras.gov.br %d ms, %d ms desde o último aviso do item%s", rotuloItem(k), reaisTexto(d.Valor, quatro), resultado, status, time.Since(inicio).Milliseconds(), reacao+time.Since(inicio).Milliseconds(), ligou)
 	agora := time.Now()
 	m.mu.Lock()
 	m.seqLance++
@@ -1466,7 +1480,17 @@ func (m *motor) pedirClassificacao(compra string, numero int, k string, interval
 	}
 	r.buscando, r.pedidaEm = true, time.Now()
 	go func() {
-		_, _ = m.lerClassificacao(compra, numero)
+		prontos := captchasProntos()
+		inicio := time.Now()
+		ci, err := m.lerClassificacao(compra, numero)
+		if err != nil {
+			marcarRobo("%s: classificação falhou em %d ms (captchas prontos antes: %d): %v", rotuloItem(k), time.Since(inicio).Milliseconds(), prontos, err)
+		} else {
+			m.mu.Lock()
+			n := len(ci.concorrentes)
+			m.mu.Unlock()
+			marcarRobo("%s: classificação lida em %d ms (captchas prontos antes: %d, %d concorrente(s))", rotuloItem(k), time.Since(inicio).Milliseconds(), prontos, n)
+		}
 		m.avaliar(k)
 	}()
 }

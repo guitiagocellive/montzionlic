@@ -7,6 +7,7 @@ package main
 import (
 	"fmt"
 	"html"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -45,6 +46,24 @@ type diagnosticoGovBr struct {
 	Respondeu bool
 	Segundos  float64
 	Erro      string
+	Proxy     string // proxy do Windows (a janela usa; o teste do aplicativo não)
+	IPv4      int    // endereços do gov.br no DNS do Windows
+	IPv6      int
+}
+
+// redeGovBr: o que pode fazer a janela (Edge WebView2) falhar enquanto o aplicativo consegue: proxy do Windows e
+// endereços do gov.br (IPv6 quebrado na rede costuma travar só o navegador).
+func redeGovBr(d *diagnosticoGovBr) {
+	d.Proxy = proxyDoWindows()
+	if ips, err := net.LookupIP("sso.acesso.gov.br"); err == nil {
+		for _, ip := range ips {
+			if ip.To4() != nil {
+				d.IPv4++
+			} else {
+				d.IPv6++
+			}
+		}
+	}
 }
 
 // testarGovBr: o próprio aplicativo tenta falar com o gov.br, para dizer se o problema é do gov.br/da internet
@@ -54,12 +73,14 @@ func testarGovBr() diagnosticoGovBr {
 	inicio := time.Now()
 	r, err := cli.Get("https://sso.acesso.gov.br/")
 	d := diagnosticoGovBr{Segundos: time.Since(inicio).Seconds()}
+	redeGovBr(&d)
+	rede := fmt.Sprintf("DNS: %d IPv4, %d IPv6; proxy do Windows: %s", d.IPv4, d.IPv6, textoOu(d.Proxy, "nenhum"))
 	if err != nil {
 		d.Erro = err.Error()
 		if strings.Contains(d.Erro, "Timeout") || strings.Contains(d.Erro, "deadline") {
 			d.Erro = "não respondeu em 12 segundos"
 		}
-		registrarLog("teste do gov.br pelo aplicativo: falhou em %.1f s (%s)", d.Segundos, mascararNumeros(d.Erro))
+		registrarLog("teste do gov.br pelo aplicativo: falhou em %.1f s (%s); %s", d.Segundos, mascararNumeros(d.Erro), mascararNumeros(rede))
 		return d
 	}
 	r.Body.Close()
@@ -67,7 +88,7 @@ func testarGovBr() diagnosticoGovBr {
 	if !d.Respondeu {
 		d.Erro = fmt.Sprintf("respondeu com erro %d", r.StatusCode)
 	}
-	registrarLog("teste do gov.br pelo aplicativo: %d em %.1f s", r.StatusCode, d.Segundos)
+	registrarLog("teste do gov.br pelo aplicativo: %d em %.1f s; %s", r.StatusCode, d.Segundos, mascararNumeros(rede))
 	return d
 }
 
@@ -78,6 +99,14 @@ func paginaGovForaDoAr(tentativa int, status int32, d diagnosticoGovBr, destino 
 		espera = min(espera, 5) // o gov.br respondeu ao aplicativo: tenta logo
 		diag = fmt.Sprintf("O aplicativo testou agora e o gov.br <b>respondeu</b> (em %s s). Deve ter sido uma demora momentânea: a janela já vai tentar de novo.",
 			strings.Replace(fmt.Sprintf("%.1f", d.Segundos), ".", ",", 1))
+		if tentativa >= 3 {
+			// A janela falha seguidas vezes e o aplicativo consegue: o caminho da janela é diferente.
+			if d.Proxy != "" {
+				diag += "<br><br>O Windows está com um <b>proxy</b> configurado (" + html.EscapeString(d.Proxy) + "). A janela do gov.br passa por ele e o teste do aplicativo não: ele pode estar segurando o gov.br. Confira em Configurações do Windows › Rede e Internet › Proxy (ou com quem cuida da rede)."
+			} else {
+				diag += "<br><br>A janela está falhando seguidas vezes, mas o aplicativo chega ao gov.br. Abra o gov.br no Edge ou no Chrome deste computador: se lá também não abrir, pode ser antivírus ou firewall bloqueando o navegador. Se puder, copie o diagnóstico na página Disputas e mande para o suporte."
+			}
+		}
 	} else {
 		diag = "O aplicativo também testou agora e o gov.br <b>" + html.EscapeString(d.Erro) + "</b>. O problema está no gov.br (que costuma ficar lento) ou na sua internet — não no Montzion."
 	}
@@ -121,3 +150,10 @@ document.getElementById("agora").onclick=ir;
 document.getElementById("fechar").onclick=function(){window.close()};
 setInterval(function(){if(document.hidden)return;s--;if(s<=0){ir();s=9999}else el.textContent=s},1000);
 </script></body></html>`
+
+func textoOu(s, padrao string) string {
+	if s == "" {
+		return padrao
+	}
+	return s
+}

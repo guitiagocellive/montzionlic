@@ -119,7 +119,7 @@ export const ponte = {
   /** Abre a página de login do gov.br de novo na janela do Compras (quando ela travou, deu erro ou ficou em branco). */
   recarregarLogin: () => chamar<{ ok: boolean }>("recarregar", {}),
   painel: () => chamar<PainelRobo>("painel", {}, 5_000),
-  configurar: (config: Record<string, unknown>) => chamar<{ ok: boolean }>("configurar", { config }, 5_000),
+  configurar: (config: Record<string, unknown>) => chamar<{ ok: boolean }>("configurar", { config, enviadoEm: Date.now() }, 5_000),
   confirmar: (ids: number[]) => chamar<{ ok: boolean }>("confirmar", { ids }, 5_000),
   atualizar: () => chamar<{ ok: boolean }>("atualizar", {}, 5_000),
   /** Últimas linhas do registro do aplicativo, sem chaves nem documentos (para mandar ao suporte). */

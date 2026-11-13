@@ -395,6 +395,7 @@ func abrirModoNavegador(comPonte bool) {
 	porta := portaLivre()
 	cmd := exec.Command(navegador,
 		fmt.Sprintf("--remote-debugging-port=%d", porta),
+		"--disable-quic",
 		"--user-data-dir="+perfil,
 		"--no-first-run",
 		"--no-default-browser-check",

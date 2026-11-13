@@ -10,7 +10,7 @@ import (
 
 const (
 	nomeApp = "Montzion"
-	versao  = "3.1.31"
+	versao  = "3.1.32"
 )
 
 func pastaInstalacao() string {
@@ -31,7 +31,7 @@ func registrarLog(formato string, args ...any) {
 		return
 	}
 	defer f.Close()
-	fmt.Fprintf(f, "%s v%s  %s\r\n", time.Now().Format("2006-01-02 15:04:05"), versao, fmt.Sprintf(formato, args...))
+	fmt.Fprintf(f, "%s v%s  %s\r\n", time.Now().Format("2006-01-02 15:04:05.000"), versao, fmt.Sprintf(formato, args...))
 }
 
 // Janela do gov.br/Compras: pedidos de recarregar vindos da ponte (lidos por abrirCompras no Windows).

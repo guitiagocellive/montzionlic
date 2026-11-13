@@ -1,10 +1,9 @@
 {
-  "versao": "3.1.31",
+  "versao": "3.1.32",
   "data": "2026-11-13",
   "novidades": [
-    "Disputas: com o robô ligado, dá para marcar ou desmarcar \"Não esperar os últimos 10 segundos para cobrir\" e \"Permitir lances com 4 casas decimais\" sem parar o robô. Vale na hora.",
-    "Disputas: o campo de desconto já vem preenchido com o intervalo mínimo entre lances do edital: em R$ quando o edital pede valor (ex.: desconto (R$) 0,01) e em % quando pede porcentagem. Dá para aumentar.",
-    "Robô mais rápido no 1º lance: perto do fim de uma disputa sua, o captcha e a conexão com o Compras.gov.br já ficam prontos mesmo com o robô parado. Ao ligar, o lance sai sem esperar.",
-    "Acompanhamento: o Compras.gov.br entrega no máximo 20 por página, e o aplicativo passa a ler de 20 em 20 (antes 10): metade dos pedidos. As páginas seguintes e as partes de uma licitação (participação, itens e mensagens) são pedidas ao mesmo tempo."
+    "Disputas: botão \"Copiar diagnóstico\" sempre no fim da página. Ele traz o retrato de agora (cada item em disputa, captchas prontos, tempo real) e a linha do tempo do robô em milissegundos: ligar, opções mudadas, cada decisão, classificação, captcha e cada lance com o tempo do pedido e desde ligar. Sem senhas, chaves nem CPF/CNPJ.",
+    "Janela do gov.br: passa a falar com o gov.br só por TCP (sem QUIC/UDP), como o teste do aplicativo. Em algumas redes o QUIC trava e a janela dava \"demorou demais\" tentativa após tentativa, mesmo com o gov.br no ar.",
+    "Janela do gov.br: quando ela falha várias vezes mas o aplicativo chega ao gov.br, a página explica o motivo provável (ex.: proxy configurado no Windows) e o diagnóstico registra o proxy e os endereços do gov.br."
   ]
 }

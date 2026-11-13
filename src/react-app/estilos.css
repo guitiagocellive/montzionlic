@@ -13888,3 +13888,24 @@ p.etapa-fechada {
 .cn-icone.cn-abrir { border-color: var(--acento); color: var(--acento-texto); }
 .cn-icone.cn-abrir:hover:not(:disabled) { background: var(--acento); color: #fff; border-color: var(--acento); }
 .pag-seta.so-icone { padding: 0; width: 38px; }
+
+/* Disputas: "Copiar diagnóstico" sempre no fim da página (tempos do robô para o suporte). */
+.rodape-diagnostico {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 24px;
+  padding: 14px 16px;
+  border: 1px dashed var(--borda, #d6dbe4);
+  border-radius: 12px;
+}
+.rodape-diagnostico .botao {
+  flex-shrink: 0;
+}
+@media (max-width: 640px) {
+  .rodape-diagnostico {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

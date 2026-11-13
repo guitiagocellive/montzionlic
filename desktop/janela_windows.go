@@ -741,9 +741,13 @@ func janelaNativa(cfg configPonte, portaDepuracao int, aoAbrir func()) error {
 	}
 
 	// A porta de controle deixa a ponte do robô de lances conversar com as janelas (só em 127.0.0.1).
+	// --disable-quic: a janela fala com o gov.br só por TCP (como o teste do aplicativo). O QUIC (por UDP) pode
+	// ficar preso em redes/roteadores que filtram UDP e dar "tempo esgotado" só na janela, tentativa após tentativa.
+	argumentos := "--disable-quic"
 	if portaDepuracao > 0 {
-		_ = os.Setenv("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", fmt.Sprintf("--remote-debugging-port=%d", portaDepuracao))
+		argumentos += fmt.Sprintf(" --remote-debugging-port=%d", portaDepuracao)
 	}
+	_ = os.Setenv("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", argumentos)
 	dados := filepath.Join(pastaInstalacao(), "Dados")
 	aoAmbiente := novoManipulador(func(hr, ambiente uintptr) uintptr {
 		if falhou(hr) || ambiente == 0 {

@@ -583,6 +583,7 @@ func (p *ponte) atender(sessao, payload string) {
 		Fase      string                `json:"fase"`
 		Atualizar bool                  `json:"atualizar"`
 		Config    map[string]configItem `json:"config"`
+		EnviadoEm int64                 `json:"enviadoEm"` // hora (ms) em que a página mandou o pedido
 		IDs       []int64               `json:"ids"`
 		Texto     string                `json:"texto"`
 		Pedido    pedidoCompras         `json:"pedido"`
@@ -599,6 +600,10 @@ func (p *ponte) atender(sessao, payload string) {
 	case "painel":
 		resposta = p.motor.Painel()
 	case "configurar":
+		if pedido.EnviadoEm > 0 {
+			ultimaChegadaConfig.Store(time.Now().UnixMilli() - pedido.EnviadoEm)
+			temChegadaConfig.Store(true)
+		}
 		p.motor.Configurar(pedido.Config)
 		resposta = mapa{"ok": true}
 	case "confirmar":
@@ -608,7 +613,7 @@ func (p *ponte) atender(sessao, payload string) {
 		go p.motor.atualizarLista()
 		resposta = mapa{"ok": true}
 	case "diagnostico":
-		resposta = mapa{"texto": diagnostico()}
+		resposta = mapa{"texto": diagnostico(p.motor)}
 	case "acompanhamento":
 		resposta = p.motor.Acompanhamento(pedido.Compra, pedido.Atualizar, pedido.Desde, pedido.Mais, pedido.Ate)
 	case "propostasColetadas":
@@ -1129,17 +1134,28 @@ var (
 
 // diagnostico devolve as últimas linhas do registro, sem chaves, tokens nem números de documentos,
 // para a pessoa copiar e mandar ao suporte.
-func diagnostico() string {
-	dados, err := os.ReadFile(filepath.Join(pastaInstalacao(), "montzion.log"))
-	if err != nil {
-		return "Sem registro: " + err.Error()
+// diagnostico: o retrato de agora, a linha do tempo do robô (ms) e o fim do registro, sem tokens, chaves nem
+// números longos (CPF/CNPJ/chaves de compra).
+func diagnostico(m *motor) string {
+	registro := ""
+	if dados, err := os.ReadFile(filepath.Join(pastaInstalacao(), "montzion.log")); err != nil {
+		registro = "Sem registro: " + err.Error()
+	} else {
+		linhas := strings.Split(strings.ReplaceAll(string(dados), "\r\n", "\n"), "\n")
+		if len(linhas) > 120 {
+			linhas = linhas[len(linhas)-120:]
+		}
+		// Sem a data no começo de cada linha (a máscara de números longos a apagaria): fica dia/mês e a hora.
+		for i, l := range linhas {
+			if len(l) > 11 && l[4] == '-' && l[7] == '-' && l[10] == ' ' {
+				linhas[i] = l[8:10] + "/" + l[5:7] + " " + l[11:]
+			}
+		}
+		registro = strings.Join(linhas, "\n")
 	}
-	linhas := strings.Split(strings.ReplaceAll(string(dados), "\r\n", "\n"), "\n")
-	if len(linhas) > 160 {
-		linhas = linhas[len(linhas)-160:]
-	}
-	t := strings.Join(linhas, "\n")
+	t := fmt.Sprintf("Montzion %s — diagnóstico do robô (%s)\n\n== Agora ==\n%s\n== Linha do tempo do robô ==\n%s\n== Registro ==\n%s",
+		versao, time.Now().Format("02/01 15:04:05"), m.estadoRoboTexto(), textoLinhaTempo(), registro)
 	t = jwtNoTexto.ReplaceAllString(t, "[token]")
 	t = chaveNoTexto.ReplaceAllString(t, "$1$2[oculto]")
-	return fmt.Sprintf("Montzion %s — diagnóstico do robô\n%s", versao, mascararNumeros(t))
+	return mascararNumeros(t)
 }

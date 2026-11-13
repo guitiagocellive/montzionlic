@@ -657,7 +657,7 @@ func (m *motor) lerAcompanhamentoDireto(lista, finalizadas bool, escolhidas []co
 			faltam = min(faltam, 1) // sem saber quantas: uma de cada vez
 		}
 		for faltam > 0 {
-			inicio := len(todas)/tam
+			inicio := len(todas) / tam
 			res := make([][]json.RawMessage, faltam)
 			var wg sync.WaitGroup
 			for i := 0; i < faltam; i++ {

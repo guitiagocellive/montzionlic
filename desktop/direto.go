@@ -100,6 +100,19 @@ func (m *motor) cicloCaptchaPronto() {
 	}
 }
 
+// captchasProntos: quantos captchas prontos (ainda válidos) há agora.
+func captchasProntos() int {
+	captchaPoolMu.Lock()
+	defer captchaPoolMu.Unlock()
+	n := 0
+	for _, c := range captchaPool {
+		if time.Since(c.em) < validadeCaptcha {
+			n++
+		}
+	}
+	return n
+}
+
 // captcha: um captcha pronto (se houver) ou um novo, pedido à página oficial.
 func (m *motor) captcha() (string, error) {
 	if c := pegarCaptchaPronto(); c != "" {
@@ -130,6 +143,7 @@ func (m *motor) gerarCaptcha() (string, error) {
 		codigo, err := m.p.avaliar(s.sessao, scriptCaptcha, 40*time.Second)
 		if err == nil && codigo != "" {
 			// Tempos do captcha (para achar demora): fila, sala de disputa aberta e o captcha em si.
+			marcarRobo("captcha pronto em %d ms (fila %d ms, sala %d ms, captcha %d ms)", time.Since(pediu).Milliseconds(), esperou.Milliseconds(), sala.Milliseconds(), time.Since(inicio).Milliseconds())
 			if total := time.Since(pediu); total > 2*time.Second {
 				registrarLog("captcha: %.1f s (fila %.1f s, sala %.1f s, captcha %.1f s)", total.Seconds(), esperou.Seconds(), sala.Seconds(), time.Since(inicio).Seconds())
 			}
