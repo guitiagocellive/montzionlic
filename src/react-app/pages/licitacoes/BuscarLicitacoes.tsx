@@ -9,8 +9,6 @@ import {
   Gavel,
   MapPin,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   ExternalLink,
   FileSearch,
   FolderOpen,
@@ -54,6 +52,7 @@ import {
 } from "../../pncp";
 import { DetalhePncp, dataHora, type EtapaPncp, reais } from "./DetalhePncp";
 import { EscolherItensPncp } from "./EscolherItensPncp";
+import { Paginacao } from "../../components/Paginacao";
 
 const CHAVE_FILTROS = "montzion:busca-pncp";
 const POR_PAGINA = 20; // licitações por página
@@ -864,40 +863,3 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
   );
 }
 
-/** Números das páginas com reticências: 1 … 4 5 [6] 7 8 … 40 */
-function numerosPaginas(atual: number, total: number): (number | "…")[] {
-  const set = new Set([1, total, atual - 2, atual - 1, atual, atual + 1, atual + 2].filter((n) => n >= 1 && n <= total));
-  const lista = [...set].sort((a, b) => a - b);
-  const saida: (number | "…")[] = [];
-  lista.forEach((n, i) => {
-    if (i > 0 && n - lista[i - 1] > 1) saida.push("…");
-    saida.push(n);
-  });
-  return saida;
-}
-
-function Paginacao({ pagina, total, aoIr, ocupado }: { pagina: number; total: number; aoIr: (n: number) => void; ocupado: boolean }) {
-  return (
-    <nav className="paginacao" aria-label="Páginas de resultados">
-      <button className="pag-seta" onClick={() => aoIr(pagina - 1)} disabled={pagina <= 1 || ocupado} aria-label="Página anterior">
-        <ChevronLeft /> <span>Anterior</span>
-      </button>
-      <div className="pag-numeros">
-        {numerosPaginas(pagina, total).map((n, i) =>
-          n === "…" ? (
-            <span key={`r${i}`} className="pag-reticencias">
-              …
-            </span>
-          ) : (
-            <button key={n} className={n === pagina ? "ativa" : ""} onClick={() => aoIr(n)} disabled={ocupado && n !== pagina} aria-label={`Página ${n}`} aria-current={n === pagina ? "page" : undefined}>
-              {n}
-            </button>
-          ),
-        )}
-      </div>
-      <button className="pag-seta" onClick={() => aoIr(pagina + 1)} disabled={pagina >= total || ocupado} aria-label="Próxima página">
-        <span>Próxima</span> <ChevronRight />
-      </button>
-    </nav>
-  );
-}

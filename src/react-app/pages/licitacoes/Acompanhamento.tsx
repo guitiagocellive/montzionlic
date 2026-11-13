@@ -1,7 +1,8 @@
-import { Bell, BellRing, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Gauge, Mail, Plus, ClipboardCopy, FilePlus2, Download, ExternalLink, LogIn, MessageSquare, Pencil, RefreshCw, Search, Send, Star, TriangleAlert } from "lucide-react";
+import { Bell, BellRing, ChevronDown, Gauge, Mail, Plus, ClipboardCopy, FilePlus2, Download, ExternalLink, LogIn, MessageSquare, Pencil, RefreshCw, Search, Send, Star, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type AvisoAcomp, avisosDe, idEmpresa, type CompraAcomp, dataDe, montarCompras, type PainelAcompanhamento, ROTULO_CHANCE } from "../../../shared/acompanhamento";
 import { api, mensagemDeErro } from "../../api";
+import { Paginacao } from "../../components/Paginacao";
 import { avisar, Modal } from "../../components/Ui";
 import { formatarMoeda } from "../../formato";
 import { link } from "../../rota";
@@ -340,7 +341,8 @@ export function Acompanhamento() {
             </div>
             <div>
               <span>Finalizadas</span>
-              <strong>{totalFinalizadas}</strong>
+              {/* Sem o total do Compras ainda (leitura guardada antiga): mostra que há mais, não só as já lidas. */}
+              <strong>{painel?.totalFinalizadas ? totalFinalizadas : finalizadas.length >= 10 ? `${finalizadas.length}+` : finalizadas.length}</strong>
             </div>
           </div>
 
@@ -399,7 +401,14 @@ export function Acompanhamento() {
               <RefreshCw className="girando" size={16} /> Buscando a página {paginaAtual} no Compras.gov.br…
             </p>
           )}
-          {totalPaginas > 1 && <Paginacao pagina={paginaAtual} total={totalPaginas} aoMudar={(n) => { setPagina(n); window.scrollTo({ top: 0, behavior: "smooth" }); }} />}
+          <Paginacao
+            pagina={paginaAtual}
+            total={totalPaginas}
+            aoIr={(n) => {
+              setPagina(n);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+          />
           {verAvisos && (
             <Modal titulo={`Avisos (${avisos.length})`} aoFechar={() => setVerAvisos(false)}>
               {avisos.length ? (
@@ -635,43 +644,6 @@ const FILTROS: Record<Filtro, { rotulo: string; fases: string[] }> = {
 };
 
 const POR_PAGINA = 10;
-
-/** Páginas como no Compras.gov.br: primeira, anterior, os números perto da atual, próxima e última. */
-function Paginacao({ pagina, total, aoMudar }: { pagina: number; total: number; aoMudar: (n: number) => void }) {
-  const numeros: (number | "…")[] = [];
-  const de = Math.max(1, Math.min(pagina - 2, total - 4));
-  const ate = Math.min(total, de + 4);
-  if (de > 1) numeros.push(1, ...(de > 2 ? (["…"] as const) : []));
-  for (let n = de; n <= ate; n++) numeros.push(n);
-  if (ate < total) numeros.push(...(ate < total - 1 ? (["…"] as const) : []), total);
-  return (
-    <nav className="paginacao-acomp" aria-label="Páginas">
-      <button className="cn-icone" onClick={() => aoMudar(1)} disabled={pagina === 1} aria-label="Primeira página" title="Primeira página">
-        <ChevronsLeft size={16} />
-      </button>
-      <button className="cn-icone" onClick={() => aoMudar(pagina - 1)} disabled={pagina === 1} aria-label="Página anterior" title="Página anterior">
-        <ChevronLeft size={16} />
-      </button>
-      {numeros.map((n, i) =>
-        n === "…" ? (
-          <span key={`r${i}`} className="reticencias-paginas">
-            …
-          </span>
-        ) : (
-          <button key={n} className={`numero-pagina ${n === pagina ? "atual" : ""}`} onClick={() => aoMudar(n)} aria-current={n === pagina ? "page" : undefined}>
-            {n}
-          </button>
-        ),
-      )}
-      <button className="cn-icone" onClick={() => aoMudar(pagina + 1)} disabled={pagina === total} aria-label="Próxima página" title="Próxima página">
-        <ChevronRight size={16} />
-      </button>
-      <button className="cn-icone" onClick={() => aoMudar(total)} disabled={pagina === total} aria-label="Última página" title="Última página">
-        <ChevronsRight size={16} />
-      </button>
-    </nav>
-  );
-}
 
 const NOME_MODALIDADE: Record<string, string> = { Pregão: "Pregão eletrônico", Dispensa: "Dispensa eletrônica", Concorrência: "Concorrência eletrônica", Cotação: "Cotação eletrônica" };
 const nomeCompra = (c: CompraAcomp) => `${NOME_MODALIDADE[c.modalidade] ?? c.modalidade} Nº ${c.numero}`;

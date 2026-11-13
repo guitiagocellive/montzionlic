@@ -110,20 +110,29 @@ func (m *motor) captcha() (string, error) {
 
 // gerarCaptcha pede um código do captcha invisível à página oficial (um por vez).
 func (m *motor) gerarCaptcha() (string, error) {
+	pediu := time.Now()
 	captchaMu.Lock()
 	defer captchaMu.Unlock()
+	esperou := time.Since(pediu)
 	var ultimo error
 	for tentativa := 0; tentativa < 3; tentativa++ {
 		s := m.p.sessaoLogada(tentativa > 0)
 		if s == nil {
 			return "", fmt.Errorf("entre no Compras.gov.br para ver isso")
 		}
+		inicioSala := time.Now()
 		if err := m.p.garantirSala(s); err != nil {
 			ultimo = err
 			continue
 		}
+		sala := time.Since(inicioSala)
+		inicio := time.Now()
 		codigo, err := m.p.avaliar(s.sessao, scriptCaptcha, 40*time.Second)
 		if err == nil && codigo != "" {
+			// Tempos do captcha (para achar demora): fila, sala de disputa aberta e o captcha em si.
+			if total := time.Since(pediu); total > 2*time.Second {
+				registrarLog("captcha: %.1f s (fila %.1f s, sala %.1f s, captcha %.1f s)", total.Seconds(), esperou.Seconds(), sala.Seconds(), time.Since(inicio).Seconds())
+			}
 			return codigo, nil
 		}
 		ultimo = err

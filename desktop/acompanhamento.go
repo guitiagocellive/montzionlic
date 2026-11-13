@@ -212,6 +212,10 @@ const scriptAcompanhamento = `(async (entrada) => {
 })`
 
 // cicloAcompanhamento lê as participações de tempos em tempos enquanto a pessoa está logada.
+// acompPrimeiraLeitura: logo depois do login, até a 1ª leitura do Acompanhamento terminar. Enquanto isso, a busca
+// das disputas do robô espera (se nenhum item estiver com o robô ligado): as duas usam o mesmo captcha, um por vez.
+var acompPrimeiraLeitura atomic.Bool
+
 // acordarAcomp: o login acabou de acontecer (ou a pessoa pediu): o ciclo lê na hora, sem esperar a próxima volta.
 var acordarAcomp = make(chan struct{}, 1)
 
@@ -316,8 +320,9 @@ func (m *motor) coletarAcompanhamento() {
 	}
 	a.mu.Unlock()
 	erro := m.lerAcompanhamento(!soPedidos, finalizadas, escolhidas)
-	if d := time.Since(inicioLeitura); d > 5*time.Second {
-		registrarLog("acompanhamento: leitura demorou %.1f s", d.Seconds())
+	acompPrimeiraLeitura.Store(false)
+	if d := time.Since(inicioLeitura); d > 3*time.Second {
+		registrarLog("acompanhamento: leitura (lista=%v, finalizadas=%v) levou %.1f s", !soPedidos, finalizadas, d.Seconds())
 	}
 
 	a.mu.Lock()
@@ -647,9 +652,13 @@ func (m *motor) lerAcompanhamentoDireto(lista, finalizadas bool, escolhidas []co
 		if tam == 10 && !tamanhoPaginaTestado() {
 			tam = m.testarTamanhoPagina()
 		}
+		inicioAndamento := time.Now()
 		a, err := participacoes("2", paginasPara(80, tam))
 		if err != nil {
 			return err
+		}
+		if d := time.Since(inicioAndamento); d > 2*time.Second {
+			registrarLog("acompanhamento: em andamento em %.1f s (%d por página)", d.Seconds(), tam)
 		}
 		if len(listaDe(a)) > 0 || !finalizadas {
 			v.Andamento = a

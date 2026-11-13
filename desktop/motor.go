@@ -270,6 +270,7 @@ func (m *motor) verSessao() {
 	precisaLista := novoLogin || (m.listaEm.IsZero() && !m.buscandoLista)
 	m.mu.Unlock()
 	if novoLogin {
+		acompPrimeiraLeitura.Store(true)
 		querCaptchaParaAcomp(40 * time.Second)
 		acordarAcompanhamento() // a tela mostra a leitura guardada: lê as participações já, sem esperar o ciclo
 	}
@@ -520,6 +521,13 @@ func (m *motor) atualizarLista() {
 	a := m.p.sessaoLogada(false)
 	if a == nil {
 		return
+	}
+	// Logo depois do login, sem robô ligado: deixa a 1ª leitura do Acompanhamento passar na frente (o captcha é um
+	// por vez). No máximo 30 s.
+	if !m.algumRoboLigado() {
+		for i := 0; i < 60 && acompPrimeiraLeitura.Load(); i++ {
+			time.Sleep(500 * time.Millisecond)
+		}
 	}
 	// Direto do aplicativo (segundos); a página do Compras.gov.br só se o direto falhar.
 	bruto, err := m.buscarListaDireta()
@@ -1533,4 +1541,16 @@ func (m *motor) Classificacao(compra string, numero int) any {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return mapa{"posicoes": ci.todos, "em": ci.em.UnixMilli()}
+}
+
+// algumRoboLigado: algum item com o robô de lances ligado (aí a sala de disputa tem prioridade).
+func (m *motor) algumRoboLigado() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, c := range m.config {
+		if c.Ligado {
+			return true
+		}
+	}
+	return false
 }

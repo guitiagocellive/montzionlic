@@ -7,6 +7,7 @@ import { useFecharAoClicarFora } from "../../components/useFecharAoClicarFora";
 import { Vazio } from "../../components/Ui";
 import { formatarData, formatarMoeda, formatarNumero } from "../../formato";
 import { MapaMarcas } from "./MapaMarcas";
+import { Paginacao } from "../../components/Paginacao";
 
 // Inteligência de mercado: quais marcas e empresas mais vendem um produto ao governo e
 // quais estados mais compram. Dados abertos do Compras.gov.br (pesquisa de preços).
@@ -325,17 +326,7 @@ function Correspondencias({ registros, uf }: { registros: RegistroPreco[]; uf: s
         ))}
       </div>
       {paginas > 1 && (
-        <div className="paginacao-simples">
-          <button className="botao secundario pequeno" disabled={pagina <= 1} onClick={() => setPagina(pagina - 1)}>
-            Anterior
-          </button>
-          <span className="texto-fraco pequeno">
-            Página {pagina} de {formatarNumero(paginas)} · {formatarNumero(lista.length)} itens
-          </span>
-          <button className="botao secundario pequeno" disabled={pagina >= paginas} onClick={() => setPagina(pagina + 1)}>
-            Próxima
-          </button>
-        </div>
+        <Paginacao pagina={pagina} total={paginas} aoIr={setPagina} />
       )}
     </section>
   );

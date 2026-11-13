@@ -13870,30 +13870,21 @@ p.etapa-fechada {
 .cn-painel, .cn-secoes, .cn-secoes .corpo-secao-compras { min-width: 0; }
 .cn-compra { grid-template-columns: minmax(0, 1fr); }
 
-/* Páginas da lista do Acompanhamento */
-.paginacao-acomp {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin: 18px 0 6px;
-}
-.numero-pagina {
-  min-width: 36px;
-  height: 36px;
-  padding: 0 10px;
-  border-radius: 10px;
-  border: 1px solid var(--borda);
-  background: var(--superficie);
-  color: var(--texto);
-  font: inherit;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  cursor: pointer;
-}
-.numero-pagina:hover { border-color: var(--acento); }
-.numero-pagina.atual { background: var(--acento); border-color: var(--acento); color: #fff; }
-.reticencias-paginas { padding: 0 4px; color: var(--texto-fraco); }
+
 
 .puxado-compras { display: block; margin-top: 2px; color: var(--acento-texto); font-size: 0.74rem; }
+
+/* Padronização: os botões de ícone do Acompanhamento seguem o .botao-icone da plataforma */
+.cn-icone {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--borda);
+  background: var(--superficie);
+  color: var(--texto-suave);
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.cn-icone svg { width: 16px; height: 16px; }
+.cn-icone:hover:not(:disabled) { background: var(--hover); color: var(--texto); border-color: var(--borda-forte); }
+.cn-icone.cn-abrir { border-color: var(--acento); color: var(--acento-texto); }
+.cn-icone.cn-abrir:hover:not(:disabled) { background: var(--acento); color: #fff; border-color: var(--acento); }
+.pag-seta.so-icone { padding: 0; width: 38px; }

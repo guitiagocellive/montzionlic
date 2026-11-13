@@ -8,6 +8,7 @@ import { formatarData, formatarMoeda, formatarNumero } from "../../formato";
 import { Participacoes, Penalidades } from "./EmpresaParticipacoes";
 import { MapaMarcas } from "./MapaMarcas";
 import { cnpjFormatado, emLotes, GraficoMeses, NOMES_UF, type Periodo, PERIODOS, periodoDe, Ranking } from "./Mercado";
+import { Paginacao } from "../../components/Paginacao";
 
 // Análise de empresas (como no Siga Pregão): o que uma empresa vence em licitações, com dados oficiais
 // e gratuitos — resultados publicados no PNCP (todas as plataformas) e cadastro do Compras.gov.br.
@@ -589,17 +590,7 @@ export function Empresas() {
                 ))}
               </div>
               {paginasItens > 1 && (
-                <div className="paginacao-simples">
-                  <button className="botao secundario pequeno" disabled={paginaItens <= 1} onClick={() => setPaginaItens(paginaItens - 1)}>
-                    Anterior
-                  </button>
-                  <span className="texto-fraco pequeno">
-                    Página {paginaItens} de {formatarNumero(paginasItens)} · {formatarNumero(itensFiltrados.length)} itens
-                  </span>
-                  <button className="botao secundario pequeno" disabled={paginaItens >= paginasItens} onClick={() => setPaginaItens(paginaItens + 1)}>
-                    Próxima
-                  </button>
-                </div>
+                <Paginacao pagina={paginaItens} total={paginasItens} aoIr={setPaginaItens} />
               )}
             </section>
           )}

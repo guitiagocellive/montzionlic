@@ -1,10 +1,10 @@
 {
-  "versao": "3.1.29",
+  "versao": "3.1.30",
   "data": "2026-11-13",
   "novidades": [
-    "Acompanhamento muito mais rápido: cada página da lista do Compras exige um captcha novo. Agora a atualização pede só 2 ou 3 páginas (antes chegava a ~33 com as finalizadas carregadas): as \"em andamento\" aparecem primeiro e, nas finalizadas, só a 1ª página é relida; as antigas são lidas quando você vai até elas.",
-    "O aplicativo testa sozinho, uma vez, se o Compras aceita 50 por página (menos páginas, menos captchas) e deixa o próximo captcha pronto enquanto a página anterior chega.",
-    "Total de finalizadas certo desde a abertura (ex.: 302), mesmo antes de ler todas.",
-    "Anexos: o arquivo é pedido sempre pelo campo \"nome\", como o site do Compras, e se o pedido direto for recusado o aplicativo tenta pela página oficial."
+    "Acompanhamento: logo depois do login, a leitura do Acompanhamento vem antes da busca das disputas do robô (as duas usam o mesmo captcha, um por vez). Com o robô ligado em algum item, a sala de disputa continua tendo prioridade.",
+    "Diagnóstico com os tempos de cada captcha (fila, sala de disputa e o captcha em si) e de cada parte da leitura: se ainda demorar, o \"Copiar diagnóstico\" mostra exatamente onde.",
+    "Visual padronizado: a mesma paginação em todas as telas (busca, acompanhamento, mercado e empresas), com atalhos para a primeira e a última página; os botões de ícone do Acompanhamento seguem o padrão da plataforma.",
+    "Finalizadas: enquanto o total do Compras não chega, mostra \"10+\" em vez de parecer que só existem as já lidas."
   ]
 }
