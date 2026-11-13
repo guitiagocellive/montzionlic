@@ -323,6 +323,23 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
     mudarItem(k, { minimo, desconto, tipoDesconto, ligado: true });
   }
 
+  // Novo mínimo com o robô LIGADO: só vale ao confirmar (Enter ou "Aplicar"). Enquanto digita, o robô continua com o
+  // mínimo anterior (o problema antigo: digitando 290, no "2" o robô já entendia mínimo 2). O robô não para.
+  function aplicarMinimo(k: string, item: ItemDisputa) {
+    const cfg = configRef.current[k] ?? ITEM_ROBO_PADRAO;
+    const texto = textos[`${k}:minimo`];
+    if (texto == null) return;
+    const minimo = paraNumero(texto);
+    if (!(minimo && minimo > 0)) return avisar("Informe um lance mínimo válido.", "erro");
+    if (cfg.minimo != null && Math.abs(minimo - cfg.minimo) < 1e-9) return;
+    const q = cfg.quatroCasas || precisaQuatroCasas(item);
+    if (item.nossoLance != null && minimo > item.nossoLance) avisar("O novo mínimo está acima do seu lance atual: o robô não vai baixar.", "erro");
+    const ref = item.nossoLance ?? item.melhorLance;
+    if (ref != null && minimo < ref * 0.6 && !window.confirm(`Confirma o novo lance mínimo de ${moeda(minimo, q)}?\n\nEle está ${Math.round((1 - minimo / ref) * 100)}% abaixo de ${moeda(ref, q)}.`)) return;
+    mudarItem(k, { minimo });
+    avisar(`Novo mínimo de ${moeda(minimo, q)} aplicado. O robô continuou ligado.`);
+  }
+
   // Quanto tempo está em "Entrando na sala de disputa" (depois de 20 s aparecem as ajudas).
   const faseAtual = painel?.fase ?? "sem-login";
   useEffect(() => {
@@ -453,10 +470,29 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
                             value={textos[`${k}:minimo`] ?? textoNumero(cfg.minimo)}
                             onChange={(e) => setTextos((t) => ({ ...t, [`${k}:minimo`]: e.target.value }))}
                             onBlur={(e) => !cfg.ligado && mudarItem(k, { minimo: paraNumero(e.target.value) })}
-                            disabled={cfg.ligado}
-                            title={cfg.ligado ? "Pare o robô para alterar o lance mínimo" : ""}
+                            onKeyDown={(e) => {
+                              if (!cfg.ligado) return;
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                aplicarMinimo(k, i);
+                              } else if (e.key === "Escape") {
+                                setTextos((t) => ({ ...t, [`${k}:minimo`]: textoNumero(cfg.minimo) }));
+                              }
+                            }}
+                            title={cfg.ligado ? "Robô ligado: digite o novo mínimo e aperte Enter ou Aplicar (Esc desfaz). O robô não para." : ""}
                             aria-label={`Lance mínimo do item ${i.numero}`}
                           />
+                          {cfg.ligado &&
+                            (() => {
+                              const digitado = textos[`${k}:minimo`];
+                              const novo = digitado != null ? paraNumero(digitado) : null;
+                              const mudou = digitado != null && (novo == null || cfg.minimo == null || Math.abs(novo - cfg.minimo) > 1e-9);
+                              return mudou ? (
+                                <button type="button" className="botao acento pequeno botao-aplicar-minimo" onClick={() => aplicarMinimo(k, i)}>
+                                  Aplicar
+                                </button>
+                              ) : null;
+                            })()}
                         </span>
                       </label>
                       {(() => {
@@ -574,7 +610,7 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
                           </div>
                         );
                       })()}
-                    {cfg.ligado && <p className="aviso-robo-travado">Robô ligado com mínimo de {moeda(cfg.minimo, q4)}. Para mudar o mínimo ou o desconto, pare o robô (■), altere e ligue de novo. As opções acima mudam na hora, sem parar.</p>}
+                    {cfg.ligado && <p className="aviso-robo-travado">Robô ligado com mínimo de {moeda(cfg.minimo, q4)}. Para mudar o mínimo sem parar o robô, digite o novo valor e aperte Enter ou Aplicar (Esc desfaz). Para mudar o desconto, pare o robô (■). As opções acima mudam na hora, sem parar.</p>}
                     <div className="item-disputa-rodape">
                       <span className="texto-fraco pequeno">
                         {FASES[i.fase] ?? i.fase}

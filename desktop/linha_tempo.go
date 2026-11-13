@@ -54,6 +54,13 @@ func marcarMudancasConfig(antes, depois map[string]configItem) {
 			}
 			continue
 		}
+		if n.Ligado && a.Ligado && n.Minimo != nil && (a.Minimo == nil || *n.Minimo != *a.Minimo) {
+			antes := "—"
+			if a.Minimo != nil {
+				antes = reaisTexto(*a.Minimo, true)
+			}
+			marcarRobo("%s: mínimo trocado com o robô ligado: %s → %s%s", rotuloItem(k), antes, reaisTexto(*n.Minimo, true), chegada)
+		}
 		if n.NaoAguardar != a.NaoAguardar {
 			marcarRobo("%s: \"não esperar os 10 s finais\" = %v (robô ligado: %v)%s", rotuloItem(k), n.NaoAguardar, n.Ligado, chegada)
 		}

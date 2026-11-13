@@ -14025,3 +14025,14 @@ p.etapa-fechada {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* Disputas: "Aplicar" o novo mínimo com o robô ligado (ao lado do campo). */
+.item-disputa-grade .entrada:has(.botao-aplicar-minimo) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.botao-aplicar-minimo {
+  flex-shrink: 0;
+  padding: 6px 10px;
+}
