@@ -15047,3 +15047,24 @@ p.etapa-fechada {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+
+/* "Usar esta na proposta": pílula cinza clara, como um botão simples. */
+.botao-link.trocar-coroa {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--superficie-3);
+  border: 1px solid var(--borda);
+  color: var(--texto);
+  font-size: 0.76rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.botao-link.trocar-coroa:hover {
+  background: var(--hover);
+  text-decoration: none;
+}
