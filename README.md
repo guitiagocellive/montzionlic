@@ -61,6 +61,11 @@ Não existe cadastro público: só um administrador adiciona pessoas.
 - **Quadro Kanban** com as etapas Para estudar → Para fazer → Orçamento → Boa colocação → Perdidas / Ganhas
   (arrastar e soltar; nomes das etapas em `src/shared/negocio.ts`).
 - **Ficha da licitação** na ordem do trabalho: Itens → Orçamento → Proposta → Resultado, e Arquivos.
+- **Quadro atualizado pelo Compras.gov.br** (no aplicativo, com a conta gov.br conectada): uma vez por dia, ao abrir
+  o Quadro, o aplicativo lê o resultado das licitações cuja sessão já aconteceu e que ainda não fecharam (e pela
+  pílula "Atualizado hoje às…" a qualquer hora). Grava só o que mudou, mostra a colocação e a marca "mudou hoje"
+  no card, manda o resumo para o sino da equipe e sugere "Mover para Ganhas/Perdidas?" quando todos os itens
+  fecharam (sem mover sozinho). Pausa durante disputas com lances acontecendo e continua depois.
 - **Orçamento automático:** preço de venda = custo com frete ÷ (1 − impostos − lucro).
 - **Análise de empresas:** Licitações → Análise de empresas (como no Siga Pregão). Digite o CNPJ de um concorrente (ou
   o seu) e o período (últimos 12 meses por padrão): cadastro (razão social, cidade, porte, CNAE, se pode licitar),

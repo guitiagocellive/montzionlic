@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { CATEGORIAS_ARQUIVO, ETAPAS_LICITACAO } from "../../shared/negocio";
-import { podeEditar, podeVer } from "../../shared/permissoes";
+import { podeEditar, podeVer, resolverPermissoes } from "../../shared/permissoes";
 import { type Ambiente, exigirAdmin, exigirLogin, exigirModulo } from "../auth";
 import { notificar } from "../notificacoes";
 import { comandoEvento, registrarEvento } from "../atividades";
@@ -401,6 +401,32 @@ rotasLicitacoes.delete("/:id", exigirAdmin, async (c) => {
 });
 
 // ---------------- Itens ----------------
+
+// Atualização do resultado pelo Compras.gov.br (feita pelo aplicativo): o que mudou vai para o sino da equipe,
+// com link para a aba Resultado. A chave junta a licitação e o texto, então o mesmo aviso não se repete.
+rotasLicitacoes.post("/:id/aviso-resultado", async (c) => {
+  const id = idDaRota(c.req.param("id"));
+  if (!id) return c.json({ erro: "Licitação inválida." }, 400);
+  const corpo = (await lerJson(c)) ?? {};
+  const titulo = String(corpo.titulo ?? "").trim().slice(0, 160);
+  const mensagem = String(corpo.mensagem ?? "").trim().slice(0, 300);
+  if (!titulo) return c.json({ erro: "Aviso vazio." }, 400);
+  const existe = await c.env.DB.prepare("SELECT 1 FROM licitacoes WHERE id = ?").bind(id).first();
+  if (!existe) return c.json({ erro: "Licitação não encontrada." }, 404);
+  let h = 0;
+  for (const ch of titulo + mensagem) h = (h * 31 + ch.charCodeAt(0)) | 0;
+  const chave = `resultado:${id}:${(h >>> 0).toString(36)}`;
+  const { results } = await c.env.DB.prepare("SELECT id, papel, permissoes FROM usuarios WHERE ativo = 1").all<{ id: number; papel: string; permissoes: string | null }>();
+  const alvos = results.filter((u) => podeVer(resolverPermissoes(u.papel, u.permissoes), "licitacoes"));
+  const agora = Date.now();
+  const comandos = alvos.map((u) =>
+    c.env.DB.prepare(
+      `INSERT OR IGNORE INTO notificacoes (usuario_id, tipo, titulo, mensagem, link, chave, criado_em) VALUES (?, 'resultado', ?, ?, ?, ?, ?)`,
+    ).bind(u.id, titulo, mensagem || null, `/licitacoes/${id}?aba=resultado`, chave, agora),
+  );
+  if (comandos.length) await c.env.DB.batch(comandos);
+  return c.json({ ok: true });
+});
 
 rotasLicitacoes.post("/:id/itens", async (c) => {
   const id = idDaRota(c.req.param("id"));

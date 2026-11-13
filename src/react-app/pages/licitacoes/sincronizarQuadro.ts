@@ -1,0 +1,108 @@
+// Atualização do Quadro pelo Compras.gov.br (feita pelo aplicativo, com a conta gov.br de quem está usando):
+// percorre as licitações cuja sessão já aconteceu e que ainda não fecharam, puxa o resultado de cada uma,
+// grava só o que mudou, atualiza a colocação do card e manda o resumo para o sino da equipe.
+import type { ItemLicitacao, Licitacao, LicitacaoResumo } from "../../../shared/tipos";
+import { api } from "../../api";
+import { ehDoCompras } from "./CadastroUmClique";
+import { puxarESalvarResultado } from "./puxarResultado";
+
+const CHAVE_ULTIMA = "montzion:sinc-quadro";
+const CHAVE_MUDOU = "montzion:sinc-quadro-mudou";
+
+export interface UltimaSinc {
+  em: number;
+  dia: string;
+  total: number;
+  mudaram: number;
+}
+
+export function lerUltimaSinc(): UltimaSinc | null {
+  try {
+    return JSON.parse(localStorage.getItem(CHAVE_ULTIMA) ?? "null") as UltimaSinc | null;
+  } catch {
+    return null;
+  }
+}
+
+/** Licitações que mudaram hoje (id → resumo), para a marca "mudou hoje" nos cards. */
+export function lerMudouHoje(): Record<number, string> {
+  try {
+    const bruto = JSON.parse(localStorage.getItem(CHAVE_MUDOU) ?? "{}") as { dia?: string; ids?: Record<number, string> };
+    return bruto.dia === diaDeHoje() ? (bruto.ids ?? {}) : {};
+  } catch {
+    return {};
+  }
+}
+
+function guardar(chave: string, valor: unknown) {
+  try {
+    localStorage.setItem(chave, JSON.stringify(valor));
+  } catch {
+    /* sem armazenamento: vale só nesta tela */
+  }
+}
+
+export const diaDeHoje = () => new Date().toLocaleDateString("sv-SE");
+
+/** Vale a pena puxar: do Compras, sessão já aconteceu e a licitação ainda não fechou. */
+export function elegivelParaSinc(l: LicitacaoResumo, hoje: string): boolean {
+  if (!ehDoCompras(l)) return false;
+  const data = l.data_reabertura && l.data_reabertura <= hoje ? l.data_reabertura : l.data_sessao;
+  if (!data || data > hoje) return false;
+  if (l.etapa === "perdida") return false;
+  if (l.etapa === "ganha") return l.itens_acompanhando > 0;
+  // Em estudo e sem proposta cadastrada pela plataforma: provavelmente não participamos.
+  if ((l.etapa === "estudar" || l.etapa === "fazer") && !l.compras_cadastrado_em) return false;
+  return l.total_itens > 0;
+}
+
+export async function sincronizarQuadro(
+  lista: LicitacaoResumo[],
+  opcoes: { aoProgredir: (feitas: number, total: number) => void; deveParar: () => boolean },
+): Promise<UltimaSinc & { avisos: number; pausada: boolean }> {
+  const hoje = diaDeHoje();
+  const mudou = lerMudouHoje();
+  let mudaram = 0;
+  let feitas = 0;
+  let avisos = 0;
+  let pausada = false;
+  for (const resumo of lista) {
+    if (opcoes.deveParar()) {
+      pausada = true;
+      break;
+    }
+    opcoes.aoProgredir(feitas, lista.length);
+    try {
+      const ficha = await api<{ licitacao: Licitacao; itens: ItemLicitacao[] }>(`/licitacoes/${resumo.id}`);
+      const r = await puxarESalvarResultado(ficha.licitacao, ficha.itens, { automatico: true });
+      // Colocação do card: a melhor entre os itens ainda em disputa.
+      if (r.melhorColocacao != null && r.melhorColocacao !== ficha.licitacao.colocacao) {
+        await api(`/licitacoes/${resumo.id}`, { metodo: "PATCH", corpo: { colocacao: r.melhorColocacao } }).catch(() => {});
+      }
+      if (r.alterados > 0) {
+        mudaram++;
+        mudou[resumo.id] = r.mudancas.join(" · ") || "Resultado atualizado";
+        if (r.mudancas.length) {
+          await api(`/licitacoes/${resumo.id}/aviso-resultado`, {
+            corpo: {
+              titulo: `${resumo.numero ? `Nº ${resumo.numero}` : "Licitação"}${resumo.orgao ? ` · ${resumo.orgao}` : ""}: resultado atualizado`,
+              mensagem: r.mudancas.join(" · "),
+            },
+          })
+            .then(() => avisos++)
+            .catch(() => {});
+        }
+      }
+    } catch (e) {
+      // Compra não achada no Compras ou fora do ar: segue para a próxima.
+      console.warn(`Atualização do quadro: licitação ${resumo.numero ?? resumo.id}:`, e instanceof Error ? e.message : e);
+    }
+    feitas++;
+  }
+  opcoes.aoProgredir(feitas, lista.length);
+  guardar(CHAVE_MUDOU, { dia: hoje, ids: mudou });
+  const ultima: UltimaSinc = { em: Date.now(), dia: hoje, total: feitas, mudaram };
+  // Parou por causa de uma disputa: não conta como "atualizado hoje" (tenta de novo quando a disputa acabar).
+  if (!pausada) guardar(CHAVE_ULTIMA, ultima);
+  return { ...ultima, avisos, pausada };
+}

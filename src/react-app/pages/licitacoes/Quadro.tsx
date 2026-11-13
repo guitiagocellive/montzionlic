@@ -12,13 +12,14 @@ import {
   ListChecks,
   Pencil,
   Plus,
+  RefreshCw,
   Search,
   SquareArrowOutUpRight,
   Trash2,
   Trophy,
   Zap,
 } from "lucide-react";
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { diasAte, ETAPAS_LICITACAO, MODALIDADES } from "../../../shared/negocio";
 import { podeEditar } from "../../../shared/permissoes";
 import type { ItemLicitacao, Licitacao, LicitacaoResumo, Usuario } from "../../../shared/tipos";
@@ -28,6 +29,8 @@ import { Alerta, Campo } from "../../components/Formulario";
 import { Kanban } from "../../components/Kanban";
 import { type ItemMenu, MenuContexto } from "../../components/MenuContexto";
 import { temPonte } from "../../robo/ponte";
+import { abrirPopupGovBr, useConexaoGovBr } from "../../robo/ConexaoGovBr";
+import { diaDeHoje, elegivelParaSinc, lerMudouHoje, lerUltimaSinc, sincronizarQuadro } from "./sincronizarQuadro";
 import { avisar, Carregando, CampoSelect, Modal } from "../../components/Ui";
 import { formatarMoeda, hojeIso } from "../../formato";
 import { navegar } from "../../rota";
@@ -47,6 +50,14 @@ export function QuadroLicitacoes({ usuario }: { usuario: Usuario }) {
   });
 
   const [menu, setMenu] = useState<{ l: LicitacaoResumo; x: number; y: number } | null>(null);
+  // Atualização pelo Compras.gov.br: sozinha uma vez por dia (com o gov.br conectado) e pela pílula do cabeçalho.
+  const conexao = useConexaoGovBr(temPonte(), false);
+  const [sinc, setSinc] = useState<{ rodando: boolean; feitas: number; total: number }>({ rodando: false, feitas: 0, total: 0 });
+  const [ultimaSinc, setUltimaSinc] = useState(lerUltimaSinc);
+  const [mudouHoje, setMudouHoje] = useState(lerMudouHoje);
+  const emDisputa = useRef(false);
+  emDisputa.current = conexao.emDisputa;
+  const rodando = useRef(false);
   const [cadastrando, setCadastrando] = useState<number | null>(null);
 
   async function carregar() {
@@ -99,6 +110,44 @@ export function QuadroLicitacoes({ usuario }: { usuario: Usuario }) {
   }
 
   const hoje = hojeIso();
+
+  async function atualizarQuadro(manual: boolean) {
+    if (rodando.current || !licitacoes) return;
+    const lista = licitacoes.filter((l) => elegivelParaSinc(l, hoje));
+    if (!lista.length) {
+      if (manual) avisar("Nenhuma licitação para atualizar agora (só as que já tiveram sessão e ainda não fecharam).");
+      return;
+    }
+    rodando.current = true;
+    setSinc({ rodando: true, feitas: 0, total: lista.length });
+    try {
+      const r = await sincronizarQuadro(lista, {
+        aoProgredir: (feitas, total) => setSinc({ rodando: true, feitas, total }),
+        // Disputa acontecendo: o robô tem prioridade, a atualização para e continua depois.
+        deveParar: () => emDisputa.current,
+      });
+      setUltimaSinc(lerUltimaSinc());
+      setMudouHoje(lerMudouHoje());
+      if (r.pausada) avisar("Atualização do quadro pausada: há uma disputa acontecendo. Ela continua sozinha quando a disputa acabar.");
+      if (r.mudaram > 0) {
+        avisar(`Quadro atualizado do Compras.gov.br: ${r.mudaram} licitação(ões) mudaram. O resumo está no sino.`);
+        await carregar();
+      } else if (manual) avisar("Quadro atualizado: nada mudou no Compras.gov.br.");
+    } finally {
+      rodando.current = false;
+      setSinc({ rodando: false, feitas: 0, total: 0 });
+    }
+  }
+
+  // Primeira vez no dia, com o gov.br conectado: atualiza sozinho.
+  const conectado = conexao.estado === "conectado";
+  useEffect(() => {
+    if (!conectado || !licitacoes || !editar || conexao.emDisputa) return;
+    if (lerUltimaSinc()?.dia === diaDeHoje()) return;
+    const t = setTimeout(() => atualizarQuadro(false), 1500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conectado, licitacoes === null, editar, conexao.emDisputa]);
 
   async function puxarResultado(l: LicitacaoResumo) {
     try {
@@ -193,11 +242,41 @@ export function QuadroLicitacoes({ usuario }: { usuario: Usuario }) {
             {editar ? "Arraste os cards entre as etapas. Clique para abrir a ficha." : "Você está no modo de visualização."}
           </p>
         </div>
-        {editar && (
-          <button className="botao" onClick={() => setNovaEm("estudar")}>
-            <Plus aria-hidden="true" /> Nova licitação
-          </button>
-        )}
+        <div className="cabecalho-acoes">
+          {editar && (
+            <button
+              type="button"
+              className={`chip-sinc ${!temPonte() ? "fora" : !conectado ? "desconectado" : ""}`}
+              disabled={sinc.rodando || !temPonte()}
+              onClick={() => (!conectado && conexao.estado !== "conectando" ? abrirPopupGovBr() : atualizarQuadro(true))}
+              title={
+                !temPonte()
+                  ? "Abra a plataforma pelo aplicativo Montzion para atualizar do Compras.gov.br"
+                  : !conectado
+                    ? "Conecte a conta gov.br para atualizar as licitações"
+                    : "Atualiza sozinho uma vez por dia. Clique para atualizar agora as licitações que já tiveram sessão."
+              }
+            >
+              <RefreshCw size={13} className={sinc.rodando ? "girando" : ""} />
+              {!temPonte()
+                ? "Atualiza pelo aplicativo"
+                : sinc.rodando
+                  ? `Atualizando ${Math.min(sinc.feitas + 1, sinc.total)} de ${sinc.total}…`
+                  : !conectado
+                    ? "Conectar gov.br para atualizar"
+                    : conexao.emDisputa && ultimaSinc?.dia !== diaDeHoje()
+                      ? "Atualiza depois da disputa"
+                      : ultimaSinc
+                      ? `${ultimaSinc.dia === diaDeHoje() ? "Atualizado hoje" : "Atualizado em " + ultimaSinc.dia.split("-").reverse().slice(0, 2).join("/")} às ${new Date(ultimaSinc.em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}${ultimaSinc.mudaram ? ` · ${ultimaSinc.mudaram} mudaram` : ""}`
+                      : "Atualizar do Compras.gov.br"}
+            </button>
+          )}
+          {editar && (
+            <button className="botao" onClick={() => setNovaEm("estudar")}>
+              <Plus aria-hidden="true" /> Nova licitação
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="barra-filtros entrar" style={{ ["--i" as string]: 1 }}>
@@ -233,7 +312,7 @@ export function QuadroLicitacoes({ usuario }: { usuario: Usuario }) {
               const total = cards.reduce((s, c) => s + (c.valor_estimado ?? 0), 0);
               return total > 0 ? <div className="coluna-rodape">{formatarMoeda(total)} estimados</div> : null;
             }}
-            renderCard={(l) => <CardLicitacao l={l} hoje={hoje} />}
+            renderCard={(l) => <CardLicitacao l={l} hoje={hoje} mudou={mudouHoje[l.id]} aoMover={editar ? (etapa) => mover(l, etapa, 0) : undefined} />}
             aoMenu={(l, x, y) => setMenu({ l, x, y })}
           />
         </div>
@@ -273,7 +352,7 @@ function quandoCurto(data: string, hora: string | null, dias: number | null) {
 /** Nome curto da modalidade para o card: "Pregão", "Dispensa", "Concorrência"... */
 const modalidadeCurta = (m: string | null) => (m ? m.replace(/\s+(eletrônic[oa]|presencial)$/i, "") : "");
 
-function CardLicitacao({ l, hoje }: { l: LicitacaoResumo; hoje: string }) {
+function CardLicitacao({ l, hoje, mudou, aoMover }: { l: LicitacaoResumo; hoje: string; mudou?: string; aoMover?: (etapa: string) => void }) {
   const ativa = !["perdida", "ganha"].includes(l.etapa);
   const reaberta = ativa && !!l.data_reabertura && l.data_reabertura >= hoje;
   const data = reaberta ? l.data_reabertura : l.data_sessao;
@@ -281,6 +360,14 @@ function CardLicitacao({ l, hoje }: { l: LicitacaoResumo; hoje: string }) {
   const dias = data ? diasAte(data, hoje) : null;
   const classePrazo = !ativa || dias == null ? "" : dias < 0 ? "passou" : dias === 0 ? "urgente" : dias === 1 ? "amanha" : "";
   const meta = [modalidadeCurta(l.modalidade), l.registro_preco === 1 ? "SRP" : ""].filter(Boolean).join(" · ");
+  // Todos os itens com resultado fechado: sugere a etapa (sem mover sozinho).
+  const fechados = l.itens_ganhos + l.itens_perdidos;
+  const sugestao =
+    ativa && aoMover && l.total_itens > 0 && l.itens_acompanhando === 0 && fechados >= l.total_itens
+      ? l.itens_ganhos > 0
+        ? { etapa: "ganha", texto: "Mover para Ganhas?" }
+        : { etapa: "perdida", texto: "Mover para Perdidas?" }
+      : null;
 
   return (
     <>
@@ -288,6 +375,7 @@ function CardLicitacao({ l, hoje }: { l: LicitacaoResumo; hoje: string }) {
         <h4 className="card-titulo">
           {l.numero ? `Nº ${l.numero}` : "Sem número"}
           {l.uasg && <small className="card-uasg">UASG {l.uasg}</small>}
+          {mudou && <span className="card-mudou" title={`Mudou hoje no Compras.gov.br: ${mudou}`} aria-label="Mudou hoje" />}
         </h4>
         {l.responsavel_nome && (
           <span title={`Responsável: ${l.responsavel_nome}`}>
@@ -325,11 +413,25 @@ function CardLicitacao({ l, hoje }: { l: LicitacaoResumo; hoje: string }) {
             <CircleCheck aria-hidden="true" /> No Compras
           </span>
         )}
-        {l.etapa === "boa_colocacao" && l.colocacao && <span className="amarelo">{l.colocacao}º lugar</span>}
+        {ativa && l.colocacao && <span className={l.colocacao === 1 ? "verde" : "amarelo"}>{l.colocacao}º lugar</span>}
         {l.itens_ganhos > 0 && <span className="verde">{l.itens_ganhos} ganho(s)</span>}
         {l.itens_acompanhando > 0 && <span className="amarelo">{l.itens_acompanhando} acompanhando</span>}
         {l.itens_perdidos > 0 && <span className="vermelho">{l.itens_perdidos} perdido(s)</span>}
       </div>
+      {mudou && <p className="card-mudou-texto">{mudou}</p>}
+      {sugestao && (
+        <button
+          type="button"
+          className="card-sugestao"
+          onClick={(e) => {
+            e.stopPropagation();
+            aoMover!(sugestao.etapa);
+          }}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          {sugestao.texto}
+        </button>
+      )}
     </>
   );
 }

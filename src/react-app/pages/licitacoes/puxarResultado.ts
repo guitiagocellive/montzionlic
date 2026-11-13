@@ -104,11 +104,12 @@ export async function puxarESalvarResultado(
   l: Licitacao,
   itens: ItemLicitacao[],
   opcoes: { automatico?: boolean } = {},
-): Promise<{ preenchidos: number; alterados: number; semDados: string[]; situacoes: Record<number, string> }> {
+): Promise<{ preenchidos: number; alterados: number; semDados: string[]; situacoes: Record<number, string>; mudancas: string[]; melhorColocacao: number | null }> {
   const { porItem, semDados } = await puxarDadosDaLicitacao(l, itens);
   const ids = Object.keys(porItem).map(Number);
-  if (!ids.length) return { preenchidos: 0, alterados: 0, semDados, situacoes: {} };
+  if (!ids.length) return { preenchidos: 0, alterados: 0, semDados, situacoes: {}, mudancas: [], melhorColocacao: null };
   let alterados = 0;
+  const mudancas: string[] = [];
   for (const id of ids) {
     const d = porItem[id];
     const atual = itens.find((i) => i.id === id);
@@ -133,6 +134,19 @@ export async function puxarESalvarResultado(
       (atual.motivo_perda ?? null) === corpo.motivo_perda;
     if (igual) continue;
     alterados++;
+    // Texto curto do que mudou (vai para o sino da equipe).
+    const n = atual?.numero ?? "";
+    if (corpo.resultado !== (atual?.resultado ?? null)) {
+      mudancas.push(
+        corpo.resultado === "ganho"
+          ? `Item ${n}: ganho${corpo.nosso_lance != null ? ` (${formatarMoeda(corpo.nosso_lance)})` : ""}`
+          : corpo.resultado === "perdido"
+            ? `Item ${n}: perdido${corpo.vencedor ? ` para ${corpo.vencedor}` : ""}${corpo.valor_vencedor != null ? ` (${formatarMoeda(corpo.valor_vencedor)})` : ""}`
+            : `Item ${n}: ${corpo.colocacao ? `${corpo.colocacao}º lugar` : "em acompanhamento"}`,
+      );
+    } else if (corpo.colocacao !== (atual?.colocacao ?? null) && corpo.colocacao) {
+      mudancas.push(`Item ${n}: agora em ${corpo.colocacao}º lugar${atual?.colocacao ? ` (era ${atual.colocacao}º)` : ""}`);
+    }
     await api(`/licitacoes/itens/${id}`, { metodo: "PATCH", corpo });
   }
   const lista = ids.map((id) => ({ item: itens.find((i) => i.id === id)!, d: porItem[id] }));
@@ -163,5 +177,8 @@ export async function puxarESalvarResultado(
   }
   if (!l.motivo_perda && todosDefinidos && motivo && perdidos.length === lista.length) geral.motivo_perda = motivo;
   if (Object.keys(geral).length) await api(`/licitacoes/${l.id}`, { metodo: "PATCH", corpo: geral });
-  return { preenchidos: ids.length, alterados, semDados, situacoes: Object.fromEntries(ids.map((id) => [id, porItem[id].situacao])) };
+  // Melhor colocação entre os itens ainda em disputa (aparece no card do quadro).
+  const emDisputa = ids.map((id) => porItem[id]).filter((d) => d.resultado !== "perdido" && d.colocacao);
+  const melhorColocacao = emDisputa.length ? Math.min(...emDisputa.map((d) => d.colocacao!)) : null;
+  return { preenchidos: ids.length, alterados, semDados, situacoes: Object.fromEntries(ids.map((id) => [id, porItem[id].situacao])), mudancas, melhorColocacao };
 }

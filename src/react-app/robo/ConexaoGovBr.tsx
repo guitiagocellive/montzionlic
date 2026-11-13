@@ -27,6 +27,9 @@ export const TITULO_CONEXAO: Record<EstadoConexao, string> = {
 
 const EVENTO_ABRIR = "montzion:entrar-govbr";
 
+/** Fases do item em que há lances acontecendo (aberta, aleatória, fechada, final, desempate). */
+const FASES_COM_LANCES = new Set(["LA", "AL", "LF", "AF", "DF", "AM", "DM"]);
+
 /** Abre o popup de login mesmo que a pessoa tenha clicado em "Agora não" (ex.: na bolinha da pílula). */
 export function abrirPopupGovBr() {
   window.dispatchEvent(new Event(EVENTO_ABRIR));
@@ -60,7 +63,8 @@ export function useConexaoGovBr(ativo: boolean, rapido: boolean): ConexaoGovBr {
           erros = 0;
           const novo: ConexaoGovBr = {
             estado: estadoDaFase(p?.fase ?? "", !!p?.conectado),
-            emDisputa: !!p?.compras?.some((c) => c.lida && c.emDisputa),
+            // Lances acontecendo agora (não conta item só aguardando abertura ou já encerrado).
+            emDisputa: !!p?.compras?.some((c) => c.lida && c.emDisputa && c.itens.some((i) => FASES_COM_LANCES.has(String(i.fase ?? "")))),
           };
           if (vivo) setConexao((atual) => (atual.estado === novo.estado && atual.emDisputa === novo.emDisputa ? atual : novo));
         } catch {
