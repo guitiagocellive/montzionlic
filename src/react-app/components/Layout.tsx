@@ -191,7 +191,12 @@ export function Layout({ usuario, caminho, aoSair, aoMudarUsuario, children }: P
           </div>
         </header>
 
-        <main className="conteudo">{children}</main>
+        <main className="conteudo">
+          {/* Cada página entra com um leve fade (a chave muda com o caminho). */}
+          <div key={caminho} className="pagina-entrar">
+            {children}
+          </div>
+        </main>
         {app && temPilula && <PopupGovBr estado={conexao.estado} automatico={naPilula} />}
       </div>
     </div>

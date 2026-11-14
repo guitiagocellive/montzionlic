@@ -1,5 +1,6 @@
 import { BotaoCadastrarCompra } from "./CadastroProposta";
 import {
+  Eye,
   Ban,
   Building,
   CalendarClock,
@@ -199,6 +200,8 @@ function SecaoFiltro({ titulo, aberta, aoAlternar, children, acoes }: { titulo: 
   );
 }
 
+const CHAVE_VISTOS = "montzion:pncp-vistos";
+
 export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
   const editar = podeEditar(usuario.permissoes, "licitacoes");
   const [filtros, setFiltros] = useState<FiltrosBusca>(lerFiltros);
@@ -218,9 +221,27 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
   const [detalhe, setDetalhe] = useState<string | null>(null);
   const [etapa, setEtapa] = useState<EtapaPncp>("dados");
   const [escolhendo, setEscolhendo] = useState<ResultadoPncp | null>(null);
+  // Licitações já abertas nesta busca (ficam com o título cinza e "Visto"), guardadas neste computador.
+  const [vistos, setVistos] = useState<Set<string>>(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(CHAVE_VISTOS) ?? "[]") as string[]);
+    } catch {
+      return new Set();
+    }
+  });
   const abrir = (id: string, e: EtapaPncp = "dados") => {
     setDetalhe(id);
     setEtapa(e);
+    setVistos((atual) => {
+      if (atual.has(id)) return atual;
+      const novo = new Set(atual).add(id);
+      try {
+        localStorage.setItem(CHAVE_VISTOS, JSON.stringify([...novo].slice(-3000)));
+      } catch {
+        /* sem armazenamento: vale só nesta tela */
+      }
+      return novo;
+    });
   };
 
   // Quais licitações do PNCP já estão no quadro.
@@ -510,7 +531,7 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
               return (
                 <article
                   key={r.id}
-                  className={`resultado-pncp clicavel ${r.cancelado || quando?.classe === "passou" ? "apagado" : ""}`}
+                  className={`resultado-pncp clicavel ${r.cancelado || quando?.classe === "passou" ? "apagado" : ""} ${vistos.has(r.id) ? "visto" : ""}`}
                   onClick={(e) => {
                     if ((e.target as HTMLElement).closest("a, button, input, select")) return;
                     if (window.getSelection()?.toString()) return; // estava selecionando texto
@@ -523,6 +544,11 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
                         {r.modalidade} Nº {r.numero}/{r.ano} - {r.orgao}
                         {r.uf && ` / ${r.uf}`}
                       </button>
+                      {vistos.has(r.id) && (
+                        <span className="selo-visto" title="Você já abriu esta licitação">
+                          <Eye size={12} /> Visto
+                        </span>
+                      )}
                     </h3>
                     <div className="acoes-resultado">
                       <button className="botao-icone" onClick={() => abrir(r.id, "itens")} aria-label="Ver itens" title="Ver itens">

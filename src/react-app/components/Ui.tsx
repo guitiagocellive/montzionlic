@@ -143,8 +143,13 @@ export function Vazio({ icone, titulo, children }: { icone: ReactNode; titulo: s
 
 export function Carregando() {
   return (
-    <div className="carregando bloco">
+    <div className="carregando bloco" role="status" aria-label="Carregando">
       <div className="anel" />
+      <div className="esqueleto" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </div>
     </div>
   );
 }
