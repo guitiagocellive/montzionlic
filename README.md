@@ -287,6 +287,14 @@ erros em `%LOCALAPPDATA%\Montzion\montzion.log`. O instalador ainda não tem
 assinatura digital de código, então o Windows mostra "O Windows protegeu o computador" na primeira vez
 (Mais informações → Executar assim mesmo).
 
+**Links compartilhados abrem no aplicativo.** O Montzion registra no Windows o endereço `montzion://` (chave
+`HKCU\Software\Classes\montzion`, refeita a cada abertura e apagada ao desinstalar). Quando alguém abre no navegador
+do Windows o link de uma licitação compartilhada (`/licitacoes/buscar?pncp=…`), a página oferece "Abrir no aplicativo
+Montzion" e chama `montzion://abrir?caminho=<página>`; o Windows abre o Montzion com esse endereço. Se o Montzion já
+estiver aberto, a segunda abertura entrega a página pela mesma trava que impede abrir dois (porta local 47811) e a
+janela aberta navega até ela e vem para a frente. Só caminhos da própria plataforma são aceitos (`desktop/link.go`). A
+escolha (perguntar, aplicativo ou navegador) fica no navegador e muda em Configurações → Aplicativo.
+
 Dentro do aplicativo, Configurações → Aplicativo não oferece baixar de novo: mostra a **versão instalada** e o botão
 **Verificar atualização**, que compara com `public/downloads/versao.json` e, se houver versão nova, mostra as novidades
 e o botão para baixar. Ao gerar um instalador novo, suba a versão em `desktop/comum.go` **e** em

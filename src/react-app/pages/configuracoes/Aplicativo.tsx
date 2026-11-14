@@ -1,6 +1,7 @@
 import { CheckCircle2, Download, Loader2, MonitorDown, MonitorSmartphone, RefreshCw, ShieldAlert, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { noAplicativo } from "../../robo/ponte";
+import { guardarEscolha, lerEscolha } from "../../robo/AbrirNoAplicativo";
 
 type VersaoPublicada = { versao: string; data?: string; novidades?: string[] };
 
@@ -201,6 +202,8 @@ function AplicativoNavegador() {
         </p>
       </section>
 
+      {windows && <LinksNoAplicativo />}
+
       <section className="cartao">
         <h2>
           <MonitorSmartphone size={17} /> Instalar pelo navegador
@@ -222,5 +225,38 @@ function AplicativoNavegador() {
         )}
       </section>
     </>
+  );
+}
+
+/** Neste computador: links compartilhados (ex.: licitação da busca) abrem no aplicativo, no navegador ou perguntam. */
+function LinksNoAplicativo() {
+  const [escolha, setEscolha] = useState(lerEscolha);
+  const opcoes: { valor: "" | "app" | "navegador"; rotulo: string }[] = [
+    { valor: "", rotulo: "Perguntar" },
+    { valor: "app", rotulo: "No aplicativo" },
+    { valor: "navegador", rotulo: "No navegador" },
+  ];
+  return (
+    <section className="cartao">
+      <h2>Links compartilhados</h2>
+      <p className="descricao">
+        Como abrir, neste computador, os links de licitação que a equipe compartilha (WhatsApp, e-mail). "No aplicativo" abre direto no Montzion
+        para Windows (versão 3.1.44 ou mais nova).
+      </p>
+      <div className="segmentado grande">
+        {opcoes.map((o) => (
+          <button
+            key={o.valor || "perguntar"}
+            className={escolha === o.valor ? "ativo" : ""}
+            onClick={() => {
+              guardarEscolha(o.valor);
+              setEscolha(o.valor);
+            }}
+          >
+            {o.rotulo}
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }

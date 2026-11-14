@@ -1,8 +1,8 @@
 {
-  "versao": "3.1.43",
-  "data": "2026-11-13",
+  "versao": "3.1.44",
+  "data": "2026-11-14",
   "novidades": [
-    "Disputas: trocar o lance mínimo sem parar o robô. Com o robô ligado, digite o novo mínimo e aperte Enter ou clique em \"Aplicar\". O robô continua ligado e passa a usar o novo valor na hora. Enquanto você digita, ele segue com o mínimo anterior (o valor só vale depois de confirmado) e o Esc desfaz. Se o novo mínimo estiver muito abaixo do seu lance atual, pede confirmação, como ao ligar.",
-    "A troca do mínimo com o robô ligado aparece na linha do tempo e no relatório da disputa (mínimo anterior → novo)."
+    "Links compartilhados abrem no aplicativo: ao clicar no link de uma licitação (WhatsApp, e-mail), o navegador oferece \"Abrir no aplicativo Montzion\" e o aplicativo abre direto na licitação. Se o Montzion já estiver aberto, a janela vai para a licitação e aparece na frente.",
+    "Na primeira vez, o navegador pergunta se pode abrir o Montzion: marque \"Sempre permitir\" para as próximas abrirem direto. Dá para mudar a escolha em Configurações → Aplicativo → Links compartilhados."
   ]
 }

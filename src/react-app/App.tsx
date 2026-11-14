@@ -31,6 +31,7 @@ import { PrimeiroAcesso } from "./pages/PrimeiroAcesso";
 import { TrocarSenhaObrigatoria } from "./pages/TrocarSenhaObrigatoria";
 import { combinar, useCaminho } from "./rota";
 import { aplicarTema } from "./tema";
+import { AbrirNoAplicativo, deveOferecerAplicativo } from "./robo/AbrirNoAplicativo";
 
 type Estado =
   | { tipo: "carregando" }
@@ -39,10 +40,14 @@ type Estado =
   | { tipo: "logado"; usuario: Usuario };
 
 export function App() {
+  // Link compartilhado aberto no navegador do Windows: oferece abrir no aplicativo Montzion antes de tudo (até do
+  // login, que no aplicativo já está feito). "Continuar no navegador" segue normalmente.
+  const [oferecerApp, setOferecerApp] = useState(() => linkCompartilhado() && deveOferecerAplicativo());
   return (
     <>
       <Conteudo />
       <Avisos />
+      {oferecerApp && <AbrirNoAplicativo caminho={window.location.pathname + window.location.search} aoContinuar={() => setOferecerApp(false)} />}
     </>
   );
 }
@@ -107,6 +112,9 @@ function Pagina({ caminho, usuario, aoMudarUsuario }: { caminho: string; usuario
       return <Painel usuario={usuario} />;
   }
 }
+
+/** Links compartilhados que podem abrir no aplicativo do Windows (hoje: licitação da busca). */
+const linkCompartilhado = () => window.location.pathname === "/licitacoes/buscar" && new URLSearchParams(window.location.search).has("pncp");
 
 function Conteudo() {
   const [estado, setEstado] = useState<Estado>({ tipo: "carregando" });

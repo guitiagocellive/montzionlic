@@ -45,6 +45,7 @@ const (
 	wmRecriarCompras    = wmApp + 3
 	wmRecarregarCompras = wmApp + 4
 	wmPaginaErroCompras = wmApp + 5
+	wmAbrirCaminho      = wmApp + 6
 	wsOverlapped        = 0x00CF0000 // WS_OVERLAPPEDWINDOW
 	cwUseDefault        = 0x80000000
 	swHide              = 0
@@ -280,6 +281,17 @@ func (a *aplicativo) procedimento(hwnd, msg, wParam, lParam uintptr) uintptr {
 		return 0
 	case wmAbrirCompra:
 		a.abrirCompras()
+		return 0
+	case wmAbrirCaminho:
+		// Link montzion:// clicado no navegador: a janela principal vai para a página e aparece na frente.
+		if c := tirarCaminhoPendente(); c != "" && a.principal != nil {
+			if a.principal.web != 0 {
+				metodo(a.principal.web, 5, utf16(endereco+c)) // Navigate
+			} else {
+				a.principal.inicial = endereco + c
+			}
+			focar(a.principal.hwnd)
+		}
 		return 0
 	case wmEsconder:
 		if a.compras != nil {
@@ -819,6 +831,30 @@ func pedirJanelaCompras() bool {
 	}
 	r, _, _ := procPostMessage.Call(app.principal.hwnd, wmAbrirCompra, 0, 0)
 	return r != 0
+}
+
+// Página pedida por um link montzion:// (entregue pela outra abertura do Montzion), esperando a janela principal.
+var (
+	caminhoPendenteMu sync.Mutex
+	caminhoPendente   string
+)
+
+func tirarCaminhoPendente() string {
+	caminhoPendenteMu.Lock()
+	defer caminhoPendenteMu.Unlock()
+	c := caminhoPendente
+	caminhoPendente = ""
+	return c
+}
+
+// pedirAbrirCaminho leva a janela principal até a página (chamada fora da linha da janela: avisa por mensagem).
+func pedirAbrirCaminho(caminho string) {
+	caminhoPendenteMu.Lock()
+	caminhoPendente = caminho
+	caminhoPendenteMu.Unlock()
+	if app != nil && app.principal != nil {
+		procPostMessage.Call(app.principal.hwnd, wmAbrirCaminho, 0, 0)
+	}
 }
 
 // fecharJanelaAberta pede para a janela do Montzion que está aberta fechar, como clicar no X (usado ao atualizar:

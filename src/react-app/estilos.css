@@ -16185,3 +16185,15 @@ body {
     display: inline;
   }
 }
+
+/* "Abrir no aplicativo Montzion" (link aberto no navegador do Windows) */
+.abrir-no-app .lembrar-escolha {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.abrir-no-app a {
+  color: var(--acento-texto);
+}

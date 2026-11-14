@@ -118,6 +118,25 @@ func criarAtalho(lnk, alvo, args string) error {
 }
 
 // Registra em "Aplicativos instalados" do Windows (só para este usuário, sem administrador).
+// Chave do Windows que faz os links montzion:// abrirem este aplicativo (só do usuário, sem pedir administrador).
+const subchaveLink = `Software\Classes\` + protocoloLink
+
+// registrarLink associa os links montzion:// ao Montzion instalado. Roda a cada abertura (é rápido e não muda nada
+// se já estiver certo), para valer também em quem atualizou de uma versão sem isso.
+func registrarLink(exe string) {
+	erros := []error{
+		gravarRegistro(subchaveLink, map[string]any{"": "URL:Montzion", "URL Protocol": ""}),
+		gravarRegistro(subchaveLink+`\DefaultIcon`, map[string]any{"": `"` + exe + `",0`}),
+		gravarRegistro(subchaveLink+`\shell\open\command`, map[string]any{"": `"` + exe + `" "%1"`}),
+	}
+	for _, err := range erros {
+		if err != nil {
+			registrarLog("não registrou os links montzion://: %v", err)
+			return
+		}
+	}
+}
+
 func registrar(exe string) {
 	err := gravarRegistro(subchaveDesinstalar, map[string]any{
 		"DisplayName":     nomeApp,
@@ -163,6 +182,7 @@ func desinstalar() {
 		_ = os.Remove(strings.TrimSuffix(lnk, ".lnk") + ".url")
 	}
 	apagarRegistro(subchaveDesinstalar)
+	apagarRegistro(subchaveLink)
 	// Apaga tudo da pasta, menos o próprio .exe (o Windows não deixa apagar um programa aberto).
 	pasta := pastaInstalacao()
 	eu, _ := os.Executable()
@@ -313,10 +333,13 @@ func fecharVersaoAberta() bool {
 	return true
 }
 
-func abrir() {
+func abrir(caminho string) {
 	trava, err := net.Listen("tcp", portaTrava)
 	if err != nil {
-		// Já está aberto: traz a janela para a frente.
+		// Já está aberto: entrega a página do link (se houver) e traz a janela para a frente.
+		if caminho != "" && !enviarPedido(portaTrava, caminho) {
+			registrarLog("não consegui entregar o link ao Montzion aberto")
+		}
 		for i := 0; i < 15; i++ {
 			if focarJanelaAberta() {
 				return
@@ -326,6 +349,7 @@ func abrir() {
 		registrarLog("outro Montzion segura a trava, mas sem janela; abrindo sem o robô")
 	} else {
 		defer trava.Close()
+		go atenderPedidos(trava, pedirAbrirCaminho)
 	}
 	comPonte := trava != nil
 	arquivoPorta := filepath.Join(pastaInstalacao(), "Dados", "EBWebView", "DevToolsActivePort")
@@ -351,7 +375,11 @@ func abrir() {
 			porta = portaLivre()
 		}
 	}
-	err = janelaNativa(configuracao(), porta, func() {
+	cfg := configuracao()
+	if caminho != "" {
+		cfg.Plataforma = endereco + caminho // aberto por um link: começa direto na página pedida
+	}
+	err = janelaNativa(cfg, porta, func() {
 		registrarLog("janela própria aberta")
 		if comPonte {
 			go ligarPonte(arquivoPorta, porta, pedirJanelaCompras, pedirEsconderCompras, true)
@@ -448,5 +476,9 @@ func main() {
 			}
 		}
 	}
-	abrir()
+	instalado := filepath.Join(pastaInstalacao(), nomeApp+".exe")
+	if _, err := os.Stat(instalado); err == nil {
+		registrarLink(instalado)
+	}
+	abrir(caminhoDoLink(os.Args[1:]))
 }
