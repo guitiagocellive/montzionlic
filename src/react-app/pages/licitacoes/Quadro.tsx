@@ -13,6 +13,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  ScanSearch,
   Search,
   SquareArrowOutUpRight,
   Trash2,
@@ -28,7 +29,10 @@ import { Avatar } from "../../components/Avatar";
 import { Alerta, Campo } from "../../components/Formulario";
 import { Kanban } from "../../components/Kanban";
 import { type ItemMenu, MenuContexto } from "../../components/MenuContexto";
-import { temPonte } from "../../robo/ponte";
+import { ponte, temPonte } from "../../robo/ponte";
+import { type AvisoAcomp, avisosDe, montarCompras } from "../../../shared/acompanhamento";
+import { type DadosRelatorio, RelatorioQuadro } from "./RelatorioQuadro";
+import { lerCodigoSolicitada } from "./ItemCompras";
 import { abrirPopupGovBr, useConexaoGovBr } from "../../robo/ConexaoGovBr";
 import { diaDeHoje, elegivelParaSinc, lerMudouHoje, lerUltimaSinc, sincronizarQuadro } from "./sincronizarQuadro";
 import { avisar, Carregando, CampoSelect, Modal } from "../../components/Ui";
@@ -58,6 +62,7 @@ export function QuadroLicitacoes({ usuario }: { usuario: Usuario }) {
   const emDisputa = useRef(false);
   emDisputa.current = conexao.emDisputa;
   const rodando = useRef(false);
+  const [relatorio, setRelatorio] = useState<DadosRelatorio | null>(null);
   const [cadastrando, setCadastrando] = useState<number | null>(null);
 
   async function carregar() {
@@ -111,12 +116,29 @@ export function QuadroLicitacoes({ usuario }: { usuario: Usuario }) {
 
   const hoje = hojeIso();
 
-  async function atualizarQuadro(manual: boolean) {
-    if (rodando.current || !licitacoes) return;
+  // "Checar licitações": confere todas no Compras.gov.br e abre o relatório só com o que importa.
+  async function checarLicitacoes() {
+    if (!temPonte()) return;
+    if (!conectado) return abrirPopupGovBr();
+    const r = await atualizarQuadro(true, true);
+    let avisos: AvisoAcomp[] = [];
+    try {
+      // Código oficial de "solicitada" (convocação para anexos etc.): sem ele as convocações não são reconhecidas.
+      await lerCodigoSolicitada().catch(() => false);
+      const p = await ponte.acompanhamento();
+      avisos = avisosDe(montarCompras(p.andamento ?? null, p.detalhes ?? null), p.agora ?? Date.now());
+    } catch {
+      /* sem a leitura do Acompanhamento: o relatório mostra só as mudanças */
+    }
+    setRelatorio({ detalhes: r?.detalhes ?? [], avisos, pausada: !!r?.pausada });
+  }
+
+  async function atualizarQuadro(manual: boolean, silencioso = false) {
+    if (rodando.current || !licitacoes) return null;
     const lista = licitacoes.filter((l) => elegivelParaSinc(l, hoje));
     if (!lista.length) {
-      if (manual) avisar("Nenhuma licitação para atualizar agora (só as que já tiveram sessão e ainda não fecharam).");
-      return;
+      if (manual && !silencioso) avisar("Nenhuma licitação para atualizar agora (só as que já tiveram sessão e ainda não fecharam).");
+      return null;
     }
     rodando.current = true;
     setSinc({ rodando: true, feitas: 0, total: lista.length });
@@ -128,11 +150,12 @@ export function QuadroLicitacoes({ usuario }: { usuario: Usuario }) {
       });
       setUltimaSinc(lerUltimaSinc());
       setMudouHoje(lerMudouHoje());
-      if (r.pausada) avisar("Atualização do quadro pausada: há uma disputa acontecendo. Ela continua sozinha quando a disputa acabar.");
+      if (r.pausada && !silencioso) avisar("Atualização do quadro pausada: há uma disputa acontecendo. Ela continua sozinha quando a disputa acabar.");
       if (r.mudaram > 0) {
-        avisar(`Quadro atualizado do Compras.gov.br: ${r.mudaram} licitação(ões) mudaram. O resumo está no sino.`);
+        if (!silencioso) avisar(`Quadro atualizado do Compras.gov.br: ${r.mudaram} licitação(ões) mudaram. O resumo está no sino.`);
         await carregar();
-      } else if (manual) avisar("Quadro atualizado: nada mudou no Compras.gov.br.");
+      } else if (manual && !silencioso) avisar("Quadro atualizado: nada mudou no Compras.gov.br.");
+      return r;
     } finally {
       rodando.current = false;
       setSinc({ rodando: false, feitas: 0, total: 0 });
@@ -256,6 +279,11 @@ export function QuadroLicitacoes({ usuario }: { usuario: Usuario }) {
           </p>
         </div>
         <div className="cabecalho-acoes">
+          {editar && temPonte() && (
+            <button className="botao secundario" onClick={checarLicitacoes} disabled={sinc.rodando} title="Confere todas as licitações no Compras.gov.br e mostra só o que importa: colocação, ganho ou perda e convocações esperando resposta">
+              <ScanSearch aria-hidden="true" /> {sinc.rodando ? "Checando…" : "Checar licitações"}
+            </button>
+          )}
           {editar && (
             <button
               type="button"
@@ -331,6 +359,7 @@ export function QuadroLicitacoes({ usuario }: { usuario: Usuario }) {
         </div>
       )}
 
+      {relatorio && licitacoes && <RelatorioQuadro dados={relatorio} licitacoes={licitacoes} aoFechar={() => setRelatorio(null)} />}
       {menu && <MenuContexto x={menu.x} y={menu.y} itens={itensDoMenu(menu.l)} aoFechar={() => setMenu(null)} />}
       {cadastrando != null && (
         <CadastroUmClique

@@ -9,6 +9,17 @@ import { puxarESalvarResultado } from "./puxarResultado";
 const CHAVE_ULTIMA = "montzion:sinc-quadro";
 const CHAVE_MUDOU = "montzion:sinc-quadro-mudou";
 
+export interface DetalheSinc {
+  id: number;
+  numero: string | null;
+  orgao: string | null;
+  mudancas: string[];
+  colocacao: number | null;
+  /** O Compras.gov.br ainda não mostra a nossa proposta (ou não deu para ler). */
+  semDados: boolean;
+  erro: string;
+}
+
 export interface UltimaSinc {
   em: number;
   dia: string;
@@ -59,13 +70,14 @@ export function elegivelParaSinc(l: LicitacaoResumo, hoje: string): boolean {
 export async function sincronizarQuadro(
   lista: LicitacaoResumo[],
   opcoes: { aoProgredir: (feitas: number, total: number) => void; deveParar: () => boolean },
-): Promise<UltimaSinc & { avisos: number; pausada: boolean }> {
+): Promise<UltimaSinc & { avisos: number; pausada: boolean; detalhes: DetalheSinc[] }> {
   const hoje = diaDeHoje();
   const mudou = lerMudouHoje();
   let mudaram = 0;
   let feitas = 0;
   let avisos = 0;
   let pausada = false;
+  const detalhes: DetalheSinc[] = [];
   for (const resumo of lista) {
     if (opcoes.deveParar()) {
       pausada = true;
@@ -79,6 +91,7 @@ export async function sincronizarQuadro(
       if (r.melhorColocacao != null && r.melhorColocacao !== ficha.licitacao.colocacao) {
         await api(`/licitacoes/${resumo.id}`, { metodo: "PATCH", corpo: { colocacao: r.melhorColocacao } }).catch(() => {});
       }
+      detalhes.push({ id: resumo.id, numero: resumo.numero, orgao: resumo.orgao, mudancas: r.mudancas, colocacao: r.melhorColocacao, semDados: !r.preenchidos, erro: "" });
       if (r.alterados > 0) {
         mudaram++;
         mudou[resumo.id] = r.mudancas.join(" · ") || "Resultado atualizado";
@@ -96,6 +109,7 @@ export async function sincronizarQuadro(
     } catch (e) {
       // Compra não achada no Compras ou fora do ar: segue para a próxima.
       console.warn(`Atualização do quadro: licitação ${resumo.numero ?? resumo.id}:`, e instanceof Error ? e.message : e);
+      detalhes.push({ id: resumo.id, numero: resumo.numero, orgao: resumo.orgao, mudancas: [], colocacao: null, semDados: true, erro: e instanceof Error ? e.message : "Não consegui ler no Compras.gov.br." });
     }
     feitas++;
   }
@@ -104,5 +118,5 @@ export async function sincronizarQuadro(
   const ultima: UltimaSinc = { em: Date.now(), dia: hoje, total: feitas, mudaram };
   // Parou por causa de uma disputa: não conta como "atualizado hoje" (tenta de novo quando a disputa acabar).
   if (!pausada) guardar(CHAVE_ULTIMA, ultima);
-  return { ...ultima, avisos, pausada };
+  return { ...ultima, avisos, pausada, detalhes };
 }

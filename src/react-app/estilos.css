@@ -15177,3 +15177,87 @@ p.etapa-fechada {
   background: var(--superficie);
   border-color: var(--borda);
 }
+
+/* Relatório do "Checar licitações" */
+.relatorio-quadro {
+  display: grid;
+  gap: 14px;
+}
+
+.resumo-relatorio {
+  margin: -6px 0 0;
+  font-size: 0.86rem;
+}
+
+.relatorio-vazio {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 28px 12px;
+  text-align: center;
+}
+
+.relatorio-vazio svg {
+  width: 34px;
+  height: 34px;
+  color: var(--verde);
+}
+
+.bloco-relatorio h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+}
+
+.bloco-relatorio.urgente h3 {
+  color: var(--vermelho);
+}
+
+.bloco-relatorio ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.bloco-relatorio li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--superficie-2);
+  border: 1px solid var(--borda);
+}
+
+.bloco-relatorio.urgente li {
+  border-color: color-mix(in srgb, var(--vermelho) 35%, var(--borda));
+}
+
+.bloco-relatorio li > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  font-size: 0.86rem;
+}
+
+.bloco-relatorio li .botao {
+  flex: none;
+  text-decoration: none;
+}
+
+.sem-mudanca-relatorio {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+.lista-sem-mudanca {
+  flex-basis: 100%;
+}
