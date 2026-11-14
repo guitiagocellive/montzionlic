@@ -15261,3 +15261,13 @@ p.etapa-fechada {
 .lista-sem-mudanca {
   flex-basis: 100%;
 }
+
+.bloco-relatorio h3 .botao-link {
+  margin-left: 4px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.lista-compacta li {
+  padding: 7px 12px;
+}

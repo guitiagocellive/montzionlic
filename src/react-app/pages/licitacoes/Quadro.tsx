@@ -30,11 +30,11 @@ import { Alerta, Campo } from "../../components/Formulario";
 import { Kanban } from "../../components/Kanban";
 import { type ItemMenu, MenuContexto } from "../../components/MenuContexto";
 import { ponte, temPonte } from "../../robo/ponte";
-import { type AvisoAcomp, avisosDe, montarCompras } from "../../../shared/acompanhamento";
+import { avisosDe, type CompraAcomp, montarCompras } from "../../../shared/acompanhamento";
 import { type DadosRelatorio, RelatorioQuadro } from "./RelatorioQuadro";
 import { lerCodigoSolicitada } from "./ItemCompras";
 import { abrirPopupGovBr, useConexaoGovBr } from "../../robo/ConexaoGovBr";
-import { diaDeHoje, elegivelParaSinc, lerMudouHoje, lerUltimaSinc, sincronizarQuadro } from "./sincronizarQuadro";
+import { detectarCadastrosNoPortal, diaDeHoje, elegivelParaSinc, lerMudouHoje, lerUltimaSinc, participacoesForaDoQuadro, sincronizarQuadro } from "./sincronizarQuadro";
 import { avisar, Carregando, CampoSelect, Modal } from "../../components/Ui";
 import { formatarMoeda, hojeIso } from "../../formato";
 import { navegar } from "../../rota";
@@ -120,29 +120,46 @@ export function QuadroLicitacoes({ usuario }: { usuario: Usuario }) {
   async function checarLicitacoes() {
     if (!temPonte()) return;
     if (!conectado) return abrirPopupGovBr();
+    // Código oficial de "solicitada" (convocação para anexos etc.): sem ele as convocações não são reconhecidas.
+    await lerCodigoSolicitada().catch(() => false);
     const r = await atualizarQuadro(true, true);
-    let avisos: AvisoAcomp[] = [];
+    setRelatorio({
+      detalhes: r?.detalhes ?? [],
+      avisos: r ? avisosDe(r.participacoes, Date.now()) : [],
+      pausada: !!r?.pausada,
+      noPortal: r?.noPortal ?? [],
+      foraDoQuadro: r?.foraDoQuadro ?? [],
+    });
+  }
+
+  /** Participações no Compras.gov.br que o aplicativo já leu (aba Acompanhamento), sem ir à internet. */
+  async function lerParticipacoes(): Promise<CompraAcomp[]> {
     try {
-      // Código oficial de "solicitada" (convocação para anexos etc.): sem ele as convocações não são reconhecidas.
-      await lerCodigoSolicitada().catch(() => false);
       const p = await ponte.acompanhamento();
-      avisos = avisosDe(montarCompras(p.andamento ?? null, p.detalhes ?? null), p.agora ?? Date.now());
+      return montarCompras(p.andamento ?? null, p.detalhes ?? null);
     } catch {
-      /* sem a leitura do Acompanhamento: o relatório mostra só as mudanças */
+      return [];
     }
-    setRelatorio({ detalhes: r?.detalhes ?? [], avisos, pausada: !!r?.pausada });
   }
 
   async function atualizarQuadro(manual: boolean, silencioso = false) {
     if (rodando.current || !licitacoes) return null;
-    const lista = licitacoes.filter((l) => elegivelParaSinc(l, hoje));
-    if (!lista.length) {
-      if (manual && !silencioso) avisar("Nenhuma licitação para atualizar agora (só as que já tiveram sessão e ainda não fecharam).");
-      return null;
-    }
     rodando.current = true;
-    setSinc({ rodando: true, feitas: 0, total: lista.length });
     try {
+      // 1) Cadastradas direto no portal: estão nas participações e não marcadas no quadro → marca.
+      const participacoes = await lerParticipacoes();
+      const copia = licitacoes.map((l) => ({ ...l }));
+      const noPortal = await detectarCadastrosNoPortal(copia, participacoes);
+      const foraDoQuadro = participacoesForaDoQuadro(copia, participacoes);
+      if (noPortal.length && !silencioso) avisar(`${noPortal.length} licitação(ões) cadastrada(s) direto no portal do Compras foram marcadas como cadastradas no quadro.`);
+      // 2) Confere só as cadastradas (pela plataforma ou no portal) que já tiveram sessão.
+      const lista = copia.filter((l) => elegivelParaSinc(l, hoje));
+      if (!lista.length) {
+        if (manual && !silencioso) avisar("Nenhuma licitação cadastrada para conferir agora (só as que já tiveram sessão e ainda não fecharam).");
+        if (noPortal.length) await carregar();
+        return { detalhes: [], pausada: false, mudaram: 0, noPortal, foraDoQuadro, participacoes };
+      }
+      setSinc({ rodando: true, feitas: 0, total: lista.length });
       const r = await sincronizarQuadro(lista, {
         aoProgredir: (feitas, total) => setSinc({ rodando: true, feitas, total }),
         // Disputa acontecendo: o robô tem prioridade, a atualização para e continua depois.
@@ -151,11 +168,11 @@ export function QuadroLicitacoes({ usuario }: { usuario: Usuario }) {
       setUltimaSinc(lerUltimaSinc());
       setMudouHoje(lerMudouHoje());
       if (r.pausada && !silencioso) avisar("Atualização do quadro pausada: há uma disputa acontecendo. Ela continua sozinha quando a disputa acabar.");
-      if (r.mudaram > 0) {
-        if (!silencioso) avisar(`Quadro atualizado do Compras.gov.br: ${r.mudaram} licitação(ões) mudaram. O resumo está no sino.`);
+      if (r.mudaram > 0 || noPortal.length) {
+        if (r.mudaram > 0 && !silencioso) avisar(`Quadro atualizado do Compras.gov.br: ${r.mudaram} licitação(ões) mudaram. O resumo está no sino.`);
         await carregar();
       } else if (manual && !silencioso) avisar("Quadro atualizado: nada mudou no Compras.gov.br.");
-      return r;
+      return { ...r, noPortal, foraDoQuadro, participacoes };
     } finally {
       rodando.current = false;
       setSinc({ rodando: false, feitas: 0, total: 0 });

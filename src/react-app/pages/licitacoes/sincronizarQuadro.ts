@@ -1,9 +1,11 @@
 // Atualização do Quadro pelo Compras.gov.br (feita pelo aplicativo, com a conta gov.br de quem está usando):
 // percorre as licitações cuja sessão já aconteceu e que ainda não fecharam, puxa o resultado de cada uma,
 // grava só o que mudou, atualiza a colocação do card e manda o resumo para o sino da equipe.
+import type { CompraAcomp } from "../../../shared/acompanhamento";
 import type { ItemLicitacao, Licitacao, LicitacaoResumo } from "../../../shared/tipos";
 import { api } from "../../api";
 import { ehDoCompras } from "./CadastroUmClique";
+import { chaveDoLink } from "./comprasCadastro";
 import { puxarESalvarResultado } from "./puxarResultado";
 
 const CHAVE_ULTIMA = "montzion:sinc-quadro";
@@ -55,15 +57,58 @@ function guardar(chave: string, valor: unknown) {
 
 export const diaDeHoje = () => new Date().toLocaleDateString("sv-SE");
 
-/** Vale a pena puxar: do Compras, sessão já aconteceu e a licitação ainda não fechou. */
+/** A compra (chave de 17 dígitos) é desta licitação? Pelo link ou por UASG + número/ano. */
+export function compraDaLicitacao(chave: string, l: Pick<LicitacaoResumo, "link" | "uasg" | "numero">) {
+  const doLink = chaveDoLink(l.link ?? null);
+  if (doLink) return doLink === chave;
+  const [num, ano] = String(l.numero ?? "").split("/");
+  if (!l.uasg || !num || !ano) return false;
+  return chave.slice(0, 6) === l.uasg.padStart(6, "0") && Number(chave.slice(8, 13)) === Number(num.replace(/\D/g, "")) && chave.slice(13) === ano.trim();
+}
+
+export interface CadastroNoPortal {
+  id: number;
+  numero: string | null;
+  orgao: string | null;
+  itens: number;
+}
+
+/**
+ * Licitações do quadro com proposta no Compras.gov.br que não foram cadastradas pela plataforma (alguém cadastrou
+ * direto no portal): aparecem nas participações lidas pelo aplicativo. Marca no quadro como cadastradas.
+ */
+export async function detectarCadastrosNoPortal(lista: LicitacaoResumo[], participacoes: CompraAcomp[]): Promise<CadastroNoPortal[]> {
+  const achados: CadastroNoPortal[] = [];
+  for (const l of lista) {
+    if (l.compras_cadastrado_em || l.etapa === "perdida" || !ehDoCompras(l)) continue;
+    const c = participacoes.find((p) => compraDaLicitacao(p.chave, l));
+    if (!c) continue;
+    const itens = c.itens.length || l.total_itens || 0;
+    try {
+      await api(`/licitacoes/${l.id}`, { metodo: "PATCH", corpo: { compras_cadastrado_em: new Date().toISOString(), compras_itens: itens } });
+      l.compras_cadastrado_em = new Date().toISOString();
+      l.compras_itens = itens;
+      achados.push({ id: l.id, numero: l.numero, orgao: l.orgao, itens });
+    } catch {
+      /* tenta de novo na próxima checagem */
+    }
+  }
+  return achados;
+}
+
+/** Participações em andamento no Compras.gov.br que não têm card no quadro. */
+export function participacoesForaDoQuadro(lista: LicitacaoResumo[], participacoes: CompraAcomp[]) {
+  return participacoes.filter((c) => !c.encerrada && !lista.some((l) => compraDaLicitacao(c.chave, l)));
+}
+
+/** Vale a pena puxar: do Compras, com proposta cadastrada (pela plataforma ou no portal), sessão já aconteceu e a
+ * licitação ainda não fechou. */
 export function elegivelParaSinc(l: LicitacaoResumo, hoje: string): boolean {
-  if (!ehDoCompras(l)) return false;
+  if (!ehDoCompras(l) || !l.compras_cadastrado_em) return false;
   const data = l.data_reabertura && l.data_reabertura <= hoje ? l.data_reabertura : l.data_sessao;
   if (!data || data > hoje) return false;
   if (l.etapa === "perdida") return false;
   if (l.etapa === "ganha") return l.itens_acompanhando > 0;
-  // Em estudo e sem proposta cadastrada pela plataforma: provavelmente não participamos.
-  if ((l.etapa === "estudar" || l.etapa === "fazer") && !l.compras_cadastrado_em) return false;
   return l.total_itens > 0;
 }
 
