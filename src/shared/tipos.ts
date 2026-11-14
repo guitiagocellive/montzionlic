@@ -11,6 +11,7 @@ export const TEMAS_CLAROS = [
   { chave: "lavanda", nome: "Lavanda", descricao: "Lilás, azul e rosa pastel", cores: ["#c4b5fd", "#f9a8d4", "#7c3aed"], fundo: "#f3f1fb" },
   { chave: "neve", nome: "Neve", descricao: "Branco e cinza, minimalista", cores: ["#ffffff", "#e4e4e7", "#18181b"], fundo: "#f5f5f7" },
   { chave: "orquidea", nome: "Orquídea", descricao: "Rosa-lilás com magenta", cores: ["#f0abfc", "#c4b5fd", "#c026d3"], fundo: "#f8f1f8" },
+  { chave: "rubi", nome: "Rubi", descricao: "Rosa-lilás com vermelho-rubi", cores: ["#fda4af", "#d8b4fe", "#e11d48"], fundo: "#f9f1f5" },
 ] as const;
 
 export const TEMAS_ESCUROS = [

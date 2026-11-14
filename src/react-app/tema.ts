@@ -1,7 +1,7 @@
 import type { Tema, TemaClaro, TemaEscuro } from "../shared/tipos";
 
 // Modo (claro/escuro/sistema) + o tema escolhido para cada modo.
-// O resultado vai para <html data-tema="claro|escuro" data-paleta="ceu|lavanda|neve|orquidea|oceano|grafite|floresta|ameixa">.
+// O resultado vai para <html data-tema="claro|escuro" data-paleta="ceu|lavanda|neve|orquidea|rubi|oceano|grafite|floresta|ameixa">.
 
 export interface PreferenciaTema {
   modo: Tema;

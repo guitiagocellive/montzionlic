@@ -5988,6 +5988,49 @@ a.kpi:hover {
   --c4: #e11d48;
 }
 
+/* ---------- Rubi (claro): Orquídea com vermelho-rubi ---------- */
+[data-paleta="rubi"] {
+  --fundo: #f9f1f5;
+  --superficie: rgb(255 255 255 / 64%);
+  --superficie-2: rgb(255 255 255 / 58%);
+  --superficie-3: rgb(36 12 22 / 5%);
+  --hover: rgb(255 255 255 / 75%);
+  --borda: rgb(36 12 22 / 8%);
+  --borda-forte: rgb(36 12 22 / 14%);
+  --texto: #240c16;
+  --texto-suave: #5e4752;
+  --texto-fraco: #927a86;
+  --contraste: #240c16;
+  --contraste-texto: #ffffff;
+  --acento: #e11d48;
+  --acento-forte: #be123c;
+  --acento-suave: rgb(225 29 72 / 10%);
+  --acento-texto: #be123c;
+  --barra: rgb(36 12 22 / 7%);
+  --malha:
+    radial-gradient(700px 500px at 5% 15%, rgb(253 164 175 / 42%), transparent 60%),
+    radial-gradient(650px 520px at 95% 0%, rgb(216 180 254 / 38%), transparent 60%),
+    radial-gradient(800px 600px at 55% 110%, rgb(251 207 232 / 48%), transparent 60%);
+  --vidro: rgb(255 255 255 / 55%);
+  --vidro-borda: rgb(255 255 255 / 85%);
+  --vidro-brilho: rgb(255 255 255 / 95%);
+  --vidro-ativo: #be123c;
+  --vidro-ativo-texto: #ffffff;
+  --sombra-vidro: 0 18px 40px -20px rgb(90 20 40 / 22%);
+  --sombra-ativo: rgb(190 18 60 / 40%);
+  --logo: linear-gradient(135deg, #e11d48, #a855f7);
+  --logo-texto: #ffffff;
+  --icone-barra: #5e4752;
+  --cartao: rgb(255 255 255 / 64%);
+  --cartao-borda: rgb(255 255 255 / 90%);
+  --botao: #be123c;
+  --botao-texto: #ffffff;
+  --c1: #e11d48;
+  --c2: #7c3aed;
+  --c3: #0d9488;
+  --c4: #ea580c;
+}
+
 /* ---------- Floresta (escuro) ---------- */
 [data-paleta="floresta"] {
   --fundo: #04130d;
@@ -7437,13 +7480,20 @@ code {
 .resultado-pncp.clicavel {
   cursor: pointer;
   transition:
-    border-color 0.15s,
-    box-shadow 0.15s;
+    border-color 0.18s,
+    box-shadow 0.18s,
+    transform 0.18s var(--curva);
 }
 
 .resultado-pncp.clicavel:hover {
   border-color: var(--borda-forte);
   box-shadow: var(--sombra-flutuante);
+  transform: translateY(-3px);
+}
+
+.resultado-pncp.clicavel:active {
+  transform: translateY(-1px) scale(0.985);
+  transition-duration: 0.08s;
 }
 
 .navegar-pncp {
@@ -15465,13 +15515,11 @@ p.etapa-fechada {
 /* Itens das listas aparecem um depois do outro (até o 14º; o resto junto). */
 .lista-pncp > article,
 .coluna-lista > div,
-.lista-compras > *,
 .bolhas-itens > *,
 .cotacoes > *,
 .lista-proposta > *,
 .lista-arquivos > *,
 .kpis > *,
-.resumo-acomp > *,
 .painel-resultado-numeros > *,
 .bloco-relatorio li,
 .lista-arquivos-ficha li,
@@ -15489,13 +15537,11 @@ p.etapa-fechada {
 
 .lista-pncp > article:nth-child(1),
 .coluna-lista > div:nth-child(1),
-.lista-compras > *:nth-child(1),
 .bolhas-itens > *:nth-child(1),
 .cotacoes > *:nth-child(1),
 .lista-proposta > *:nth-child(1),
 .lista-arquivos > *:nth-child(1),
 .kpis > *:nth-child(1),
-.resumo-acomp > *:nth-child(1),
 .painel-resultado-numeros > *:nth-child(1),
 .bloco-relatorio li:nth-child(1),
 .lista-arquivos-ficha li:nth-child(1),
@@ -15505,13 +15551,11 @@ p.etapa-fechada {
 
 .lista-pncp > article:nth-child(2),
 .coluna-lista > div:nth-child(2),
-.lista-compras > *:nth-child(2),
 .bolhas-itens > *:nth-child(2),
 .cotacoes > *:nth-child(2),
 .lista-proposta > *:nth-child(2),
 .lista-arquivos > *:nth-child(2),
 .kpis > *:nth-child(2),
-.resumo-acomp > *:nth-child(2),
 .painel-resultado-numeros > *:nth-child(2),
 .bloco-relatorio li:nth-child(2),
 .lista-arquivos-ficha li:nth-child(2),
@@ -15521,13 +15565,11 @@ p.etapa-fechada {
 
 .lista-pncp > article:nth-child(3),
 .coluna-lista > div:nth-child(3),
-.lista-compras > *:nth-child(3),
 .bolhas-itens > *:nth-child(3),
 .cotacoes > *:nth-child(3),
 .lista-proposta > *:nth-child(3),
 .lista-arquivos > *:nth-child(3),
 .kpis > *:nth-child(3),
-.resumo-acomp > *:nth-child(3),
 .painel-resultado-numeros > *:nth-child(3),
 .bloco-relatorio li:nth-child(3),
 .lista-arquivos-ficha li:nth-child(3),
@@ -15537,13 +15579,11 @@ p.etapa-fechada {
 
 .lista-pncp > article:nth-child(4),
 .coluna-lista > div:nth-child(4),
-.lista-compras > *:nth-child(4),
 .bolhas-itens > *:nth-child(4),
 .cotacoes > *:nth-child(4),
 .lista-proposta > *:nth-child(4),
 .lista-arquivos > *:nth-child(4),
 .kpis > *:nth-child(4),
-.resumo-acomp > *:nth-child(4),
 .painel-resultado-numeros > *:nth-child(4),
 .bloco-relatorio li:nth-child(4),
 .lista-arquivos-ficha li:nth-child(4),
@@ -15553,13 +15593,11 @@ p.etapa-fechada {
 
 .lista-pncp > article:nth-child(5),
 .coluna-lista > div:nth-child(5),
-.lista-compras > *:nth-child(5),
 .bolhas-itens > *:nth-child(5),
 .cotacoes > *:nth-child(5),
 .lista-proposta > *:nth-child(5),
 .lista-arquivos > *:nth-child(5),
 .kpis > *:nth-child(5),
-.resumo-acomp > *:nth-child(5),
 .painel-resultado-numeros > *:nth-child(5),
 .bloco-relatorio li:nth-child(5),
 .lista-arquivos-ficha li:nth-child(5),
@@ -15569,13 +15607,11 @@ p.etapa-fechada {
 
 .lista-pncp > article:nth-child(6),
 .coluna-lista > div:nth-child(6),
-.lista-compras > *:nth-child(6),
 .bolhas-itens > *:nth-child(6),
 .cotacoes > *:nth-child(6),
 .lista-proposta > *:nth-child(6),
 .lista-arquivos > *:nth-child(6),
 .kpis > *:nth-child(6),
-.resumo-acomp > *:nth-child(6),
 .painel-resultado-numeros > *:nth-child(6),
 .bloco-relatorio li:nth-child(6),
 .lista-arquivos-ficha li:nth-child(6),
@@ -15585,13 +15621,11 @@ p.etapa-fechada {
 
 .lista-pncp > article:nth-child(7),
 .coluna-lista > div:nth-child(7),
-.lista-compras > *:nth-child(7),
 .bolhas-itens > *:nth-child(7),
 .cotacoes > *:nth-child(7),
 .lista-proposta > *:nth-child(7),
 .lista-arquivos > *:nth-child(7),
 .kpis > *:nth-child(7),
-.resumo-acomp > *:nth-child(7),
 .painel-resultado-numeros > *:nth-child(7),
 .bloco-relatorio li:nth-child(7),
 .lista-arquivos-ficha li:nth-child(7),
@@ -15601,13 +15635,11 @@ p.etapa-fechada {
 
 .lista-pncp > article:nth-child(8),
 .coluna-lista > div:nth-child(8),
-.lista-compras > *:nth-child(8),
 .bolhas-itens > *:nth-child(8),
 .cotacoes > *:nth-child(8),
 .lista-proposta > *:nth-child(8),
 .lista-arquivos > *:nth-child(8),
 .kpis > *:nth-child(8),
-.resumo-acomp > *:nth-child(8),
 .painel-resultado-numeros > *:nth-child(8),
 .bloco-relatorio li:nth-child(8),
 .lista-arquivos-ficha li:nth-child(8),
@@ -15617,13 +15649,11 @@ p.etapa-fechada {
 
 .lista-pncp > article:nth-child(9),
 .coluna-lista > div:nth-child(9),
-.lista-compras > *:nth-child(9),
 .bolhas-itens > *:nth-child(9),
 .cotacoes > *:nth-child(9),
 .lista-proposta > *:nth-child(9),
 .lista-arquivos > *:nth-child(9),
 .kpis > *:nth-child(9),
-.resumo-acomp > *:nth-child(9),
 .painel-resultado-numeros > *:nth-child(9),
 .bloco-relatorio li:nth-child(9),
 .lista-arquivos-ficha li:nth-child(9),
@@ -15633,13 +15663,11 @@ p.etapa-fechada {
 
 .lista-pncp > article:nth-child(10),
 .coluna-lista > div:nth-child(10),
-.lista-compras > *:nth-child(10),
 .bolhas-itens > *:nth-child(10),
 .cotacoes > *:nth-child(10),
 .lista-proposta > *:nth-child(10),
 .lista-arquivos > *:nth-child(10),
 .kpis > *:nth-child(10),
-.resumo-acomp > *:nth-child(10),
 .painel-resultado-numeros > *:nth-child(10),
 .bloco-relatorio li:nth-child(10),
 .lista-arquivos-ficha li:nth-child(10),
@@ -15649,13 +15677,11 @@ p.etapa-fechada {
 
 .lista-pncp > article:nth-child(11),
 .coluna-lista > div:nth-child(11),
-.lista-compras > *:nth-child(11),
 .bolhas-itens > *:nth-child(11),
 .cotacoes > *:nth-child(11),
 .lista-proposta > *:nth-child(11),
 .lista-arquivos > *:nth-child(11),
 .kpis > *:nth-child(11),
-.resumo-acomp > *:nth-child(11),
 .painel-resultado-numeros > *:nth-child(11),
 .bloco-relatorio li:nth-child(11),
 .lista-arquivos-ficha li:nth-child(11),
@@ -15665,13 +15691,11 @@ p.etapa-fechada {
 
 .lista-pncp > article:nth-child(12),
 .coluna-lista > div:nth-child(12),
-.lista-compras > *:nth-child(12),
 .bolhas-itens > *:nth-child(12),
 .cotacoes > *:nth-child(12),
 .lista-proposta > *:nth-child(12),
 .lista-arquivos > *:nth-child(12),
 .kpis > *:nth-child(12),
-.resumo-acomp > *:nth-child(12),
 .painel-resultado-numeros > *:nth-child(12),
 .bloco-relatorio li:nth-child(12),
 .lista-arquivos-ficha li:nth-child(12),
@@ -15681,13 +15705,11 @@ p.etapa-fechada {
 
 .lista-pncp > article:nth-child(13),
 .coluna-lista > div:nth-child(13),
-.lista-compras > *:nth-child(13),
 .bolhas-itens > *:nth-child(13),
 .cotacoes > *:nth-child(13),
 .lista-proposta > *:nth-child(13),
 .lista-arquivos > *:nth-child(13),
 .kpis > *:nth-child(13),
-.resumo-acomp > *:nth-child(13),
 .painel-resultado-numeros > *:nth-child(13),
 .bloco-relatorio li:nth-child(13),
 .lista-arquivos-ficha li:nth-child(13),
@@ -15697,13 +15719,11 @@ p.etapa-fechada {
 
 .lista-pncp > article:nth-child(14),
 .coluna-lista > div:nth-child(14),
-.lista-compras > *:nth-child(14),
 .bolhas-itens > *:nth-child(14),
 .cotacoes > *:nth-child(14),
 .lista-proposta > *:nth-child(14),
 .lista-arquivos > *:nth-child(14),
 .kpis > *:nth-child(14),
-.resumo-acomp > *:nth-child(14),
 .painel-resultado-numeros > *:nth-child(14),
 .bloco-relatorio li:nth-child(14),
 .lista-arquivos-ficha li:nth-child(14),
@@ -15750,15 +15770,87 @@ p.etapa-fechada {
 }
 
 /* Cards e linhas clicáveis respondem ao toque. */
-.card-kanban:active,
-.resultado-pncp.clicavel:active,
-.linha-compra:active {
+.card-kanban:active {
   transform: scale(0.992);
 }
 
 .botao-icone:active:not(:disabled),
 .chip-sinc:active:not(:disabled) {
   transform: scale(0.94);
+}
+
+/* Carregando: espera um pouco antes de aparecer (rápido não pisca) e surge suave. */
+.carregando.bloco.espera {
+  min-height: 160px;
+}
+
+.carregando.bloco:not(.espera) {
+  animation: aparecer 0.25s ease;
+}
+
+.espera-entrar {
+  animation: aparecer 0.3s ease 0.5s backwards;
+}
+
+/* Páginas em tempo real (disputas, acompanhamento): sem animações de entrada, para não pesar.
+   Os sinais da disputa (cronômetro pulsando, tremida no lance novo) continuam. */
+.pagina-leve .entrar,
+.pagina-leve .kpis > *,
+.pagina-leve .lista-pncp > article,
+.pagina-leve .bolhas-itens > * {
+  animation: none;
+}
+
+/* Busca: abrir uma licitação. A janela cresce a partir do centro com um leve "salto",
+   e trocar de licitação (Anterior/Próxima ou setas) desliza para o lado. */
+.modal-fundo:has(> .modal-destaque) {
+  animation: aparecer 0.28s ease;
+}
+
+.modal.modal-destaque {
+  animation: janela-destaque 0.46s cubic-bezier(0.18, 1.25, 0.4, 1);
+}
+
+@keyframes janela-destaque {
+  from {
+    opacity: 0;
+    transform: translateY(28px) scale(0.9);
+  }
+  60% {
+    opacity: 1;
+  }
+}
+
+.troca-pncp {
+  animation: troca-aparece 0.32s var(--curva) backwards;
+}
+
+.troca-pncp.vai {
+  animation-name: troca-vai;
+}
+
+.troca-pncp.volta {
+  animation-name: troca-volta;
+}
+
+@keyframes troca-aparece {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes troca-vai {
+  from {
+    opacity: 0;
+    transform: translateX(36px);
+  }
+}
+
+@keyframes troca-volta {
+  from {
+    opacity: 0;
+    transform: translateX(-36px);
+  }
 }
 
 /* Busca: licitação já aberta fica com o título cinza e o selo "Visto". */

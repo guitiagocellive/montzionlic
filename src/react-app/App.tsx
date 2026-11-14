@@ -145,7 +145,7 @@ function Conteudo() {
   if (estado.tipo === "carregando") {
     return (
       <div className="tela-central">
-        <div className="carregando">
+        <div className="carregando espera-entrar">
           <div className="anel" />
         </div>
       </div>

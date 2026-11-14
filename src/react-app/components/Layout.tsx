@@ -21,6 +21,9 @@ interface Props {
   children: ReactNode;
 }
 
+// Páginas que atualizam em tempo real (disputas, acompanhamento): sem animações, para não pesar.
+const PAGINAS_LEVES = /^\/(disputas|licitacoes\/(acompanhamento|cadastradas))(\/|$)/;
+
 export function Layout({ usuario, caminho, aoSair, aoMudarUsuario, children }: Props) {
   const areas = areasPermitidas(usuario.permissoes);
   const area = areaDoCaminho(caminho, areas);
@@ -193,7 +196,7 @@ export function Layout({ usuario, caminho, aoSair, aoMudarUsuario, children }: P
 
         <main className="conteudo">
           {/* Cada página entra com um leve fade (a chave muda com o caminho). */}
-          <div key={caminho} className="pagina-entrar">
+          <div key={caminho} className={PAGINAS_LEVES.test(caminho) ? "pagina-leve" : "pagina-entrar"}>
             {children}
           </div>
         </main>

@@ -16,11 +16,14 @@ export function Modal({
   aoFechar,
   children,
   largo = false,
+  classe = "",
 }: {
   titulo: string;
   aoFechar: () => void;
   children: ReactNode;
   largo?: boolean;
+  /** Classe extra na janela (ex.: animação de abertura mais marcada). */
+  classe?: string;
 }) {
   const fundo = useRef<HTMLDivElement>(null);
   const fechar = useRef(aoFechar);
@@ -48,7 +51,7 @@ export function Modal({
   // Renderiza direto no <body> para ficar sempre por cima do topo e do menu.
   return createPortal(
     <div ref={fundo} className="modal-fundo" onMouseDown={(e) => e.target === e.currentTarget && aoFechar()}>
-      <div className={`modal ${largo ? "largo" : ""}`} role="dialog" aria-modal="true" aria-label={titulo}>
+      <div className={`modal ${largo ? "largo" : ""} ${classe}`} role="dialog" aria-modal="true" aria-label={titulo}>
         <div className="modal-topo">
           <h2>{titulo}</h2>
           <button className="botao-icone" onClick={aoFechar} aria-label="Fechar">
@@ -142,6 +145,13 @@ export function Vazio({ icone, titulo, children }: { icone: ReactNode; titulo: s
 }
 
 export function Carregando() {
+  // Só aparece se a página demorar: carregamentos rápidos não piscam o "carregando" na tela.
+  const [mostrar, setMostrar] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setMostrar(true), 450);
+    return () => clearTimeout(t);
+  }, []);
+  if (!mostrar) return <div className="carregando bloco espera" aria-busy="true" />;
   return (
     <div className="carregando bloco" role="status" aria-label="Carregando">
       <div className="anel" />

@@ -280,7 +280,11 @@ interface Props {
 }
 
 export function DetalhePncp(props: Props) {
-  const { resultado: r, anterior, proxima, posicao, aoFechar } = props;
+  const { resultado: r, posicao, aoFechar } = props;
+  // Para que lado a próxima licitação entra (desliza da direita na "Próxima", da esquerda na "Anterior").
+  const [lado, setLado] = useState<"" | "vai" | "volta">("");
+  const anterior = props.anterior && (() => (setLado("volta"), props.anterior!()));
+  const proxima = props.proxima && (() => (setLado("vai"), props.proxima!()));
 
   // Setas do teclado passam de uma licitação para outra.
   useEffect(() => {
@@ -295,7 +299,7 @@ export function DetalhePncp(props: Props) {
   }, [anterior, proxima]);
 
   return (
-    <Modal titulo={`${r.modalidade} nº ${r.numero}/${r.ano}`} aoFechar={aoFechar} largo>
+    <Modal titulo={`${r.modalidade} nº ${r.numero}/${r.ano}`} aoFechar={aoFechar} largo classe="modal-destaque">
       {(anterior || proxima) && (
         <div className="navegar-pncp">
           <button className="botao secundario pequeno" onClick={anterior} disabled={!anterior}>
@@ -307,7 +311,9 @@ export function DetalhePncp(props: Props) {
           </button>
         </div>
       )}
-      <Corpo key={r.id} {...props} />
+      <div key={r.id} className={`troca-pncp ${lado}`}>
+        <Corpo {...props} />
+      </div>
     </Modal>
   );
 }
