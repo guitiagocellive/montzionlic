@@ -15996,9 +15996,11 @@ body {
     padding-inline: 10px;
   }
 
+  /* Links (PNCP, portal, compartilhar) dividem as linhas pelo tamanho do texto;
+     as ações principais (cadastrar, adicionar) ocupam a linha inteira. */
   .detalhe-pncp-links {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    display: flex;
+    flex-wrap: wrap;
     gap: 8px;
   }
 
@@ -16007,20 +16009,29 @@ body {
   }
 
   .detalhe-pncp-links > * {
+    flex: 1 1 auto;
     justify-content: center;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .detalhe-pncp-links > .botao.acento {
-    grid-column: 1 / -1;
+    flex-basis: 100%;
   }
 
+  /* Órgão, cidade e sessão correm como texto: o ícone fica junto da palavra, sem linha sozinho. */
   .ficha-pncp-topo .resultado-pncp-orgao {
-    flex-wrap: wrap;
-    row-gap: 2px;
+    display: block;
+    line-height: 1.6;
+  }
+
+  .ficha-pncp-topo .resultado-pncp-orgao svg {
+    display: inline;
+    margin-right: 4px;
+    vertical-align: -2px;
+  }
+
+  .ficha-pncp-topo .resultado-pncp-orgao .separador {
+    margin: 0 6px;
   }
 
   .fatos-pncp {
