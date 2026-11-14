@@ -15271,3 +15271,7 @@ p.etapa-fechada {
 .lista-compacta li {
   padding: 7px 12px;
 }
+
+.nota-relatorio {
+  margin: 0;
+}
