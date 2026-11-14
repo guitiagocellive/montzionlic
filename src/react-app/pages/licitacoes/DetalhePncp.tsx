@@ -15,6 +15,7 @@ import {
   MapPin,
   Plus,
   RefreshCw,
+  Share,
   SquareArrowOutUpRight,
   Tag,
   TrendingUp,
@@ -274,6 +275,8 @@ interface Props {
   ocupado: boolean; // importando outra
   aoImportar: () => void;
   aoFechar: () => void;
+  /** Botão "Compartilhar" (link da licitação para WhatsApp, e-mail…). */
+  aoCompartilhar?: () => void;
   anterior?: () => void;
   proxima?: () => void;
   posicao?: string;
@@ -318,7 +321,7 @@ export function DetalhePncp(props: Props) {
   );
 }
 
-function Corpo({ resultado: r, etapa, aoMudarEtapa, idQuadro, podeImportar, importando, ocupado, aoImportar }: Props) {
+function Corpo({ resultado: r, etapa, aoMudarEtapa, idQuadro, podeImportar, importando, ocupado, aoImportar, aoCompartilhar }: Props) {
   const [itens, tentarItens] = useCarga(() => listarItens(r), r.id);
   const [arquivos, tentarArquivos] = useCarga(() => listarArquivos(r), r.id);
   const [extra] = useCarga(() => detalheCompra(r), r.id);
@@ -394,6 +397,11 @@ function Corpo({ resultado: r, etapa, aoMudarEtapa, idQuadro, podeImportar, impo
             <a className="botao secundario pequeno" href={linkPortal} target="_blank" rel="noreferrer noopener" title={linkPortal}>
               <ExternalLink /> Abrir no {dados?.portal ?? r.portal}
             </a>
+          )}
+          {aoCompartilhar && (
+            <button className="botao secundario pequeno" onClick={aoCompartilhar}>
+              <Share /> Compartilhar
+            </button>
           )}
           {!r.cancelado && <BotaoCadastrarCompra link={linkPortal} />}
           {r.cancelado && <span className="chip vermelho">Cancelada</span>}

@@ -564,6 +564,62 @@ async function buscarItens(r: ResultadoPncp): Promise<ItemPncp[]> {
   }));
 }
 
+const ESFERA_POR_ID: Record<string, string> = { F: "Federal", E: "Estadual", M: "Municipal", D: "Distrital" };
+
+/**
+ * Uma licitação pelo nº de controle do PNCP (ex.: "07615750000117-1-000118/2026"), para abrir um link compartilhado
+ * sem precisar refazer a busca. Devolve null se o número não tiver o formato certo ou o PNCP não achar.
+ */
+export async function licitacaoPorId(id: string): Promise<ResultadoPncp | null> {
+  const m = /^(\d{14})-\d+-0*(\d+)\/(\d{4})$/.exec(id.trim());
+  if (!m) return null;
+  const [, cnpj, sequencial, ano] = m;
+  const d = await buscarJson<
+    Partial<DetalheCompra> & {
+      orgaoEntidade?: { razaoSocial: string; cnpj: string; esferaId?: string };
+      modoDisputaNome?: string | null;
+      situacaoCompraId?: number;
+      situacaoCompraNome?: string | null;
+      amparoLegal?: { nome?: string } | null;
+      dataPublicacaoPncp?: string | null;
+      informacaoComplementar?: string | null;
+    }
+  >(`${CONSULTA}/orgaos/${cnpj}/compras/${ano}/${sequencial}`, 2).catch(() => null);
+  if (!d || !d.numeroCompra) return null;
+  const portal = portalDaLicitacao(d.linkSistemaOrigem, d.usuarioNome);
+  const valor = typeof d.valorTotalEstimado === "number" && d.valorTotalEstimado > 0 ? d.valorTotalEstimado : null;
+  return {
+    id: id.trim(),
+    titulo: `${(d.modalidadeNome ?? "").replace(" - ", " ")} nº ${d.numeroCompra}`,
+    objeto: d.objetoCompra ?? "",
+    numero: d.numeroCompra,
+    ano,
+    sequencial,
+    cnpj,
+    orgao: d.orgaoEntidade?.razaoSocial ?? "",
+    unidade: d.unidadeOrgao?.nomeUnidade ?? "",
+    uasg: d.unidadeOrgao?.codigoUnidade ?? "",
+    municipio: d.unidadeOrgao?.municipioNome ?? "",
+    uf: d.unidadeOrgao?.ufSigla ?? "",
+    esfera: ESFERA_POR_ID[d.orgaoEntidade?.esferaId ?? ""] ?? "",
+    modalidade: (d.modalidadeNome ?? "").replace(" - ", " "),
+    modalidadeId: String(d.modalidadeId ?? ""),
+    modoDisputa: d.modoDisputaNome && d.modoDisputaNome !== "Não se aplica" ? d.modoDisputaNome : "",
+    situacao: d.situacaoCompraNome ?? "",
+    srp: !!d.srp,
+    valorEstimado: valor,
+    amparo: d.amparoLegal?.nome ?? "",
+    publicadoEm: d.dataPublicacaoPncp ?? null,
+    abertura: d.dataAberturaProposta ?? null,
+    encerramento: d.dataEncerramentoProposta ?? null,
+    linkPncp: `https://pncp.gov.br/app/editais/${cnpj}/${ano}/${sequencial}`,
+    portal: portal.nome,
+    linkPortal: portal.link,
+    informacao: (d.informacaoComplementar ?? "").trim(),
+    cancelado: d.situacaoCompraId === 3,
+  };
+}
+
 /** Dados extras da compra (nº do processo, link de origem). O PNCP às vezes ainda não tem: devolve null. */
 export async function detalheCompra(r: ResultadoPncp): Promise<{ processo: string; linkPortal: string | null; portal: string } | null> {
   const d = await buscarJson<Partial<DetalheCompra>>(`${CONSULTA}/orgaos/${baseCompra(r)}`, 1).catch(() => null);

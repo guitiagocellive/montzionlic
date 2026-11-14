@@ -20,6 +20,7 @@ import {
   Loader2,
   Plus,
   Search,
+  Share,
   SlidersHorizontal,
   SquareArrowOutUpRight,
   X,
@@ -40,6 +41,7 @@ import {
   MODOS_DISPUTA,
   type FiltrosBusca,
   type ItemPncp,
+  licitacaoPorId,
   MODALIDADES_PNCP,
   type Municipio,
   ordenar,
@@ -53,6 +55,7 @@ import {
 } from "../../pncp";
 import { DetalhePncp, dataHora, type EtapaPncp, reais } from "./DetalhePncp";
 import { EscolherItensPncp } from "./EscolherItensPncp";
+import { compartilharLicitacao } from "./compartilharLicitacao";
 import { Paginacao } from "../../components/Paginacao";
 
 const CHAVE_FILTROS = "montzion:busca-pncp";
@@ -221,6 +224,8 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
   const [detalhe, setDetalhe] = useState<string | null>(null);
   const [etapa, setEtapa] = useState<EtapaPncp>("dados");
   const [escolhendo, setEscolhendo] = useState<ResultadoPncp | null>(null);
+  // Licitação aberta por um link compartilhado (?pncp=…), mesmo sem estar nos resultados da busca.
+  const [compartilhada, setCompartilhada] = useState<ResultadoPncp | null>(null);
   // Licitações já abertas nesta busca (ficam com o título cinza e "Visto"), guardadas neste computador.
   const [vistos, setVistos] = useState<Set<string>>(() => {
     try {
@@ -243,6 +248,20 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
       return novo;
     });
   };
+
+  // Link compartilhado: abre a janela da licitação direto.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("pncp");
+    if (!id) return;
+    licitacaoPorId(id)
+      .then((r) => {
+        if (!r) return avisar("Não encontrei essa licitação no PNCP. O link pode estar incompleto.", "erro");
+        setCompartilhada(r);
+        abrir(r.id);
+      })
+      .catch(() => avisar("Não consegui abrir a licitação do link agora. Tente de novo em instantes.", "erro"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Quais licitações do PNCP já estão no quadro.
   useEffect(() => {
@@ -340,7 +359,7 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
   const totalPaginas = resposta ? Math.max(1, Math.ceil((resposta.varredura ? resposta.itens.length : resposta.total) / POR_PAGINA)) : 1;
   const visiveis = resposta?.varredura ? (resultados ?? []).slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA) : resultados ?? [];
   const posAberto = detalhe && resultados ? resultados.findIndex((x) => x.id === detalhe) : -1;
-  const aberto = posAberto >= 0 ? resultados![posAberto] : null;
+  const aberto = posAberto >= 0 ? resultados![posAberto] : compartilhada && compartilhada.id === detalhe ? compartilhada : null;
   const posGeral = posAberto < 0 ? -1 : resposta?.varredura ? posAberto : (pagina - 1) * POR_PAGINA + posAberto;
   const totalGeral = resposta ? (resposta.varredura ? resposta.itens.length : resposta.total) : 0;
   function irPara(pos: number) {
@@ -565,6 +584,9 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
                           <Globe />
                         </a>
                       )}
+                      <button className="botao-icone" onClick={() => compartilharLicitacao(r)} aria-label="Compartilhar" title="Compartilhar o link">
+                        <Share />
+                      </button>
                       <BotaoCadastrarCompra link={r.linkPortal} />
                       {idQuadro ? (
                         <a className="botao secundario pequeno" {...link(`/licitacoes/${idQuadro}`)}>
@@ -878,7 +900,12 @@ export function BuscarLicitacoes({ usuario }: { usuario: Usuario }) {
           importando={importando?.id === aberto.id ? importando.etapa : null}
           ocupado={!!importando && importando.id !== aberto.id}
           aoImportar={() => setEscolhendo(aberto)}
-          aoFechar={() => setDetalhe(null)}
+          aoFechar={() => {
+            setDetalhe(null);
+            // Fechou a licitação do link: tira o ?pncp do endereço (voltar/recarregar não reabre).
+            if (new URLSearchParams(window.location.search).has("pncp")) window.history.replaceState(null, "", "/licitacoes/buscar");
+          }}
+          aoCompartilhar={() => compartilharLicitacao(aberto)}
           anterior={posGeral > 0 ? () => irPara(posAberto - 1) : undefined}
           proxima={posGeral >= 0 && posGeral < totalGeral - 1 ? () => irPara(posAberto + 1) : undefined}
           posicao={posGeral >= 0 ? `${posGeral + 1} de ${totalGeral.toLocaleString("pt-BR")}` : undefined}
