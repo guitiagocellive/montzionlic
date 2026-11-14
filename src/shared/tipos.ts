@@ -9,8 +9,8 @@ export type Tema = "claro" | "escuro" | "sistema";
 export const TEMAS_CLAROS = [
   { chave: "ceu", nome: "Céu", descricao: "Azul com toque de pêssego", cores: ["#7dd3fc", "#fdba74", "#2563eb"], fundo: "#f2f6fb" },
   { chave: "lavanda", nome: "Lavanda", descricao: "Lilás, azul e rosa pastel", cores: ["#c4b5fd", "#f9a8d4", "#7c3aed"], fundo: "#f3f1fb" },
-  { chave: "menta", nome: "Menta", descricao: "Verde-água fresco e leve", cores: ["#a7f3d0", "#7dd3fc", "#0d9488"], fundo: "#f0f7f4" },
-  { chave: "areia", nome: "Areia", descricao: "Bege quente com terracota", cores: ["#fed7aa", "#e7e5e4", "#c2410c"], fundo: "#f7f3ee" },
+  { chave: "neve", nome: "Neve", descricao: "Branco e cinza, minimalista", cores: ["#ffffff", "#e4e4e7", "#18181b"], fundo: "#f5f5f7" },
+  { chave: "orquidea", nome: "Orquídea", descricao: "Rosa-lilás com magenta", cores: ["#f0abfc", "#c4b5fd", "#c026d3"], fundo: "#f8f1f8" },
 ] as const;
 
 export const TEMAS_ESCUROS = [

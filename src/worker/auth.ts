@@ -1,7 +1,7 @@
 import type { Context, MiddlewareHandler } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { type Modulo, podeEditar, podeVer, resolverPermissoes } from "../shared/permissoes";
-import type { Tema, TemaClaro, TemaEscuro, Usuario } from "../shared/tipos";
+import { type Tema, type TemaClaro, type TemaEscuro, TEMAS_CLAROS, TEMAS_ESCUROS, type Usuario } from "../shared/tipos";
 import { gerarToken, sha256 } from "./crypto";
 
 export type Ambiente = {
@@ -46,8 +46,9 @@ export function paraUsuario(l: LinhaUsuario): Usuario {
     cargo: l.cargo,
     cor: l.cor,
     tema: l.tema,
-    temaClaro: l.tema_claro,
-    temaEscuro: l.tema_escuro,
+    // Tema que deixou de existir (ex.: Menta, Areia) volta para o padrão.
+    temaClaro: TEMAS_CLAROS.some((t) => t.chave === l.tema_claro) ? l.tema_claro : "ceu",
+    temaEscuro: TEMAS_ESCUROS.some((t) => t.chave === l.tema_escuro) ? l.tema_escuro : "oceano",
     // A chave muda a cada foto nova, então serve para evitar cache antigo.
     foto: l.foto_chave ? `/api/fotos/${l.id}?v=${l.foto_chave.slice(-8)}` : null,
     permissoes: resolverPermissoes(l.papel, l.permissoes),

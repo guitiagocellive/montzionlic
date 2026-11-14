@@ -5905,88 +5905,87 @@ a.kpi:hover {
   --c4: #e11d48;
 }
 
-/* ---------- Menta (claro) ---------- */
-[data-paleta="menta"] {
-  --fundo: #f0f7f4;
-  --superficie: rgb(255 255 255 / 64%);
-  --superficie-2: rgb(255 255 255 / 58%);
-  --superficie-3: rgb(15 31 26 / 5%);
-  --hover: rgb(255 255 255 / 75%);
-  --borda: rgb(15 31 26 / 8%);
-  --borda-forte: rgb(15 31 26 / 14%);
-  --texto: #0f1f1a;
-  --texto-suave: #43564f;
-  --texto-fraco: #74867f;
-  --contraste: #0f1f1a;
+/* ---------- Neve (claro): branco e cinza, sem manchas de cor ---------- */
+[data-paleta="neve"] {
+  --fundo: #f5f5f7;
+  --superficie: rgb(255 255 255 / 88%);
+  --superficie-2: rgb(255 255 255 / 70%);
+  --superficie-3: rgb(24 24 27 / 5%);
+  --hover: rgb(24 24 27 / 4%);
+  --borda: rgb(24 24 27 / 8%);
+  --borda-forte: rgb(24 24 27 / 14%);
+  --texto: #18181b;
+  --texto-suave: #52525b;
+  --texto-fraco: #8a8a94;
+  --contraste: #18181b;
   --contraste-texto: #ffffff;
-  --acento: #0d9488;
-  --acento-forte: #0f766e;
-  --acento-suave: rgb(13 148 136 / 11%);
-  --acento-texto: #0f766e;
-  --barra: rgb(15 31 26 / 7%);
-  --malha:
-    radial-gradient(700px 500px at 5% 15%, rgb(167 243 208 / 60%), transparent 60%),
-    radial-gradient(650px 520px at 95% 0%, rgb(125 211 252 / 42%), transparent 60%),
-    radial-gradient(800px 600px at 55% 110%, rgb(94 234 212 / 34%), transparent 60%);
-  --vidro: rgb(255 255 255 / 55%);
-  --vidro-borda: rgb(255 255 255 / 85%);
+  --acento: #3f3f46;
+  --acento-forte: #18181b;
+  --acento-suave: rgb(63 63 70 / 9%);
+  --acento-texto: #18181b;
+  --barra: rgb(24 24 27 / 7%);
+  --malha: none;
+  --vidro: rgb(255 255 255 / 92%);
+  --vidro-borda: rgb(24 24 27 / 8%);
   --vidro-brilho: rgb(255 255 255 / 95%);
-  --vidro-ativo: #0d9488;
+  --vidro-ativo: #18181b;
   --vidro-ativo-texto: #ffffff;
-  --sombra-vidro: 0 18px 40px -20px rgb(15 60 50 / 22%);
-  --sombra-ativo: rgb(13 148 136 / 40%);
-  --logo: linear-gradient(135deg, #0d9488, #10b981);
+  --sombra-vidro: 0 1px 2px rgb(17 17 24 / 4%), 0 12px 30px -18px rgb(17 17 24 / 14%);
+  --sombra-ativo: rgb(24 24 27 / 30%);
+  --logo: linear-gradient(135deg, #27272a, #52525b);
   --logo-texto: #ffffff;
-  --icone-barra: #43564f;
-  --cartao: rgb(255 255 255 / 64%);
-  --cartao-borda: rgb(255 255 255 / 90%);
-  --botao: #0d9488;
+  --icone-barra: #52525b;
+  --cartao: rgb(255 255 255 / 88%);
+  --cartao-borda: rgb(24 24 27 / 8%);
+  --botao: #18181b;
   --botao-texto: #ffffff;
-  --c1: #0d9488;
+  --c1: #18181b;
   --c2: #2563eb;
-  --c3: #65a30d;
-  --c4: #db2777;
+  --c3: #059669;
+  --c4: #e11d48;
 }
 
-/* ---------- Areia (claro) ---------- */
-[data-paleta="areia"] {
-  --fundo: #f7f3ee;
-  --superficie: rgb(255 255 255 / 66%);
+/* ---------- Orquídea (claro): par do Ameixa ---------- */
+[data-paleta="orquidea"] {
+  --fundo: #f8f1f8;
+  --superficie: rgb(255 255 255 / 64%);
   --superficie-2: rgb(255 255 255 / 58%);
-  --superficie-3: rgb(28 25 23 / 5%);
+  --superficie-3: rgb(30 14 36 / 5%);
   --hover: rgb(255 255 255 / 75%);
-  --borda: rgb(28 25 23 / 8%);
-  --borda-forte: rgb(28 25 23 / 14%);
-  --texto: #1c1917;
-  --texto-suave: #57534e;
-  --texto-fraco: #8a837c;
-  --contraste: #1c1917;
+  --borda: rgb(30 14 36 / 8%);
+  --borda-forte: rgb(30 14 36 / 14%);
+  --texto: #1e0e24;
+  --texto-suave: #5b4a62;
+  --texto-fraco: #8c7d92;
+  --contraste: #1e0e24;
   --contraste-texto: #ffffff;
-  --acento: #c2410c;
-  --acento-forte: #9a3412;
-  --acento-suave: rgb(194 65 12 / 10%);
-  --acento-texto: #9a3412;
-  --barra: rgb(28 25 23 / 7%);
+  --acento: #c026d3;
+  --acento-forte: #a21caf;
+  --acento-suave: rgb(192 38 211 / 11%);
+  --acento-texto: #a21caf;
+  --barra: rgb(30 14 36 / 7%);
   --malha:
-    radial-gradient(700px 500px at 5% 12%, rgb(254 215 170 / 50%), transparent 60%),
-    radial-gradient(650px 520px at 95% 0%, rgb(231 229 228 / 70%), transparent 60%),
-    radial-gradient(800px 600px at 60% 110%, rgb(251 207 232 / 30%), transparent 60%);
+    radial-gradient(700px 500px at 5% 15%, rgb(240 171 252 / 45%), transparent 60%),
+    radial-gradient(650px 520px at 95% 0%, rgb(196 181 253 / 42%), transparent 60%),
+    radial-gradient(800px 600px at 55% 110%, rgb(251 207 232 / 48%), transparent 60%);
   --vidro: rgb(255 255 255 / 55%);
   --vidro-borda: rgb(255 255 255 / 85%);
   --vidro-brilho: rgb(255 255 255 / 95%);
-  --vidro-ativo: #1c1917;
+  --vidro-ativo: #a21caf;
   --vidro-ativo-texto: #ffffff;
-  --sombra-vidro: 0 18px 40px -20px rgb(60 40 20 / 20%);
-  --sombra-ativo: rgb(28 25 23 / 28%);
-  --logo: linear-gradient(135deg, #ea580c, #be123c);
+  --sombra-vidro: 0 18px 40px -20px rgb(80 20 90 / 22%);
+  --sombra-ativo: rgb(162 28 175 / 40%);
+  --logo: linear-gradient(135deg, #a855f7, #ec4899);
   --logo-texto: #ffffff;
-  --icone-barra: #57534e;
-  --cartao: rgb(255 255 255 / 66%);
+  --icone-barra: #5b4a62;
+  --cartao: rgb(255 255 255 / 64%);
   --cartao-borda: rgb(255 255 255 / 90%);
-  --c1: #c2410c;
-  --c2: #0f766e;
-  --c3: #4d7c0f;
-  --c4: #be185d;
+  --botao: #a21caf;
+  --botao-texto: #ffffff;
+  --c1: #c026d3;
+  --c2: #6366f1;
+  --c3: #0d9488;
+  --c4: #e11d48;
 }
 
 /* ---------- Floresta (escuro) ---------- */
