@@ -31,8 +31,8 @@ Não existe cadastro público: só um administrador adiciona pessoas.
 ## Configurações (engrenagem)
 
 - **Meu perfil:** foto, nome, cargo e cor no time.
-- **Aparência:** modo claro, escuro ou automático; tema claro (Céu ou Lavanda) e tema escuro
-  (Oceano ou Grafite). Barras com efeito de vidro fosco. Novas paletas ficam em `estilos.css`
+- **Aparência:** modo claro, escuro ou automático; tema claro (Céu, Lavanda, Menta ou Areia) e tema escuro
+  (Oceano, Grafite, Floresta ou Ameixa). Barras com efeito de vidro fosco. Novas paletas ficam em `estilos.css`
   (`[data-paleta="..."]`) e na lista `TEMAS_CLAROS`/`TEMAS_ESCUROS` de `src/shared/tipos.ts`.
 - **Empresas** (admin): uma ou mais empresas participantes, cada uma com logo (e marca d'água opcional),
   dados cadastrais e representante legal (nome, CPF, RG, cargo).

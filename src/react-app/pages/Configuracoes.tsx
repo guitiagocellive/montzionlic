@@ -285,11 +285,11 @@ function Aparencia({ usuario, aoMudarUsuario }: { usuario: Usuario; aoMudarUsuar
     }
   }
 
-  const CartaoTema = ({ t, ativo, aoEscolher }: { t: { chave: string; nome: string; descricao: string; cores: readonly string[] }; ativo: boolean; aoEscolher: () => void }) => (
+  const CartaoTema = ({ t, ativo, aoEscolher }: { t: { chave: string; nome: string; descricao: string; cores: readonly string[]; fundo: string }; ativo: boolean; aoEscolher: () => void }) => (
     <button className={`tema-opcao ${ativo ? "ativo" : ""}`} onClick={aoEscolher}>
       <span
         className="tema-previa"
-        style={{ background: `radial-gradient(circle at 15% 20%, ${t.cores[0]}, transparent 60%), radial-gradient(circle at 90% 10%, ${t.cores[1]}, transparent 55%), ${t.chave === "grafite" ? "#0a0a0c" : t.chave === "oceano" ? "#04121a" : "#f6f7fb"}` }}
+        style={{ background: `radial-gradient(circle at 15% 20%, ${t.cores[0]}, transparent 60%), radial-gradient(circle at 90% 10%, ${t.cores[1]}, transparent 55%), ${t.fundo}` }}
       >
         <i style={{ background: "rgb(255 255 255 / 30%)", backdropFilter: "blur(6px)" }} />
         <i style={{ background: "rgb(255 255 255 / 18%)" }} />

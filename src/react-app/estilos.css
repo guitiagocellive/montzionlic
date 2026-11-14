@@ -5905,6 +5905,178 @@ a.kpi:hover {
   --c4: #e11d48;
 }
 
+/* ---------- Menta (claro) ---------- */
+[data-paleta="menta"] {
+  --fundo: #f0f7f4;
+  --superficie: rgb(255 255 255 / 64%);
+  --superficie-2: rgb(255 255 255 / 58%);
+  --superficie-3: rgb(15 31 26 / 5%);
+  --hover: rgb(255 255 255 / 75%);
+  --borda: rgb(15 31 26 / 8%);
+  --borda-forte: rgb(15 31 26 / 14%);
+  --texto: #0f1f1a;
+  --texto-suave: #43564f;
+  --texto-fraco: #74867f;
+  --contraste: #0f1f1a;
+  --contraste-texto: #ffffff;
+  --acento: #0d9488;
+  --acento-forte: #0f766e;
+  --acento-suave: rgb(13 148 136 / 11%);
+  --acento-texto: #0f766e;
+  --barra: rgb(15 31 26 / 7%);
+  --malha:
+    radial-gradient(700px 500px at 5% 15%, rgb(167 243 208 / 60%), transparent 60%),
+    radial-gradient(650px 520px at 95% 0%, rgb(125 211 252 / 42%), transparent 60%),
+    radial-gradient(800px 600px at 55% 110%, rgb(94 234 212 / 34%), transparent 60%);
+  --vidro: rgb(255 255 255 / 55%);
+  --vidro-borda: rgb(255 255 255 / 85%);
+  --vidro-brilho: rgb(255 255 255 / 95%);
+  --vidro-ativo: #0d9488;
+  --vidro-ativo-texto: #ffffff;
+  --sombra-vidro: 0 18px 40px -20px rgb(15 60 50 / 22%);
+  --sombra-ativo: rgb(13 148 136 / 40%);
+  --logo: linear-gradient(135deg, #0d9488, #10b981);
+  --logo-texto: #ffffff;
+  --icone-barra: #43564f;
+  --cartao: rgb(255 255 255 / 64%);
+  --cartao-borda: rgb(255 255 255 / 90%);
+  --botao: #0d9488;
+  --botao-texto: #ffffff;
+  --c1: #0d9488;
+  --c2: #2563eb;
+  --c3: #65a30d;
+  --c4: #db2777;
+}
+
+/* ---------- Areia (claro) ---------- */
+[data-paleta="areia"] {
+  --fundo: #f7f3ee;
+  --superficie: rgb(255 255 255 / 66%);
+  --superficie-2: rgb(255 255 255 / 58%);
+  --superficie-3: rgb(28 25 23 / 5%);
+  --hover: rgb(255 255 255 / 75%);
+  --borda: rgb(28 25 23 / 8%);
+  --borda-forte: rgb(28 25 23 / 14%);
+  --texto: #1c1917;
+  --texto-suave: #57534e;
+  --texto-fraco: #8a837c;
+  --contraste: #1c1917;
+  --contraste-texto: #ffffff;
+  --acento: #c2410c;
+  --acento-forte: #9a3412;
+  --acento-suave: rgb(194 65 12 / 10%);
+  --acento-texto: #9a3412;
+  --barra: rgb(28 25 23 / 7%);
+  --malha:
+    radial-gradient(700px 500px at 5% 12%, rgb(254 215 170 / 50%), transparent 60%),
+    radial-gradient(650px 520px at 95% 0%, rgb(231 229 228 / 70%), transparent 60%),
+    radial-gradient(800px 600px at 60% 110%, rgb(251 207 232 / 30%), transparent 60%);
+  --vidro: rgb(255 255 255 / 55%);
+  --vidro-borda: rgb(255 255 255 / 85%);
+  --vidro-brilho: rgb(255 255 255 / 95%);
+  --vidro-ativo: #1c1917;
+  --vidro-ativo-texto: #ffffff;
+  --sombra-vidro: 0 18px 40px -20px rgb(60 40 20 / 20%);
+  --sombra-ativo: rgb(28 25 23 / 28%);
+  --logo: linear-gradient(135deg, #ea580c, #be123c);
+  --logo-texto: #ffffff;
+  --icone-barra: #57534e;
+  --cartao: rgb(255 255 255 / 66%);
+  --cartao-borda: rgb(255 255 255 / 90%);
+  --c1: #c2410c;
+  --c2: #0f766e;
+  --c3: #4d7c0f;
+  --c4: #be185d;
+}
+
+/* ---------- Floresta (escuro) ---------- */
+[data-paleta="floresta"] {
+  --fundo: #04130d;
+  --superficie: rgb(255 255 255 / 4.5%);
+  --superficie-solida: #0b1f17;
+  --superficie-2: rgb(255 255 255 / 5%);
+  --superficie-3: rgb(255 255 255 / 8%);
+  --hover: rgb(255 255 255 / 8%);
+  --borda: rgb(255 255 255 / 8%);
+  --borda-forte: rgb(255 255 255 / 15%);
+  --texto: #ecf7f1;
+  --texto-suave: #a3bdb0;
+  --texto-fraco: #6b8579;
+  --contraste: #ffffff;
+  --contraste-texto: #04130d;
+  --acento: #10b981;
+  --acento-forte: #34d399;
+  --acento-suave: rgb(16 185 129 / 16%);
+  --acento-texto: #6ee7b7;
+  --barra: rgb(255 255 255 / 8%);
+  --fundo-modal: rgb(2 10 6 / 60%);
+  --sombra-flutuante: 0 24px 60px -16px rgb(0 0 0 / 70%), 0 0 0 1px rgb(255 255 255 / 10%);
+  --malha:
+    radial-gradient(700px 500px at 5% 15%, rgb(16 185 129 / 28%), transparent 60%),
+    radial-gradient(700px 500px at 95% 5%, rgb(20 184 166 / 22%), transparent 60%),
+    radial-gradient(800px 600px at 60% 105%, rgb(132 204 22 / 14%), transparent 60%);
+  --vidro: rgb(255 255 255 / 7%);
+  --vidro-borda: rgb(255 255 255 / 14%);
+  --vidro-brilho: rgb(255 255 255 / 16%);
+  --vidro-ativo: rgb(255 255 255 / 94%);
+  --vidro-ativo-texto: #04130d;
+  --sombra-vidro: 0 18px 40px -18px rgb(0 0 0 / 55%);
+  --sombra-ativo: rgb(16 185 129 / 50%);
+  --logo: linear-gradient(135deg, #10b981, #0d9488);
+  --logo-texto: #ffffff;
+  --icone-barra: rgb(255 255 255 / 72%);
+  --cartao: rgb(255 255 255 / 4%);
+  --cartao-borda: rgb(255 255 255 / 8%);
+  --c1: #34d399;
+  --c2: #38bdf8;
+  --c3: #a3e635;
+  --c4: #fb7185;
+}
+
+/* ---------- Ameixa (escuro) ---------- */
+[data-paleta="ameixa"] {
+  --fundo: #12081a;
+  --superficie: rgb(255 255 255 / 4.5%);
+  --superficie-solida: #1d1026;
+  --superficie-2: rgb(255 255 255 / 5%);
+  --superficie-3: rgb(255 255 255 / 8%);
+  --hover: rgb(255 255 255 / 8%);
+  --borda: rgb(255 255 255 / 8%);
+  --borda-forte: rgb(255 255 255 / 15%);
+  --texto: #f6eefa;
+  --texto-suave: #bfaecb;
+  --texto-fraco: #85748f;
+  --contraste: #ffffff;
+  --contraste-texto: #12081a;
+  --acento: #d946ef;
+  --acento-forte: #e879f9;
+  --acento-suave: rgb(217 70 239 / 16%);
+  --acento-texto: #f0abfc;
+  --barra: rgb(255 255 255 / 8%);
+  --fundo-modal: rgb(8 3 12 / 60%);
+  --sombra-flutuante: 0 24px 60px -16px rgb(0 0 0 / 70%), 0 0 0 1px rgb(255 255 255 / 10%);
+  --malha:
+    radial-gradient(700px 500px at 5% 15%, rgb(168 85 247 / 30%), transparent 60%),
+    radial-gradient(700px 500px at 95% 5%, rgb(236 72 153 / 22%), transparent 60%),
+    radial-gradient(800px 600px at 60% 105%, rgb(99 102 241 / 20%), transparent 60%);
+  --vidro: rgb(255 255 255 / 7%);
+  --vidro-borda: rgb(255 255 255 / 14%);
+  --vidro-brilho: rgb(255 255 255 / 16%);
+  --vidro-ativo: rgb(255 255 255 / 94%);
+  --vidro-ativo-texto: #12081a;
+  --sombra-vidro: 0 18px 40px -18px rgb(0 0 0 / 55%);
+  --sombra-ativo: rgb(217 70 239 / 45%);
+  --logo: linear-gradient(135deg, #a855f7, #ec4899);
+  --logo-texto: #ffffff;
+  --icone-barra: rgb(255 255 255 / 72%);
+  --cartao: rgb(255 255 255 / 4%);
+  --cartao-borda: rgb(255 255 255 / 8%);
+  --c1: #e879f9;
+  --c2: #818cf8;
+  --c3: #2dd4bf;
+  --c4: #fb7185;
+}
+
 /* ---------- Vidro fosco nas barras ---------- */
 .rail,
 .abas,
@@ -6023,7 +6195,7 @@ a.kpi:hover {
 }
 
 .temas {
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
 }
 
 .tema-previa {

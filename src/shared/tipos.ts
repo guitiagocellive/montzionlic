@@ -7,13 +7,17 @@ export type Tema = "claro" | "escuro" | "sistema";
 
 /** Variações de cor. As claras valem no modo claro; as escuras, no escuro. */
 export const TEMAS_CLAROS = [
-  { chave: "ceu", nome: "Céu", descricao: "Azul com toque de pêssego", cores: ["#7dd3fc", "#fdba74", "#2563eb"] },
-  { chave: "lavanda", nome: "Lavanda", descricao: "Lilás, azul e rosa pastel", cores: ["#c4b5fd", "#f9a8d4", "#7c3aed"] },
+  { chave: "ceu", nome: "Céu", descricao: "Azul com toque de pêssego", cores: ["#7dd3fc", "#fdba74", "#2563eb"], fundo: "#f2f6fb" },
+  { chave: "lavanda", nome: "Lavanda", descricao: "Lilás, azul e rosa pastel", cores: ["#c4b5fd", "#f9a8d4", "#7c3aed"], fundo: "#f3f1fb" },
+  { chave: "menta", nome: "Menta", descricao: "Verde-água fresco e leve", cores: ["#a7f3d0", "#7dd3fc", "#0d9488"], fundo: "#f0f7f4" },
+  { chave: "areia", nome: "Areia", descricao: "Bege quente com terracota", cores: ["#fed7aa", "#e7e5e4", "#c2410c"], fundo: "#f7f3ee" },
 ] as const;
 
 export const TEMAS_ESCUROS = [
-  { chave: "oceano", nome: "Oceano", descricao: "Azul profundo com ciano", cores: ["#0e7490", "#1d4ed8", "#22d3ee"] },
-  { chave: "grafite", nome: "Grafite", descricao: "Neutro e minimalista", cores: ["#27272a", "#3f3f46", "#8b5cf6"] },
+  { chave: "oceano", nome: "Oceano", descricao: "Azul profundo com ciano", cores: ["#0e7490", "#1d4ed8", "#22d3ee"], fundo: "#04121a" },
+  { chave: "grafite", nome: "Grafite", descricao: "Neutro e minimalista", cores: ["#27272a", "#3f3f46", "#8b5cf6"], fundo: "#0a0a0c" },
+  { chave: "floresta", nome: "Floresta", descricao: "Verde escuro com esmeralda", cores: ["#047857", "#0f766e", "#34d399"], fundo: "#04130d" },
+  { chave: "ameixa", nome: "Ameixa", descricao: "Roxo profundo com magenta", cores: ["#7e22ce", "#be185d", "#e879f9"], fundo: "#12081a" },
 ] as const;
 
 export type TemaClaro = (typeof TEMAS_CLAROS)[number]["chave"];
