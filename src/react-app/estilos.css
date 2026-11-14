@@ -15896,3 +15896,281 @@ p.etapa-fechada {
     animation: none !important;
   }
 }
+
+/* =========================================================
+   Celular: nada passa da largura da tela, janelas viram "folha" de baixo,
+   botões quebram linha em vez de cortar e a ficha começa pelo trabalho.
+   ========================================================= */
+
+/* A página nunca rola de lado (no iPhone isso também desalinhava as janelas). */
+html,
+body {
+  overflow-x: clip;
+}
+
+.conteudo {
+  min-width: 0;
+}
+
+@media (max-width: 860px) {
+  /* ---------- Janelas (modais): folha que sobe de baixo, com a altura real da tela ---------- */
+  .modal-fundo {
+    place-items: end center;
+    padding: 0;
+    padding-top: max(12px, env(safe-area-inset-top));
+  }
+
+  .modal,
+  .modal.largo {
+    width: 100%;
+    max-width: 100%;
+    max-height: calc(100dvh - max(12px, env(safe-area-inset-top)));
+    padding: 0 16px calc(20px + env(safe-area-inset-bottom));
+    border-radius: 22px 22px 0 0;
+    overscroll-behavior: contain;
+    animation: folha-subir 0.32s var(--curva);
+  }
+
+  .modal.modal-destaque {
+    animation: folha-subir 0.38s cubic-bezier(0.2, 1.1, 0.4, 1);
+  }
+
+  /* Título fixo no topo da folha enquanto o conteúdo rola. */
+  .modal-topo {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    margin: 0 -16px 12px;
+    padding: 16px 16px 10px;
+    background: var(--superficie-solida);
+  }
+
+  .modal-topo h2 {
+    font-size: 1rem;
+  }
+
+  .botoes-modal {
+    flex-wrap: wrap;
+  }
+
+  .botoes-modal > .botao {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  /* ---------- Busca de licitações ---------- */
+  .resultado-topo {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .acoes-resultado {
+    flex-wrap: wrap;
+    width: 100%;
+    flex-shrink: 1;
+    gap: 6px;
+  }
+
+  .acoes-resultado > .botao {
+    flex: 1 1 140px;
+    justify-content: center;
+  }
+
+  .tags-resultado {
+    min-width: 0;
+  }
+
+  .tags-resultado .selo-info {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Janela da licitação do PNCP: botões lado a lado, abas iguais. */
+  .navegar-pncp {
+    margin: 0 0 12px;
+  }
+
+  .navegar-pncp .botao {
+    padding-inline: 10px;
+  }
+
+  .detalhe-pncp-links {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .detalhe-pncp-links .espaco {
+    display: none;
+  }
+
+  .detalhe-pncp-links > * {
+    justify-content: center;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .detalhe-pncp-links > .botao.acento {
+    grid-column: 1 / -1;
+  }
+
+  .ficha-pncp-topo .resultado-pncp-orgao {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+
+  .fatos-pncp {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .arquivos-pncp {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* ---------- Abas (ficha e janela do PNCP): todas cabem, ícone em cima do nome ---------- */
+  .abas-ficha {
+    overflow: visible;
+  }
+
+  .abas-ficha .aba-ficha,
+  .ficha-principal .aba-ficha {
+    position: relative;
+    flex: 1 1 0;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+    padding: 8px 2px 7px;
+    font-size: 0.72rem;
+    line-height: 1.1;
+  }
+
+  .abas-ficha .aba-ficha span {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .abas-ficha .aba-ficha small {
+    position: absolute;
+    top: 3px;
+    right: calc(50% - 26px);
+    padding: 0 5px;
+    font-size: 0.62rem;
+  }
+
+  /* ---------- Ficha da licitação: o trabalho (próximo passo e abas) vem primeiro ---------- */
+  .ficha-layout {
+    grid-template-areas: "principal" "lateral" "direita";
+    gap: 14px;
+  }
+
+  .ficha-lateral {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .proximo-passo-botoes {
+    width: 100%;
+    justify-content: stretch;
+    flex-wrap: wrap;
+  }
+
+  .proximo-passo-botoes > .botao {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  /* Seletores de várias opções (ex.: Ganhamos / Acompanhando / Perdemos / Cancelado) quebram linha. */
+  .segmentado {
+    flex-wrap: wrap;
+    max-width: 100%;
+    border-radius: 16px;
+  }
+
+  .segmentado button {
+    flex: 1 1 auto;
+  }
+
+  .painel-resultado-numeros {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .painel-resultado-numeros span {
+    overflow-wrap: anywhere;
+  }
+
+  /* Proposta: título da seção quebra linha em vez de passar por baixo do botão. */
+  .secao-alternar h2 {
+    white-space: normal;
+    font-size: 0.98rem;
+  }
+
+  .secao-extra {
+    margin-left: auto;
+  }
+
+  /* ---------- Gerais ---------- */
+  .cabecalho-pagina {
+    flex-wrap: wrap;
+  }
+
+  .temas {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tema-previa {
+    height: 58px;
+  }
+
+  table {
+    max-width: 100%;
+  }
+
+  img,
+  video,
+  iframe,
+  canvas,
+  svg {
+    max-width: 100%;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 16px; /* evita o zoom automático do iPhone ao tocar no campo */
+  }
+}
+
+@keyframes folha-subir {
+  from {
+    transform: translateY(40px);
+    opacity: 0.4;
+  }
+}
+
+/* Card do quadro: segurar no celular abre o menu, sem a lupa/seleção de texto do iPhone. */
+@media (hover: none) {
+  .card-kanban {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
+
+/* Textos de ajuda conforme o aparelho: mouse (computador) ou toque (celular). */
+.so-toque {
+  display: none;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .so-mouse {
+    display: none;
+  }
+
+  .so-toque {
+    display: inline;
+  }
+}

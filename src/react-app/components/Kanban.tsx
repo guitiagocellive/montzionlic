@@ -34,6 +34,9 @@ export function Kanban<T extends CardBase>({
   somenteLeitura = false,
   aoMenu,
 }: Props<T>) {
+  const segurou = useRef(false);
+  const toque = useRef({ x: 0, y: 0 });
+  const timerToque = useRef(0);
   const [arrastando, setArrastando] = useState<number | null>(null);
   const [alvo, setAlvo] = useState<{ etapa: string; indice: number } | null>(null);
   const listas = useRef<Record<string, HTMLDivElement | null>>({});
@@ -130,7 +133,38 @@ export function Kanban<T extends CardBase>({
                       setArrastando(null);
                       setAlvo(null);
                     }}
-                    onClick={() => aoAbrir(card)}
+                    onClick={() => {
+                      if (segurou.current) {
+                        segurou.current = false; // o toque longo abriu o menu: não abre a ficha
+                        return;
+                      }
+                      aoAbrir(card);
+                    }}
+                    // Celular: segurar o card (meio segundo) abre o mesmo menu do botão direito.
+                    onTouchStart={(e) => {
+                      if (!aoMenu) return;
+                      const t = e.touches[0];
+                      toque.current = { x: t.clientX, y: t.clientY };
+                      clearTimeout(timerToque.current);
+                      timerToque.current = window.setTimeout(() => {
+                        segurou.current = true;
+                        navigator.vibrate?.(12);
+                        aoMenu(card, toque.current.x, toque.current.y);
+                      }, 500);
+                    }}
+                    onTouchMove={(e) => {
+                      const t = e.touches[0];
+                      if (Math.abs(t.clientX - toque.current.x) > 10 || Math.abs(t.clientY - toque.current.y) > 10) clearTimeout(timerToque.current);
+                    }}
+                    onTouchEnd={(e) => {
+                      clearTimeout(timerToque.current);
+                      // Soltar o dedo depois do toque longo não pode virar clique (fecharia o menu ou abriria a ficha).
+                      if (segurou.current) {
+                        e.preventDefault();
+                        segurou.current = false;
+                      }
+                    }}
+                    onTouchCancel={() => clearTimeout(timerToque.current)}
                     onContextMenu={(e) => {
                       if (!aoMenu) return;
                       e.preventDefault();

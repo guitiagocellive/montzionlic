@@ -292,7 +292,14 @@ export function QuadroLicitacoes({ usuario }: { usuario: Usuario }) {
           <span className="sobretitulo">Licitações</span>
           <h1>Quadro de licitações</h1>
           <p className="texto-suave">
-            {editar ? "Arraste os cards entre as etapas. Clique para abrir a ficha." : "Você está no modo de visualização."}
+            {editar ? (
+              <>
+                <span className="so-mouse">Arraste os cards entre as etapas. Clique para abrir a ficha.</span>
+                <span className="so-toque">Toque no card para abrir a ficha; segure para mover ou ver mais opções.</span>
+              </>
+            ) : (
+              "Você está no modo de visualização."
+            )}
           </p>
         </div>
         <div className="cabecalho-acoes">
