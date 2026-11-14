@@ -105,7 +105,7 @@ function nomeCompra(chave: string) {
 function Barra({ partes }: { partes: { nome: string; valor: number; cor: string }[] }) {
   const total = partes.reduce((s, p) => s + p.valor, 0) || 1;
   return (
-    <div className="barra-resultados" role="img" aria-label={partes.map((p) => `${p.nome}: ${p.valor}`).join(", ")}>
+    <div className="barra-participacoes" role="img" aria-label={partes.map((p) => `${p.nome}: ${p.valor}`).join(", ")}>
       {partes
         .filter((p) => p.valor > 0)
         .map((p) => (

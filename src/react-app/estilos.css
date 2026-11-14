@@ -12981,7 +12981,7 @@ label.botao.desativado {
 .situacao-penalidade a {
   color: inherit;
 }
-.barra-resultados {
+.barra-participacoes {
   display: flex;
   height: 10px;
   border-radius: 999px;
@@ -12989,7 +12989,7 @@ label.botao.desativado {
   background: var(--superficie-2);
   margin: 12px 0 6px;
 }
-.barra-resultados span {
+.barra-participacoes span {
   height: 100%;
 }
 .motivos-empresa,
