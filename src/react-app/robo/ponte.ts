@@ -110,6 +110,8 @@ export interface PainelRobo {
   recentesPorItem?: Record<string, { valor: number; ok: boolean; mensagem: string; em: number; posicao?: number; tipo?: string }[]>;
 }
 
+let modosDasCompras: Record<string, string> = {};
+
 export const ponte = {
   estado: () => chamar<EstadoPonte & { motor?: boolean; fase?: string; aviso?: string }>("estado", {}, 8_000),
   /** Abre a janela de login do gov.br (mostrar = abre mesmo se já estiver logado). */
@@ -122,7 +124,12 @@ export const ponte = {
   /** Abre a página de login do gov.br de novo na janela do Compras (quando ela travou, deu erro ou ficou em branco). */
   recarregarLogin: () => chamar<{ ok: boolean }>("recarregar", {}),
   painel: () => chamar<PainelRobo>("painel", {}, 5_000),
-  configurar: (config: Record<string, unknown>) => chamar<{ ok: boolean }>("configurar", { config, enviadoEm: Date.now() }, 5_000),
+  /** Configuração dos itens; vai junto o modo de disputa de cada compra (definirModos). */
+  configurar: (config: Record<string, unknown>) => chamar<{ ok: boolean }>("configurar", { config, modos: modosDasCompras, enviadoEm: Date.now() }, 5_000),
+  /** Modo de disputa por compra ("aberto", "aberto-fechado"…), lido nos dados abertos: o robô usa no aberto-fechado. */
+  definirModos: (modos: Record<string, string>) => {
+    modosDasCompras = { ...modosDasCompras, ...modos };
+  },
   confirmar: (ids: number[]) => chamar<{ ok: boolean }>("confirmar", { ids }, 5_000),
   atualizar: () => chamar<{ ok: boolean }>("atualizar", {}, 5_000),
   /** Últimas linhas do registro do aplicativo, sem chaves nem documentos (para mandar ao suporte). */

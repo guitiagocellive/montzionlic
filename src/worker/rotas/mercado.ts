@@ -126,6 +126,14 @@ rotasMercado.get("/itens-compra", async (c) => {
   return repassar(c, "/modulo-contratacoes/2.1_consultarItensContratacoes_PNCP_14133_Id", { tipo: "idCompra", codigo: chave });
 });
 
+// Dados de uma compra pelo código do Compras.gov.br (17 dígitos), entre eles o modo de disputa ("Aberto",
+// "Aberto-Fechado"…). A página Disputas usa para mostrar o modo e o robô para a estratégia do aberto-fechado.
+rotasMercado.get("/compra", async (c) => {
+  const chave = c.req.query("chave") ?? "";
+  if (!/^\d{17}$/.test(chave)) return c.json({ erro: "Compra inválida." }, 400);
+  return repassar(c, "/modulo-contratacoes/1.1_consultarContratacoes_PNCP_14133_Id", { tipo: "idCompra", codigo: chave });
+});
+
 // Nome e cidade de um órgão comprador (UASG).
 rotasMercado.get("/uasg", async (c) => {
   const codigo = c.req.query("codigo") ?? "";

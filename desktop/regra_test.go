@@ -383,3 +383,60 @@ func TestValoresQueNaoBatem(t *testing.T) {
 		t.Errorf("com a situação do Compras (G) vale a situação: %+v", d)
 	}
 }
+
+func TestVagaNaEtapaFechada(t *testing.T) {
+	// Disputa do Borrifador (aberto-fechado): 1º em R$ 14,20, nós em R$ 500, mínimo R$ 13, intervalo R$ 0,01.
+	cfg := &configItem{Ligado: true, Minimo: f(13), Desconto: 0.01, TipoDesconto: "V"}
+	e := estadoItem{Fase: "AL", Melhor: f(14.20), Nosso: f(500), Situacao: "P", Variacao: f(0.01), TipoVariacao: "V", AbertoFechado: true}
+	d := decidir(e, cfg)
+	if !d.Enviar || d.Tipo != "vaga-fechada" || d.Valor != 14.76 || d.Posicao != 2 {
+		t.Fatalf("fora da faixa: volta para 4%% acima do 1º (14,76), atrás dele; veio %+v", d)
+	}
+	// Dentro dos 5% (14,20 × 1,05 = 14,91): não dá lance, mesmo com o 1º baixando um centavo.
+	e.Nosso, e.Melhor = f(14.76), f(14.19)
+	if d := decidir(e, cfg); d.Enviar || d.Tipo != "vaga-fechada" {
+		t.Errorf("na faixa (4,0%% acima): sem lance, veio %+v", d)
+	}
+	// O 1º baixou para 13,90: 14,76 passou dos 5% (14,59) → 4% acima (14,45).
+	e.Melhor = f(13.90)
+	if d := decidir(e, cfg); !d.Enviar || d.Valor != 14.45 {
+		t.Errorf("saiu da faixa: 14,45, veio %+v", d)
+	}
+	// Etapa aberta (LA) longe do fim: espera os 10 s finais; nos 10 s finais, ajusta.
+	la := e
+	la.Fase, la.RestanteSeg = "LA", f(300)
+	if d := decidir(la, cfg); d.Enviar {
+		t.Errorf("LA longe do fim: espera, veio %+v", d)
+	}
+	la.RestanteSeg = f(6)
+	if d := decidir(la, cfg); !d.Enviar || d.Valor != 14.45 {
+		t.Errorf("LA nos 10 s finais: 14,45, veio %+v", d)
+	}
+	// Em 1º (nosso proposta inicial já era a menor): não sobe o lance, só aguarda.
+	e.Nosso, e.Melhor, e.Situacao = f(13.90), f(13.90), "G"
+	if d := decidir(e, cfg); d.Enviar {
+		t.Errorf("em 1º: aguarda, veio %+v", d)
+	}
+	// O mínimo não deixa entrar nos 5%: 1º em 10, mínimo 13 → melhor colocação pela classificação.
+	e2 := estadoItem{Fase: "AL", Melhor: f(10), Nosso: f(15), Situacao: "P", Variacao: f(0.01), TipoVariacao: "V", AbertoFechado: true, Concorrentes: []float64{10, 13.5, 14}}
+	if d := decidir(e2, cfg); !d.Enviar || d.Tipo != "colocacao" || d.Valor != 13.49 {
+		t.Errorf("sem caber nos 5%%: fica entre os melhores (13,49), veio %+v", d)
+	}
+	// "Lutar pelo 1º lugar": disputa normalmente (cobre o 1º), também no aleatório.
+	lutar := &configItem{Ligado: true, Minimo: f(13), Desconto: 0.01, TipoDesconto: "V", LutarPrimeiro: true}
+	e3 := estadoItem{Fase: "AL", Melhor: f(14.20), Nosso: f(14.50), Situacao: "P", Variacao: f(0.01), TipoVariacao: "V", AbertoFechado: true}
+	if d := decidir(e3, lutar); !d.Enviar || d.Tipo != "lance" || d.Valor != 14.19 {
+		t.Errorf("lutando pelo 1º: cobre com 14,19, veio %+v", d)
+	}
+	// Modo aberto (não é aberto-fechado): nada muda.
+	e3.AbertoFechado = false
+	if d := decidir(e3, cfg); d.Tipo != "lance" {
+		t.Errorf("modo aberto: disputa normal, veio %+v", d)
+	}
+	// Ganhar tempo marcado numa compra aberto-fechado: não vale (vai pela vaga na etapa fechada).
+	gt := &configItem{Ligado: true, Minimo: f(13), GanharTempo: true}
+	e4 := estadoItem{Fase: "LA", RestanteSeg: f(5), Melhor: f(14.20), Nosso: f(14.50), Situacao: "P", PodeGanharTempo: true, AbertoFechado: true}
+	if d := decidir(e4, gt); d.Tipo == "ganhar-tempo" {
+		t.Errorf("aberto-fechado não ganha tempo: %+v", d)
+	}
+}

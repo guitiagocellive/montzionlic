@@ -49,7 +49,7 @@ func marcarMudancasConfig(antes, depois map[string]configItem) {
 				if n.TipoDesconto == "V" {
 					tipo = "R$"
 				}
-				marcarRobo("%s: robô LIGADO%s — mínimo %s, desconto %g %s, não esperar: %v, 4 casas: %v", rotuloItem(k), chegada, minimo, n.Desconto, tipo, n.NaoAguardar, n.QuatroCasas)
+				marcarRobo("%s: robô LIGADO%s — mínimo %s, desconto %g %s, não esperar: %v, 4 casas: %v, lutar pelo 1º: %v", rotuloItem(k), chegada, minimo, n.Desconto, tipo, n.NaoAguardar, n.QuatroCasas, n.LutarPrimeiro)
 			} else {
 				marcarRobo("%s: robô desligado%s", rotuloItem(k), chegada)
 			}
@@ -64,6 +64,9 @@ func marcarMudancasConfig(antes, depois map[string]configItem) {
 		}
 		if n.NaoAguardar != a.NaoAguardar {
 			marcarRobo("%s: \"não esperar os 10 s finais\" = %v (robô ligado: %v)%s", rotuloItem(k), n.NaoAguardar, n.Ligado, chegada)
+		}
+		if n.LutarPrimeiro != a.LutarPrimeiro {
+			marcarRobo("%s: \"lutar pelo 1º lugar\" = %v (robô ligado: %v)%s", rotuloItem(k), n.LutarPrimeiro, n.Ligado, chegada)
 		}
 		if n.GanharTempo != a.GanharTempo {
 			marcarRobo("%s: \"ganhar tempo\" = %v (robô ligado: %v)%s", rotuloItem(k), n.GanharTempo, n.Ligado, chegada)
@@ -304,7 +307,7 @@ func (m *motor) estadoRoboTexto() string {
 			if !it.atualizadoEm.IsZero() {
 				t += fmt.Sprintf(", dados de %.1f s atrás", agora.Sub(it.atualizadoEm).Seconds())
 			}
-			if c.ehAbertoFechado() {
+			if m.abertoFechado(chave) {
 				t += ", aberto-fechado"
 			}
 			// Grupo, ou valores que não batem (nosso abaixo do melhor): mostra os campos de valor como vieram, para
@@ -321,7 +324,7 @@ func (m *motor) estadoRoboTexto() string {
 				if cfg.Minimo != nil {
 					minimo = reaisTexto(*cfg.Minimo, true)
 				}
-				t += fmt.Sprintf(" | robô ligado: %v, mínimo %s, desconto %g %s, não esperar: %v, 4 casas: %v", cfg.Ligado, minimo, cfg.Desconto, tipo, cfg.NaoAguardar, cfg.QuatroCasas)
+				t += fmt.Sprintf(" | robô ligado: %v, mínimo %s, desconto %g %s, não esperar: %v, 4 casas: %v, lutar pelo 1º: %v", cfg.Ligado, minimo, cfg.Desconto, tipo, cfg.NaoAguardar, cfg.QuatroCasas, cfg.LutarPrimeiro)
 			}
 			if r := m.ranking[k]; r != nil && !r.em.IsZero() {
 				t += fmt.Sprintf(" | classificação de %.1f s atrás", agora.Sub(r.em).Seconds())

@@ -94,7 +94,9 @@ type motor struct {
 	p  *ponte
 	mu sync.Mutex
 
-	compras     map[string]*compraMotor
+	compras map[string]*compraMotor
+	// Modo de disputa de cada compra mandado pela página (dados abertos do Compras.gov.br): "aberto-fechado"...
+	modos       map[string]string
 	ordem       []string
 	descartadas int
 	config      map[string]configItem
@@ -190,6 +192,23 @@ func (m *motor) carregarConfig() {
 	if err == nil {
 		_ = json.Unmarshal(dados, &m.config)
 	}
+}
+
+// DefinirModos: modo de disputa por compra (a página lê nos dados abertos e manda junto com a configuração).
+func (m *motor) DefinirModos(modos map[string]string) {
+	m.mu.Lock()
+	if m.modos == nil {
+		m.modos = map[string]string{}
+	}
+	for k, v := range modos {
+		m.modos[k] = strings.ToLower(strings.TrimSpace(v))
+	}
+	m.mu.Unlock()
+}
+
+// abertoFechado (com m.mu travado): pela compra (lista/fase vista) ou pelo modo mandado pela página.
+func (m *motor) abertoFechado(chave string) bool {
+	return m.compras[chave].ehAbertoFechado() || m.modos[chave] == "aberto-fechado"
 }
 
 func (m *motor) Configurar(itens map[string]configItem) {
@@ -1294,10 +1313,9 @@ func (m *motor) avaliar(k string) {
 	if ehDispensa(compra) {
 		cfg.GanharTempo = false // na dispensa o período de lances não é prorrogado: ganhar tempo só baixaria o preço
 	}
-	if cfg.GanharTempo && c.ehAbertoFechado() {
-		// Aberto-fechado: lance não prorroga a etapa aberta; o robô disputa normalmente.
-		cfg.GanharTempo = false
-	}
+	// Aberto-fechado: lance não prorroga a etapa aberta (sem "ganhar tempo"); sem "Lutar pelo 1º lugar" o robô
+	// fica até 5% atrás do 1º para ir à etapa fechada.
+	e.AbertoFechado = m.abertoFechado(compra)
 	d := decidir(e, &cfg)
 	marcarDecisao(k, d)
 	// Mantém a classificação em dia sempre que não dá para ser 1º acima do mínimo, já antes dos 10 s finais,

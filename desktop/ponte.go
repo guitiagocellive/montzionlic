@@ -584,6 +584,7 @@ func (p *ponte) atender(sessao, payload string) {
 		Atualizar bool                  `json:"atualizar"`
 		Config    map[string]configItem `json:"config"`
 		EnviadoEm int64                 `json:"enviadoEm"` // hora (ms) em que a página mandou o pedido
+		Modos     map[string]string     `json:"modos"`     // modo de disputa por compra (dados abertos)
 		Relatorio string                `json:"relatorio"` // nome do arquivo do relatório da disputa
 		IDs       []int64               `json:"ids"`
 		Texto     string                `json:"texto"`
@@ -604,6 +605,9 @@ func (p *ponte) atender(sessao, payload string) {
 		if pedido.EnviadoEm > 0 {
 			ultimaChegadaConfig.Store(time.Now().UnixMilli() - pedido.EnviadoEm)
 			temChegadaConfig.Store(true)
+		}
+		if pedido.Modos != nil {
+			p.motor.DefinirModos(pedido.Modos)
 		}
 		p.motor.Configurar(pedido.Config)
 		resposta = mapa{"ok": true}

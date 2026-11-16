@@ -30,7 +30,18 @@ type configItem struct {
 	// na frente acha que está resolvido e para de acompanhar; quando a pessoa quiser atacar, desmarca a opção e o
 	// robô volta a disputar normalmente. Para no mínimo.
 	GanharTempo bool `json:"ganharTempo"`
+	// Lutar pelo 1º lugar (só aberto-fechado): sem a opção (padrão), na etapa aberta o robô fica ATRÁS do 1º, até
+	// 5% acima dele — o bastante para ir à etapa fechada sem mostrar o próprio preço (quem está em 1º acha que já
+	// ganhou e tende a dar um lance fechado menos agressivo). Com a opção, disputa o 1º lugar até a etapa fechada.
+	LutarPrimeiro bool `json:"lutarPrimeiro"`
 }
+
+// Aberto-fechado: vão à etapa fechada o 1º e quem estiver até 10% acima dele (IN SEGES 73/2022); o robô usa 5%,
+// com folga. Quando sai da faixa, volta para 4% acima do 1º (não precisa dar lance a cada centavo do 1º).
+const (
+	faixaFechada = 5.0
+	alvoFechada  = 4.0
+)
 
 type estadoItem struct {
 	Fase          string
@@ -54,6 +65,8 @@ type estadoItem struct {
 	PodeGanharTempo bool
 	// Lances de ganhar tempo recusados seguidos (ex.: valor igual ao de outra empresa): desce um intervalo a mais.
 	PassosExtraGanharTempo int
+	// A compra é do modo aberto-fechado (lista do Compras, dados abertos ou um item já no aleatório/fechada).
+	AbertoFechado bool
 }
 
 type decisao struct {
@@ -139,6 +152,51 @@ func ganharTempo(e estadoItem, minimo, nosso float64, q bool) decisao {
 	return decisao{Tipo: "ganhar-tempo-aguardando", Motivo: fmt.Sprintf("Ganhando tempo: nos %d s finais dá %s sobre o próprio lance, sem cobrir os concorrentes (desmarque para disputar)", segundosFinais, reaisTexto(alvo, q))}
 }
 
+// vagaFechada (aberto-fechado, etapa aberta, sem "Lutar pelo 1º lugar"): fica atrás do 1º, até 5% acima dele.
+// Dentro da faixa não dá lance (não mostra o preço); fora dela, volta para 4% acima do 1º (nos 10 s finais da etapa
+// aberta, ou na hora no encerramento aleatório, quando qualquer segundo pode ser o último). Se o mínimo não deixa
+// entrar na faixa, busca a melhor colocação (os 3 melhores também vão à etapa fechada).
+func vagaFechada(e estadoItem, c *configItem, minimo, nosso float64) decisao {
+	q := c.QuatroCasas
+	if e.Melhor == nil {
+		return decisao{Tipo: "vaga-fechada", Motivo: "Aberto-fechado: aguardando o melhor lance para ficar até 5% atrás do 1º"}
+	}
+	melhor := *e.Melhor
+	if nosso <= melhor+1e-9 {
+		return decisao{Tipo: "vaga-fechada", Motivo: "Aberto-fechado: em 1º na etapa aberta (lance não sobe); vai para a etapa fechada"}
+	}
+	acima := func(v float64) string {
+		return strings.Replace(strconv.FormatFloat((v/melhor-1)*100, 'f', 1, 64), ".", ",", 1)
+	}
+	limite := arredondarAbaixo(melhor*(1+faixaFechada/100), q)
+	if nosso <= limite+1e-9 {
+		return decisao{Tipo: "vaga-fechada", Motivo: fmt.Sprintf("Aberto-fechado: na faixa da etapa fechada (%s%% acima do 1º, até %g%%), sem mostrar o seu preço", acima(nosso), faixaFechada)}
+	}
+	if !c.NaoAguardar && e.Fase == "LA" && e.RestanteSeg != nil && *e.RestanteSeg > segundosFinais {
+		return decisao{Tipo: "aguardando-final", Motivo: fmt.Sprintf("Aberto-fechado: %s%% acima do 1º; nos últimos %d s volta para até %g%% atrás dele", acima(nosso), segundosFinais, faixaFechada)}
+	}
+	alvo := arredondarAbaixo(melhor*(1+alvoFechada/100), q)
+	if teto := arredondarAbaixo(nosso-passoMinimo(nosso, e, q), q); alvo > teto { // intervalo do edital sobre o nosso lance
+		alvo = teto
+	}
+	if alvo >= minimo && alvo < nosso-1e-9 {
+		pos := 2
+		if alvo <= melhor+1e-9 {
+			pos = 1
+		}
+		return decisao{Enviar: true, Tipo: "vaga-fechada", Valor: alvo, Posicao: pos,
+			Motivo: fmt.Sprintf("Aberto-fechado: garantindo a vaga na etapa fechada com %s (%s%% acima do 1º, %s)", reaisTexto(alvo, q), acima(alvo), reaisTexto(melhor, q))}
+	}
+	if nosso <= minimo {
+		return decisao{Tipo: "no-minimo", Motivo: "No lance mínimo: melhor colocação possível"}
+	}
+	// O mínimo não deixa chegar a 5% do 1º: os 3 melhores também vão à etapa fechada.
+	if e.Concorrentes != nil {
+		return melhorColocacao(e, c, minimo, nosso)
+	}
+	return decisao{Tipo: "precisa-classificacao", Motivo: "Aberto-fechado: o mínimo não deixa chegar a 5% do 1º; lendo a classificação para ficar entre os 3 melhores"}
+}
+
 // precisaQuatroCasas: o edital ou os lances do item têm mais de 2 casas decimais (o robô passa a usar 4 casas
 // sozinho, sem depender da caixinha).
 func precisaQuatroCasas(e estadoItem) bool {
@@ -186,7 +244,7 @@ func decidir(e estadoItem, c *configItem) decisao {
 		// o valor na tela (se tiver sido convocada para a etapa fechada).
 		return decisao{Tipo: "fechada-manual", Motivo: "Etapa fechada: confira e envie o seu lance único (sugestão: " + reaisTexto(minimo, q) + ")"}
 	}
-	if c.GanharTempo && e.Fase == "LA" {
+	if c.GanharTempo && e.Fase == "LA" && !e.AbertoFechado {
 		return ganharTempo(e, minimo, nosso, q)
 	}
 	if e.Situacao == "G" {
@@ -196,6 +254,9 @@ func decidir(e estadoItem, c *configItem) decisao {
 		// O nosso lance abaixo do "melhor lance" não existe numa disputa de menor preço: os dois valores vieram em
 		// bases diferentes (visto em item de grupo). Sem saber quem está na frente, o robô não dá lance.
 		return decisao{Tipo: "conferir-valores", Motivo: "Os valores deste item não batem (o nosso aparece abaixo do melhor lance): o robô não dá lance sozinho aqui"}
+	}
+	if e.AbertoFechado && !c.LutarPrimeiro && (e.Fase == "LA" || e.Fase == "AL") {
+		return vagaFechada(e, c, minimo, nosso)
 	}
 	if !c.NaoAguardar && e.Fase == "LA" && e.RestanteSeg != nil && *e.RestanteSeg > segundosFinais {
 		return decisao{Tipo: "aguardando-final", Motivo: fmt.Sprintf("Aguardando entrar nos últimos %d segundos para enviar lance", segundosFinais)}

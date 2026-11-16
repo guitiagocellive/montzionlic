@@ -24,9 +24,34 @@ export interface ConfigItemRobo {
   /** Ganhar tempo (só pregão, etapa aberta): em qualquer posição, nos 10 s finais dá um lance do intervalo mínimo
    *  abaixo do próprio lance e não cobre os concorrentes — prorroga o cronômetro até a pessoa desmarcar e atacar. */
   ganharTempo?: boolean;
+  /** Lutar pelo 1º lugar (só aberto-fechado): sem a opção (padrão), na etapa aberta o robô fica atrás do 1º, até 5%
+   *  acima dele — entra na etapa fechada sem mostrar o próprio preço. Com a opção, disputa o 1º até a etapa fechada. */
+  lutarPrimeiro?: boolean;
 }
 
-export const ITEM_ROBO_PADRAO: ConfigItemRobo = { ligado: false, minimo: null, desconto: 0, naoAguardar: false, quatroCasas: false, ganharTempo: false };
+export const ITEM_ROBO_PADRAO: ConfigItemRobo = { ligado: false, minimo: null, desconto: 0, naoAguardar: false, quatroCasas: false, ganharTempo: false, lutarPrimeiro: false };
+
+/** Aberto-fechado: vão à etapa fechada o 1º e quem estiver até 10% acima dele; o robô usa 5% (com folga) e, quando
+ *  sai da faixa, volta para 4% acima do 1º. */
+export const FAIXA_FECHADA = 5;
+export const ALVO_FECHADA = 4;
+
+/** Modo de disputa pelo nome dos dados abertos ("Aberto", "Aberto-Fechado", "Fechado-Aberto"…). */
+export function normalizarModo(nome: string | null | undefined): "aberto" | "aberto-fechado" | "fechado-aberto" | "" {
+  const t = (nome ?? "").toLowerCase();
+  const a = t.indexOf("aberto");
+  const f = t.indexOf("fechado");
+  if (a >= 0 && f > a) return "aberto-fechado";
+  if (f >= 0 && a > f) return "fechado-aberto";
+  if (a >= 0) return "aberto";
+  return "";
+}
+
+export const NOMES_MODO: Record<string, string> = {
+  aberto: "Disputa aberta",
+  "aberto-fechado": "Disputa aberta e fechada",
+  "fechado-aberto": "Disputa fechada e aberta",
+};
 
 /** Fases do item no Compras.gov.br (FaseItemEnum). */
 export const FASES: Record<string, string> = {
@@ -63,6 +88,8 @@ export interface EstadoItem {
   concorrentes?: number[] | null;
   /** Ganhar tempo liberado nesta rodada do cronômetro (pregão; um lance por rodada). */
   podeGanharTempo?: boolean;
+  /** A compra é do modo aberto-fechado. */
+  abertoFechado?: boolean;
 }
 
 /** O edital ou os lances do item têm mais de 2 casas decimais: lances com 4 casas. */
@@ -73,7 +100,7 @@ export function precisaQuatroCasas(estado: Pick<EstadoItem, "variacaoMinima" | "
 
 export type TipoDecisao =
   | "desligado" | "sem-minimo" | "aguardando-fase" | "ganhando" | "aguardando-final" | "lance" | "colocacao"
-  | "melhor-possivel" | "precisa-classificacao" | "no-minimo" | "fechada" | "fechada-manual" | "sem-proposta" | "ganhar-tempo" | "ganhar-tempo-aguardando" | "ganhar-tempo-minimo" | "conferir-valores";
+  | "melhor-possivel" | "precisa-classificacao" | "no-minimo" | "fechada" | "fechada-manual" | "sem-proposta" | "ganhar-tempo" | "ganhar-tempo-aguardando" | "ganhar-tempo-minimo" | "conferir-valores" | "vaga-fechada";
 
 export interface Decisao {
   acao: "aguardar" | "enviar";
@@ -124,7 +151,7 @@ export function decidir(estado: EstadoItem, item: ConfigItemRobo | undefined): D
 
   // Ganhar tempo (etapa aberta): em qualquer posição, só o intervalo mínimo sobre o próprio lance nos 10 s finais,
   // sem cobrir ninguém (prorroga o cronômetro até a pessoa desmarcar e atacar).
-  if (item.ganharTempo && estado.fase === "LA") {
+  if (item.ganharTempo && estado.fase === "LA" && !estado.abertoFechado) {
     const alvo = arredondarAbaixo(estado.nossoLance - passoMinimo(estado.nossoLance, estado, q), q);
     if (alvo < minimo || !(alvo < estado.nossoLance)) return { acao: "aguardar", tipo: "ganhar-tempo-minimo", motivo: "Ganhar tempo: chegou ao seu mínimo" };
     if (estado.podeGanharTempo && estado.restanteSeg != null && estado.restanteSeg <= SEGUNDOS_FINAIS)
@@ -136,6 +163,7 @@ export function decidir(estado: EstadoItem, item: ConfigItemRobo | undefined): D
   // Nosso lance abaixo do "melhor" não existe em disputa de menor preço: valores em bases diferentes (item de grupo).
   if (!estado.situacao && estado.melhorLance != null && estado.nossoLance < estado.melhorLance - 1e-9)
     return { acao: "aguardar", tipo: "conferir-valores", motivo: "Os valores deste item não batem (o nosso aparece abaixo do melhor lance): o robô não dá lance sozinho aqui" };
+  if (estado.abertoFechado && !item.lutarPrimeiro && (estado.fase === "LA" || estado.fase === "AL")) return vagaFechada(estado, item, minimo, estado.nossoLance);
 
   // Espera os 10 segundos finais (no encerramento aleatório não há cronômetro: qualquer segundo pode ser o último).
   if (!item.naoAguardar && estado.fase === "LA" && estado.restanteSeg != null && estado.restanteSeg > SEGUNDOS_FINAIS) {
@@ -157,6 +185,26 @@ export function decidir(estado: EstadoItem, item: ConfigItemRobo | undefined): D
     return { acao: "aguardar", tipo: "precisa-classificacao", motivo: "Não dá para ser 1º acima do mínimo: lendo a classificação para achar a melhor colocação" };
   }
   return melhorColocacao(estado, item, minimo, estado.nossoLance);
+}
+
+/** Aberto-fechado sem "Lutar pelo 1º lugar": fica atrás do 1º, até 5% acima dele (igual a desktop/regra.go). */
+function vagaFechada(estado: EstadoItem, item: ConfigItemRobo, minimo: number, nosso: number): Decisao {
+  const q = item.quatroCasas;
+  const melhor = estado.melhorLance;
+  if (melhor == null) return { acao: "aguardar", tipo: "vaga-fechada", motivo: "Aberto-fechado: aguardando o melhor lance para ficar até 5% atrás do 1º" };
+  if (nosso <= melhor + 1e-9) return { acao: "aguardar", tipo: "vaga-fechada", motivo: "Aberto-fechado: em 1º na etapa aberta (lance não sobe); vai para a etapa fechada" };
+  const acima = (v: number) => ((v / melhor - 1) * 100).toFixed(1).replace(".", ",");
+  if (nosso <= arredondarAbaixo(melhor * (1 + FAIXA_FECHADA / 100), q) + 1e-9)
+    return { acao: "aguardar", tipo: "vaga-fechada", motivo: `Aberto-fechado: na faixa da etapa fechada (${acima(nosso)}% acima do 1º, até ${FAIXA_FECHADA}%), sem mostrar o seu preço` };
+  if (!item.naoAguardar && estado.fase === "LA" && estado.restanteSeg != null && estado.restanteSeg > SEGUNDOS_FINAIS)
+    return { acao: "aguardar", tipo: "aguardando-final", motivo: `Aberto-fechado: ${acima(nosso)}% acima do 1º; nos últimos ${SEGUNDOS_FINAIS} s volta para até ${FAIXA_FECHADA}% atrás dele` };
+  const alvo = Math.min(arredondarAbaixo(melhor * (1 + ALVO_FECHADA / 100), q), arredondarAbaixo(nosso - passoMinimo(nosso, estado, q), q));
+  if (alvo >= minimo && alvo < nosso - 1e-9)
+    return { acao: "enviar", tipo: "vaga-fechada", valor: alvo, motivo: `Aberto-fechado: garantindo a vaga na etapa fechada com ${reais(alvo, q)} (${acima(alvo)}% acima do 1º, ${reais(melhor, q)})` };
+  if (nosso <= minimo) return { acao: "aguardar", tipo: "no-minimo", motivo: "No lance mínimo: melhor colocação possível" };
+  if (!estado.concorrentes)
+    return { acao: "aguardar", tipo: "precisa-classificacao", motivo: "Aberto-fechado: o mínimo não deixa chegar a 5% do 1º; lendo a classificação para ficar entre os 3 melhores" };
+  return melhorColocacao(estado, item, minimo, nosso);
 }
 
 /** Lances dos outros (sem o nosso) mais o melhor lance atual, se alguém cobriu depois da leitura. */
@@ -219,6 +267,7 @@ export function normalizarItem(bruto: unknown): ConfigItemRobo {
     naoAguardar: b.naoAguardar === true,
     quatroCasas: b.quatroCasas === true,
     ganharTempo: b.ganharTempo === true,
+    lutarPrimeiro: b.lutarPrimeiro === true,
   };
 }
 

@@ -1,7 +1,7 @@
-import { Check, ChevronDown, CircleX, ClipboardCopy, Download, FileText, Gauge, Info, ListOrdered, Play, RefreshCw, Square, TriangleAlert, Volume2, VolumeX, Zap } from "lucide-react";
+import { Check, ChevronDown, CircleX, ClipboardCopy, Download, FileText, Gauge, Info, Layers, ListOrdered, Play, RefreshCw, Square, TriangleAlert, Volume2, VolumeX, Zap } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { podeEditar, podeVer } from "../../shared/permissoes";
-import { type CompraDisputa, type ConfigItemRobo, FASES, ITEM_ROBO_PADRAO, type ItemDisputa, lerCompra, lerItemDisputa, precisaQuatroCasas, SEGUNDOS_FINAIS } from "../../shared/robo";
+import { type CompraDisputa, type ConfigItemRobo, FAIXA_FECHADA, FASES, ITEM_ROBO_PADRAO, type ItemDisputa, lerCompra, lerItemDisputa, NOMES_MODO, normalizarModo, precisaQuatroCasas, SEGUNDOS_FINAIS } from "../../shared/robo";
 import type { Usuario } from "../../shared/tipos";
 import { api, mensagemDeErro } from "../api";
 import { avisar, Modal, Vazio } from "../components/Ui";
@@ -10,6 +10,7 @@ import { link } from "../rota";
 import { noAplicativo, type PainelRobo, ponte, type RelatorioDisputa, type ResultadoTesteRobo, temPonte } from "../robo/ponte";
 import { BotaoRecarregarGovBr } from "../robo/ErroCompras";
 import { SemContaGovBr } from "../robo/ConexaoGovBr";
+import { gruposDaCompra } from "./licitacoes/comprasCadastro";
 
 // Página Disputas: o robô roda dentro do aplicativo (recebe os lances em tempo real e responde na hora).
 // Aqui só mostramos o que ele vê, guardamos a configuração de cada item e registramos os lances.
@@ -125,7 +126,7 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
       (painel?.compras ?? [])
         .map((c) => {
           const compra = lerCompra({ chaveCompra: c.chave, ...c.info });
-          return compra ? { compra, itens: c.itens.map(lerItemDisputa).filter((i) => i.numero > 0), lida: c.lida, emDisputa: c.emDisputa, erro: c.erro } : null;
+          return compra ? { compra, itens: c.itens.map(lerItemDisputa).filter((i) => i.numero !== 0), lida: c.lida, emDisputa: c.emDisputa, erro: c.erro } : null;
         })
         .filter((x): x is CompraNaTela => !!x),
     [painel],
@@ -244,6 +245,42 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
         avisar(mensagemDeErro(e), "erro");
       });
   }, [chavesCompras]);
+
+  // Modo de disputa de cada pregão (aberto, aberto e fechado…): pelos dados abertos do Compras.gov.br (não muda, fica
+  // guardado no navegador). Vai junto com a configuração para o robô do aplicativo.
+  const [modos, setModos] = useState<Record<string, string>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("montzion:modos-disputa") ?? "{}") as Record<string, string>;
+    } catch {
+      return {};
+    }
+  });
+  const modosPedidos = useRef(new Set<string>());
+  const chavesPregao = compras.filter((c) => c.compra.modalidade !== "dispensa").map((c) => c.compra.chave).join(",");
+  useEffect(() => {
+    const faltam = chavesPregao.split(",").filter((k) => /^\d{17}$/.test(k) && !modos[k] && !modosPedidos.current.has(k));
+    faltam.forEach((k) => modosPedidos.current.add(k));
+    for (const k of faltam) {
+      api<{ resultado?: { modoDisputaNomePncp?: string }[] }>(`/mercado/compra?chave=${k}`)
+        .then((r) => {
+          const modo = normalizarModo(r.resultado?.[0]?.modoDisputaNomePncp);
+          if (modo) setModos((m) => ({ ...m, [k]: modo }));
+        })
+        .catch(() => modosPedidos.current.delete(k));
+    }
+  }, [chavesPregao]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    try {
+      localStorage.setItem("montzion:modos-disputa", JSON.stringify(modos));
+    } catch {
+      /* sem armazenamento: lê de novo na próxima vez */
+    }
+    ponte.definirModos(modos);
+    if (Object.keys(configRef.current).length) ponte.configurar(configRef.current).catch(() => {});
+  }, [modos]);
+  /** Modo da compra: dados abertos, o que veio da lista ou, sem isso, um item já no aleatório/etapa fechada. */
+  const modoDa = (c: CompraNaTela) =>
+    modos[c.compra.chave] || normalizarModo(c.compra.modoDisputa) || (c.itens.some((i) => ["AL", "AF", "LF"].includes(i.fase)) ? "aberto-fechado" : "");
 
   // Lances que o robô deu: registra na plataforma e avisa o aplicativo que já registrou.
   useEffect(() => {
@@ -373,7 +410,9 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
   const conferindo = visiveis.filter((c) => !c.lida).length;
   const ultimoLance = painel?.ultimoLance ?? null;
 
-  const cartaoCompra = ({ compra: c, itens, lida, erro }: CompraNaTela) => {
+  const cartaoCompra = (cn: CompraNaTela) => {
+    const { compra: c, itens, lida, erro } = cn;
+    const modo = c.modalidade === "dispensa" ? "" : modoDa(cn);
     const aberta = abertas.has(c.chave);
     const robo = Object.entries(config).some(([k, v]) => v.ligado && k.startsWith(`${c.chave}:`));
     const emLances = itens.some((i) => EM_DISPUTA.has(i.fase));
@@ -402,7 +441,13 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
               {c.orgao && ` - ${c.orgao}`}
             </strong>
             <span className="chips-compra">
-              {c.modoDisputa && <span className="chip">{c.modoDisputa}</span>}
+              {modo ? (
+                <span className={`chip modo-disputa ${modo}`} title={modo === "aberto-fechado" ? "Quem vai para a etapa fechada: o 1º e quem estiver até 10% acima dele" : undefined}>
+                  {NOMES_MODO[modo]}
+                </span>
+              ) : (
+                c.modoDisputa && <span className="chip">{c.modoDisputa}</span>
+              )}
               {!lida && <span className="chip">Verificando…</span>}
               {emLances && <span className="chip azul">Itens em fase de lances</span>}
               {robo && <span className="chip verde">Robô ligado</span>}
@@ -438,26 +483,48 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
                 // 4 casas: a escolha salva ou, sozinho, quando o edital ou os lances têm mais de 2 casas.
                 const q4 = cfg.quatroCasas || precisaQuatroCasas(i);
                 const restante = i.restanteSeg == null ? null : i.restanteSeg - atraso;
-                const situacao = i.situacao === "G" ? "ganhando" : i.situacao === "E" ? "empatado" : i.situacao === "P" ? "perdendo" : "";
-                const nosso = i.melhorLance != null && i.nossoLance != null && i.melhorLance >= i.nossoLance;
+                // Nosso lance abaixo do "melhor" sem situação: valores em bases diferentes (visto em grupo) — não diz quem está na frente.
+                const incoerente = !i.situacao && i.melhorLance != null && i.nossoLance != null && i.nossoLance < i.melhorLance - 1e-9;
+                // Aberto-fechado sem "Lutar pelo 1º lugar": atrás do 1º, até 5% acima dele, é de propósito (vaga na etapa fechada).
+                const naFaixa =
+                  modo === "aberto-fechado" && !cfg.lutarPrimeiro && i.situacao === "P" && i.melhorLance != null && i.nossoLance != null && i.nossoLance <= i.melhorLance * (1 + FAIXA_FECHADA / 100) + 1e-9;
+                const situacao = naFaixa ? "faixa" : i.situacao === "G" ? "ganhando" : i.situacao === "E" ? "empatado" : i.situacao === "P" ? "perdendo" : "";
+                const nosso = !incoerente && i.melhorLance != null && i.nossoLance != null && i.melhorLance >= i.nossoLance;
                 const msg = painel?.mensagens[k];
                 return (
                   <div key={k} className={`item-disputa ${situacao} ${cfg.ligado ? "robo-ligado" : ""} ${faixaTempo(i.fase, restante)} ${tremendo.has(k) ? "lance-novo" : ""}`}>
                     <div className="item-disputa-titulo">
-                      <strong>
-                        ITEM {i.numero}
-                        {i.descricao && ` - ${i.descricao}`}
-                      </strong>
-                      {situacao && <span className={`selo-situacao ${situacao}`}>{situacao.toUpperCase()}</span>}
+                      {i.numero < 0 ? (
+                        <strong className="titulo-grupo-disputa">
+                          <Layers size={16} /> GRUPO {Math.abs(i.numero)}
+                          {i.descricao && !/^grupo\s*\d+$/i.test(i.descricao.trim()) && ` - ${i.descricao}`}
+                        </strong>
+                      ) : (
+                        <strong>
+                          ITEM {i.numero}
+                          {i.descricao && ` - ${i.descricao}`}
+                        </strong>
+                      )}
+                      {situacao && (
+                        <span className={`selo-situacao ${situacao}`} title={naFaixa ? `Atrás do 1º, até ${FAIXA_FECHADA}% acima dele: vai para a etapa fechada sem mostrar o seu preço` : undefined}>
+                          {naFaixa ? "NA FAIXA DA FECHADA" : situacao.toUpperCase()}
+                        </span>
+                      )}
+                      {incoerente && (
+                        <span className="selo-situacao conferir" title="O nosso lance aparece abaixo do melhor lance: os valores vieram em bases diferentes. O robô não dá lance sozinho aqui.">
+                          CONFERIR VALORES
+                        </span>
+                      )}
                       {i.colocacao && (
                         <span className="selo-colocacao" title="Pela última classificação lida">
                           {i.colocacao.posicao}º de {i.colocacao.total}
                         </span>
                       )}
-                      <button className="botao secundario pequeno botao-classificacao" onClick={() => setClassificacao({ compra: c.chave, item: i.numero, titulo: `Item ${i.numero}${i.descricao ? ` - ${i.descricao}` : ""}` })}>
+                      <button className="botao secundario pequeno botao-classificacao" onClick={() => setClassificacao({ compra: c.chave, item: i.numero, titulo: i.numero < 0 ? `Grupo ${Math.abs(i.numero)}` : `Item ${i.numero}${i.descricao ? ` - ${i.descricao}` : ""}` })}>
                         <ListOrdered size={14} /> Classificação
                       </button>
                     </div>
+                    {i.numero < 0 && <ItensDoGrupo chave={c.chave} grupo={i.numero} automatico={!(robo && emLances)} />}
                     <div className="item-disputa-grade">
                       <label className="campo">
                         <span>lance mínimo (R$)</span>
@@ -524,7 +591,7 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
                       <div className={`valor-disputa melhor-lance ${tremendo.has(k) ? "tremer" : ""}`} key={tremendo.has(k) ? `t${tremendo.get(k)}` : "parado"}>
                         <span>Melhor lance</span>
                         <strong className={nosso ? "texto-verde" : "texto-perigo"}>
-                          {moeda(i.melhorLance, q4)} <em className={`selo-quem ${nosso ? "voce" : ""}`}>{nosso ? "VOCÊ" : "CONCORRENTE"}</em>
+                          {moeda(i.melhorLance, q4)} {!incoerente && <em className={`selo-quem ${nosso ? "voce" : ""}`}>{nosso ? "VOCÊ" : "CONCORRENTE"}</em>}
                         </strong>
                       </div>
                       <div className="valor-disputa">
@@ -567,7 +634,16 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
                           Permitir lances com 4 casas decimais
                         </label>
                       )}
-                      {c.modalidade !== "dispensa" && (
+                      {modo === "aberto-fechado" && (
+                        <label
+                          className="opcao-lutar-primeiro"
+                          title={`Aberto e fechado: vão para a etapa fechada o 1º e quem estiver até 10% acima dele. Desmarcado (padrão), o robô fica ATRÁS do 1º, até ${FAIXA_FECHADA}% acima dele: entra na etapa fechada sem mostrar o seu preço — quem está em 1º acha que já ganhou e tende a dar um lance fechado menos agressivo. Marcado, o robô disputa o 1º lugar até a etapa fechada.`}
+                        >
+                          <input type="checkbox" checked={!!cfg.lutarPrimeiro} onChange={(e) => mudarItem(k, { lutarPrimeiro: e.target.checked })} /> Lutar pelo 1º lugar
+                          {!cfg.lutarPrimeiro && <span className="texto-fraco"> (desmarcado: fica até {FAIXA_FECHADA}% atrás do 1º para ir à etapa fechada sem mostrar o seu preço)</span>}
+                        </label>
+                      )}
+                      {c.modalidade !== "dispensa" && modo !== "aberto-fechado" && (
                         <label title="Em qualquer posição: nos 10 segundos finais o robô dá um lance só do intervalo mínimo abaixo do SEU próprio lance e não cobre os concorrentes. O cronômetro do pregão é prorrogado e a disputa se estende — quem está na frente acha que já ganhou e para de acompanhar. Quando quiser atacar, desmarque: o robô volta a disputar na hora. Para no seu mínimo. (Lances com 4 casas decimais agora são automáticos quando o edital pede.)">
                           <input type="checkbox" checked={!!cfg.ganharTempo} onChange={(e) => mudarItem(k, { ganharTempo: e.target.checked })} /> Ganhar tempo (só o intervalo mínimo sobre o seu lance nos 10 s finais, sem cobrir ninguém — desmarque para atacar)
                         </label>
@@ -1149,5 +1225,81 @@ function JanelaResultados({ resultados, compras, aoFechar }: { resultados: NonNu
         ))}
       </div>
     </Modal>
+  );
+}
+
+interface ItemDoGrupo {
+  numero: number;
+  descricao: string;
+  quantidade: number | null;
+  unidade: string;
+  estimado: number | null;
+}
+
+/**
+ * Itens de dentro de um grupo da disputa: quais são pelo Compras.gov.br (pelo aplicativo, uma vez por compra) e a
+ * descrição, quantidade e valor estimado pelos dados abertos. Com o robô ligado em lances nesta compra só lê quando
+ * a pessoa pede (não disputa a vez com as leituras do robô).
+ */
+function ItensDoGrupo({ chave, grupo, automatico }: { chave: string; grupo: number; automatico: boolean }) {
+  const [aberto, setAberto] = useState(automatico);
+  const [itens, setItens] = useState<ItemDoGrupo[] | null>(null);
+  const [erro, setErro] = useState("");
+  useEffect(() => {
+    if (!aberto || itens) return;
+    let vivo = true;
+    type Oficial = { numeroItemCompra?: number; descricaoResumida?: string; quantidade?: number; unidadeMedida?: string; valorUnitarioEstimado?: number; orcamentoSigiloso?: boolean };
+    Promise.all([gruposDaCompra(chave), api<{ resultado?: Oficial[] }>(`/mercado/itens-compra?chave=${chave}`).catch(() => null)])
+      .then(([grupos, oficiais]) => {
+        if (!vivo) return;
+        const g = grupos.find((x) => x.numero === grupo);
+        if (!g) return setErro("Não consegui ler agora quais itens estão neste grupo.");
+        const porNumero = new Map((oficiais?.resultado ?? []).map((o) => [Number(o.numeroItemCompra), o]));
+        setItens(
+          g.itens.map((n) => {
+            const o = porNumero.get(n);
+            return {
+              numero: n,
+              descricao: o?.descricaoResumida?.trim() ?? "",
+              quantidade: o?.quantidade ?? null,
+              unidade: o?.unidadeMedida ?? "",
+              estimado: o && o.orcamentoSigiloso !== true && o.valorUnitarioEstimado ? o.valorUnitarioEstimado : null,
+            };
+          }),
+        );
+      })
+      .catch(() => vivo && setErro("Não consegui ler agora quais itens estão neste grupo."));
+    return () => {
+      vivo = false;
+    };
+  }, [aberto, chave, grupo, itens]);
+  return (
+    <div className={`itens-grupo-disputa ${aberto ? "aberto" : ""}`}>
+      <button type="button" className="itens-grupo-disputa-topo" onClick={() => setAberto((a) => !a)} aria-expanded={aberto}>
+        <Layers size={14} /> {itens ? `${itens.length} itens neste grupo` : "Itens deste grupo"}
+        <ChevronDown size={14} className="seta" />
+      </button>
+      {aberto &&
+        (erro ? (
+          <p className="texto-fraco pequeno">{erro}</p>
+        ) : !itens ? (
+          <p className="texto-fraco pequeno carregando-linha">
+            <RefreshCw className="girando" size={14} /> Lendo os itens do grupo…
+          </p>
+        ) : (
+          <ul>
+            {itens.map((x) => (
+              <li key={x.numero}>
+                <span className="numero-item-grupo">{x.numero}</span>
+                <span className="descricao-item-grupo">{x.descricao || `Item ${x.numero}`}</span>
+                <span className="texto-fraco pequeno">
+                  {x.quantidade != null && `${x.quantidade.toLocaleString("pt-BR")} ${x.unidade}`.trim()}
+                  {x.estimado != null && ` · estimado ${moeda(x.estimado, false)} un.`}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ))}
+    </div>
   );
 }

@@ -1,8 +1,9 @@
 {
-  "versao": "3.1.46",
+  "versao": "3.1.47",
   "data": "2026-11-16",
   "novidades": [
-    "Robô no modo aberto-fechado: o \"Ganhar tempo\" não dá mais lance na etapa aberta (nesse modo o lance não prorroga o cronômetro); o robô disputa normalmente.",
-    "Itens de grupo: quando os valores não batem (o nosso aparece abaixo do melhor lance), o robô não dá lance sozinho e o diagnóstico mostra os valores como vieram do Compras.gov.br."
+    "Robô no modo aberto e fechado: na etapa aberta ele fica atrás do 1º lugar, até 5% acima dele — entra na etapa fechada sem mostrar o seu preço. A opção \"Lutar pelo 1º lugar\" (no lugar do \"Ganhar tempo\" nesse modo) faz o robô disputar o 1º até a etapa fechada.",
+    "Disputas mostram o modo de cada pregão: \"Disputa aberta\" ou \"Disputa aberta e fechada\".",
+    "Itens de grupo aparecem como GRUPO, com os itens de dentro do grupo (descrição, quantidade e valor estimado)."
   ]
 }
