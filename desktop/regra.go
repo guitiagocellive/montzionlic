@@ -192,6 +192,11 @@ func decidir(e estadoItem, c *configItem) decisao {
 	if e.Situacao == "G" {
 		return decisao{Tipo: "ganhando", Motivo: "Ganhando"}
 	}
+	if e.Situacao == "" && e.Melhor != nil && nosso < *e.Melhor-1e-9 {
+		// O nosso lance abaixo do "melhor lance" não existe numa disputa de menor preço: os dois valores vieram em
+		// bases diferentes (visto em item de grupo). Sem saber quem está na frente, o robô não dá lance.
+		return decisao{Tipo: "conferir-valores", Motivo: "Os valores deste item não batem (o nosso aparece abaixo do melhor lance): o robô não dá lance sozinho aqui"}
+	}
 	if !c.NaoAguardar && e.Fase == "LA" && e.RestanteSeg != nil && *e.RestanteSeg > segundosFinais {
 		return decisao{Tipo: "aguardando-final", Motivo: fmt.Sprintf("Aguardando entrar nos últimos %d segundos para enviar lance", segundosFinais)}
 	}

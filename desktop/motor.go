@@ -48,6 +48,27 @@ type compraMotor struct {
 	erro     string
 	inscrita bool
 	qtdLog   int // última quantidade de itens em disputa registrada no log (para o diagnóstico)
+	// Algum item passou pelo encerramento aleatório ou pela etapa fechada: a compra é do modo aberto-fechado.
+	abertoFechado bool
+}
+
+// ehAbertoFechado: no modo aberto-fechado a etapa aberta dura 15 min + encerramento aleatório e lance NÃO prorroga
+// o cronômetro (o "ganhar tempo" só gastaria lance). Reconhece pelo modo de disputa da lista, quando vem, ou por já
+// ter visto um item da compra no encerramento aleatório (AL) ou na etapa fechada (AF/LF).
+func (c *compraMotor) ehAbertoFechado() bool {
+	if c == nil {
+		return false
+	}
+	if c.abertoFechado {
+		return true
+	}
+	for _, k := range []string{"descricaoModoDisputa", "modoDisputa", "nomeModoDisputa"} {
+		t := strings.ToLower(textoDe(c.info[k]))
+		if i, j := strings.Index(t, "aberto"), strings.Index(t, "fechado"); i >= 0 && j > i {
+			return true
+		}
+	}
+	return false
 }
 
 type registroLance struct {
@@ -667,6 +688,9 @@ func (m *motor) mesclar(c *compraMotor, novo map[string]any, agora time.Time) st
 	if fasesDeLance[faseAntes] || fasesDeLance[faseAgora] {
 		it.teveLances = true
 	}
+	if faseAgora == "AL" || faseAgora == "AF" || faseAgora == "LF" {
+		c.abertoFechado = true
+	}
 	if faseAgora == "E" && faseAntes != "E" && it.teveLances {
 		m.fimDaDisputa(c.chave, int(*n))
 	}
@@ -1269,6 +1293,10 @@ func (m *motor) avaliar(k string) {
 	e.PassosExtraGanharTempo = m.passosGT[k]
 	if ehDispensa(compra) {
 		cfg.GanharTempo = false // na dispensa o período de lances não é prorrogado: ganhar tempo só baixaria o preço
+	}
+	if cfg.GanharTempo && c.ehAbertoFechado() {
+		// Aberto-fechado: lance não prorroga a etapa aberta; o robô disputa normalmente.
+		cfg.GanharTempo = false
 	}
 	d := decidir(e, &cfg)
 	marcarDecisao(k, d)

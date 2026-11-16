@@ -208,6 +208,10 @@ Não existe cadastro público: só um administrador adiciona pessoas.
     de melhores lances da sala (`lances/por-participante`, mantida em dia a cada 2 s quando faltam até 45 s):
     cobre por 1 centavo o concorrente mais barato que ainda está acima do mínimo (ex.: 1º 500, 2º 800, nós 1.000,
     mínimo 700 → 799,99). O mínimo é só o limite: **nunca vai direto ao mínimo** sem saber a classificação.
+  - **Aberto-fechado (3.1.46):** a compra é reconhecida pelo modo de disputa da lista ou por um item no
+    encerramento aleatório (AL) ou na etapa fechada (AF/LF); nesse modo o "Ganhar tempo" fica desligado (lance não
+    prorroga a etapa aberta). **Valores que não batem** (nosso abaixo do melhor, sem situação — visto em item de
+    grupo): o robô não dá lance (`conferir-valores`) e o diagnóstico mostra os campos de valor como vieram.
 - **Datas** sempre pelo calendário da plataforma (`components/Calendario.tsx`): data única ou período início–fim
   com atalhos; o campo `Campo type="date"` já usa o calendário.
 - **Fornecedores** por nicho, com WhatsApp, site e catálogo.

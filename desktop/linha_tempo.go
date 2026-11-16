@@ -8,6 +8,7 @@ package main
 // a classificação, o pedido ao Compras.gov.br ou a própria regra (ex.: aguardando os 10 s finais).
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"sort"
@@ -303,6 +304,14 @@ func (m *motor) estadoRoboTexto() string {
 			if !it.atualizadoEm.IsZero() {
 				t += fmt.Sprintf(", dados de %.1f s atrás", agora.Sub(it.atualizadoEm).Seconds())
 			}
+			if c.ehAbertoFechado() {
+				t += ", aberto-fechado"
+			}
+			// Grupo, ou valores que não batem (nosso abaixo do melhor): mostra os campos de valor como vieram, para
+			// saber em que base o Compras.gov.br manda cada um.
+			if n < 0 || (e.Situacao == "" && e.Melhor != nil && e.Nosso != nil && *e.Nosso < *e.Melhor-1e-9) {
+				t += " | valores como vieram: " + camposDeValor(it.bruto)
+			}
 			if temCfg {
 				tipo := "%"
 				if cfg.TipoDesconto == "V" {
@@ -331,4 +340,33 @@ func (m *motor) estadoRoboTexto() string {
 		b.WriteString(l + "\n")
 	}
 	return b.String()
+}
+
+// camposDeValor: só os campos de valor/quantidade do item (sem nome de empresa nem identificação), em JSON curto.
+func camposDeValor(b map[string]any) string {
+	var partes []string
+	chaves := make([]string, 0, len(b))
+	for k := range b {
+		chaves = append(chaves, k)
+	}
+	sort.Strings(chaves)
+	for _, k := range chaves {
+		l := strings.ToLower(k)
+		if !strings.Contains(l, "valor") && !strings.Contains(l, "quantidade") && !strings.Contains(l, "grupo") && !strings.Contains(l, "criterio") && !strings.Contains(l, "tipo") {
+			continue
+		}
+		j, err := json.Marshal(b[k])
+		if err != nil {
+			continue
+		}
+		v := string(j)
+		if len(v) > 200 {
+			v = v[:200] + "…"
+		}
+		partes = append(partes, k+"="+v)
+	}
+	if len(partes) == 0 {
+		return "(nenhum)"
+	}
+	return strings.Join(partes, " ")
 }

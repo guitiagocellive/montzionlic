@@ -1,8 +1,8 @@
 {
-  "versao": "3.1.45",
+  "versao": "3.1.46",
   "data": "2026-11-16",
   "novidades": [
-    "Propostas já cadastradas aparecem certas: a plataforma passa a ler os itens como a tela \"Cadastrar propostas\" do Compras.gov.br, com o seu valor, a quantidade, a marca e o modelo de cada item (antes um item cadastrado podia aparecer como \"Proposta não cadastrada\").",
-    "Licitações de grupo: os itens aparecem dentro do grupo no cadastro, em Cadastradas e na busca de licitações."
+    "Robô no modo aberto-fechado: o \"Ganhar tempo\" não dá mais lance na etapa aberta (nesse modo o lance não prorroga o cronômetro); o robô disputa normalmente.",
+    "Itens de grupo: quando os valores não batem (o nosso aparece abaixo do melhor lance), o robô não dá lance sozinho e o diagnóstico mostra os valores como vieram do Compras.gov.br."
   ]
 }

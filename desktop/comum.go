@@ -10,7 +10,7 @@ import (
 
 const (
 	nomeApp = "Montzion"
-	versao  = "3.1.45"
+	versao  = "3.1.46"
 )
 
 func pastaInstalacao() string {

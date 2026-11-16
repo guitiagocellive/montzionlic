@@ -350,3 +350,36 @@ func TestFimDaDisputaPassandoPorAguardandoEncerramento(t *testing.T) {
 		t.Fatal("item que já chegou encerrado não é fim de disputa acompanhada")
 	}
 }
+
+func TestAbertoFechadoSemGanharTempo(t *testing.T) {
+	// Diagnóstico de 16/11: no aberto-fechado o "ganhar tempo" deu R$ 499,99 no fim da etapa aberta e a compra foi
+	// para o encerramento aleatório do mesmo jeito (lance não prorroga). Reconhece o modo e não gasta lance.
+	c := &compraMotor{chave: "08000106002312026", itens: map[int]*itemMotor{}, info: map[string]any{}}
+	if c.ehAbertoFechado() {
+		t.Fatal("sem sinal nenhum não é aberto-fechado")
+	}
+	m := &motor{}
+	m.mesclar(c, map[string]any{"numero": 22.0, "fase": "AL"}, time.Now())
+	if !c.ehAbertoFechado() {
+		t.Error("um item no encerramento aleatório (AL) marca a compra como aberto-fechado")
+	}
+	c2 := &compraMotor{info: map[string]any{"descricaoModoDisputa": "Aberto e Fechado"}}
+	c3 := &compraMotor{info: map[string]any{"descricaoModoDisputa": "Fechado e Aberto"}}
+	c4 := &compraMotor{info: map[string]any{"descricaoModoDisputa": "Aberto"}}
+	if !c2.ehAbertoFechado() || c3.ehAbertoFechado() || c4.ehAbertoFechado() {
+		t.Error("modo pela lista: só \"Aberto e Fechado\"")
+	}
+}
+
+func TestValoresQueNaoBatem(t *testing.T) {
+	// Item de grupo do diagnóstico: melhor R$ 25.573,20, nosso R$ 9.631,80, situação vazia — bases diferentes.
+	cfg := &configItem{Ligado: true, Minimo: f(5000), NaoAguardar: true}
+	e := estadoItem{Numero: -1, Fase: "LA", RestanteSeg: f(5), Melhor: f(25573.2), Nosso: f(9631.8), Concorrentes: []float64{25573.2, 30000}}
+	if d := decidir(e, cfg); d.Enviar || d.Tipo != "conferir-valores" {
+		t.Errorf("valores que não batem: não dá lance, veio %+v", d)
+	}
+	e.Situacao = "G"
+	if d := decidir(e, cfg); d.Tipo != "ganhando" {
+		t.Errorf("com a situação do Compras (G) vale a situação: %+v", d)
+	}
+}

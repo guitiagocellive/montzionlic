@@ -73,7 +73,7 @@ export function precisaQuatroCasas(estado: Pick<EstadoItem, "variacaoMinima" | "
 
 export type TipoDecisao =
   | "desligado" | "sem-minimo" | "aguardando-fase" | "ganhando" | "aguardando-final" | "lance" | "colocacao"
-  | "melhor-possivel" | "precisa-classificacao" | "no-minimo" | "fechada" | "fechada-manual" | "sem-proposta" | "ganhar-tempo" | "ganhar-tempo-aguardando" | "ganhar-tempo-minimo";
+  | "melhor-possivel" | "precisa-classificacao" | "no-minimo" | "fechada" | "fechada-manual" | "sem-proposta" | "ganhar-tempo" | "ganhar-tempo-aguardando" | "ganhar-tempo-minimo" | "conferir-valores";
 
 export interface Decisao {
   acao: "aguardar" | "enviar";
@@ -133,6 +133,9 @@ export function decidir(estado: EstadoItem, item: ConfigItemRobo | undefined): D
   }
 
   if (estado.situacao === "G") return { acao: "aguardar", tipo: "ganhando", motivo: "Ganhando" };
+  // Nosso lance abaixo do "melhor" não existe em disputa de menor preço: valores em bases diferentes (item de grupo).
+  if (!estado.situacao && estado.melhorLance != null && estado.nossoLance < estado.melhorLance - 1e-9)
+    return { acao: "aguardar", tipo: "conferir-valores", motivo: "Os valores deste item não batem (o nosso aparece abaixo do melhor lance): o robô não dá lance sozinho aqui" };
 
   // Espera os 10 segundos finais (no encerramento aleatório não há cronômetro: qualquer segundo pode ser o último).
   if (!item.naoAguardar && estado.fase === "LA" && estado.restanteSeg != null && estado.restanteSeg > SEGUNDOS_FINAIS) {
