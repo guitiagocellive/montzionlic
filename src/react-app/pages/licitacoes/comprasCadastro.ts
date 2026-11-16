@@ -1,8 +1,8 @@
 // Cadastro de proposta no Compras.gov.br: o que é comum à janela de cadastro, à busca por número/UASG e ao
 // cadastro com um clique do quadro. Tudo vai pelo aplicativo, com a sessão do gov.br da pessoa.
 
-import { buscarLicitacoes, FILTROS_PADRAO, type ResultadoPncp } from "../../pncp";
-import { mensagemDeErro } from "../../api";
+import { buscarLicitacoes, FILTROS_PADRAO, listarItens, type ResultadoPncp } from "../../pncp";
+import { api, mensagemDeErro } from "../../api";
 import { pedir } from "./ItemCompras";
 
 export const FE = "/comprasnet-fase-externa";
@@ -71,6 +71,8 @@ export interface ItemProposta {
   grupoDe: number | null;
   /** No cabeçalho do grupo: o nome dele ("Grupo 1"). */
   nomeGrupo: string;
+  /** A quantidade veio na lista do próprio Compras (e não completada pelos dados da licitação). */
+  quantidadeDaLista?: boolean;
   /** Mesmo número de referencia.valor (null quando sigiloso ou não informado). */
   valorEstimado: number | null;
   referencia: Referencia;
@@ -90,7 +92,9 @@ export function lerItem(b: unknown, srp: boolean): ItemProposta | null {
   const valores = obj(p.valores);
   const trat = txt(x.tipoTratamentoDiferenciadoMeEpp);
   // Igual à tela oficial: sigiloso até homologar; sem valor = "Não informado".
-  const cabecaGrupo = x.isGrupo === true && x.isSubItem !== true;
+  // Grupo: o Compras marca com isGrupo; algumas listas só mandam o número negativo (-1, -8...), que é sempre grupo.
+  const ehGrupo = x.isGrupo === true || n < 0;
+  const cabecaGrupo = ehGrupo && x.isSubItem !== true;
   // O grupo mostra o valor estimado TOTAL (como a tela oficial: "Valor estimado (total)").
   const porValorTotal = cabecaGrupo || x.disputaPorValorUnitario === false;
   const ref = valorDe(porValorTotal ? x.valorEstimadoTotal : (x.valorEstimadoUnitario ?? x.valorEstimado ?? x.valorUnitarioEstimado));
@@ -106,15 +110,16 @@ export function lerItem(b: unknown, srp: boolean): ItemProposta | null {
     descricaoDetalhada: txt(x.descricaoDetalhada ?? obj(x.detalhamento).descricaoDetalhada),
     quantidade: num(x.quantidadeSolicitada ?? obj(x.detalhamento).quantidadeSolicitada ?? x.quantidade ?? x.quantidadeTotal ?? x.quantidadeItem),
     unidade: txt(x.unidadeFornecimento ?? x.unidadeMedida ?? x.unidade),
+    quantidadeDaLista: num(x.quantidadeSolicitada ?? obj(x.detalhamento).quantidadeSolicitada ?? x.quantidade ?? x.quantidadeTotal ?? x.quantidadeItem) != null,
     desconto,
     material: txt(x.tipoItemCatalogo) !== "S",
     exclusivoMeEpp: trat === "1" || x.participacaoExclusivaMeEppOuEquiparadas === true,
     srp,
     margem: x.utilizaMargemPreferencia === true,
     anexoObrigatorio: x.isObrigatorioEnvioAnexo === true,
-    grupo: x.isGrupo === true && x.isSubItem !== true,
+    grupo: cabecaGrupo,
     grupoDe: null,
-    nomeGrupo: x.isGrupo === true ? txt(x.descricao) || `Grupo ${Math.abs(n)}` : "",
+    nomeGrupo: ehGrupo ? txt(x.descricao) || `Grupo ${Math.abs(n)}` : "",
     valorEstimado: referencia.valor,
     referencia,
     porValorTotal,
@@ -155,6 +160,41 @@ export interface CompraCarregada {
   /** O Compras.gov.br só mostra os itens depois de aceitar as declarações. */
   itensBloqueados: boolean;
   cnpj: string;
+  /**
+   * Os itens vieram da lista geral (sem a sua proposta nem a quantidade): aplicativo antigo, que ainda não lê a
+   * lista da tela "Cadastrar propostas". A tela pede para atualizar em vez de dizer "Proposta não cadastrada".
+   */
+  semPropostas: boolean;
+}
+
+const AGUARDANDO = "/itens/aguardando-abertura-sessao-publica";
+
+/**
+ * Lê todas as páginas de uma lista do Compras (pede nos dois formatos de página que as telas oficiais usam). O
+ * Compras às vezes ignora o tamanho pedido e devolve de 20 em 20: por isso só para quando o cabeçalho diz que
+ * acabou, quando a página vem vazia, menor que a primeira, ou repetida (servidor que ignora o número da página).
+ */
+async function todasAsPaginas(caminho: string, captcha: boolean, porPagina: number, extra = ""): Promise<unknown[]> {
+  const todos: unknown[] = [];
+  const vistos = new Set<string>();
+  let primeira = 0;
+  for (let pagina = 0; pagina < 40; pagina++) {
+    const r = await pedir({ caminho, captcha, query: `${extra}tamanhoPagina=${porPagina}&pagina=${pagina}&size=${porPagina}&page=${pagina}` });
+    const l = lista(r.dados);
+    const chaves = l.map((b) => JSON.stringify([obj(b).numero, obj(b).isSubItem]));
+    if (!l.length || chaves.every((k) => vistos.has(k))) break;
+    chaves.forEach((k) => vistos.add(k));
+    todos.push(...l);
+    if (!pagina) primeira = l.length;
+    const paginas = Number(r.cabecalhos?.["pages-count"] ?? 0);
+    const totalReg = Number(r.cabecalhos?.["register-count"] ?? 0);
+    if (paginas) {
+      if (pagina + 1 >= paginas) break;
+    } else if (totalReg) {
+      if (todos.length >= totalReg) break;
+    } else if (pagina > 0 && l.length < primeira) break; // sem cabeçalho: página menor que a primeira é a última
+  }
+  return todos;
 }
 
 export async function carregarCompra(chave: string): Promise<CompraCarregada> {
@@ -170,19 +210,27 @@ export async function carregarCompra(chave: string): Promise<CompraCarregada> {
   );
   const c: Bruto = { ...obj(p.compra), ...daCompra };
   if (!Object.keys(c).length && erroParticipacao) throw erroParticipacao;
-  const todos: unknown[] = [];
+  let todos: unknown[] = [];
   let itensBloqueados = false;
+  // Como a tela "Cadastrar propostas": a lista "aguardando abertura da sessão" traz cada item com a sua proposta.
+  // Se ela não responder (aplicativo antigo, ou a compra já passou dessa fase), usa a lista geral de itens.
+  let semPropostas = false;
+  let aguardando = true;
   try {
-    for (let pagina = 0; pagina < 10; pagina++) {
-      const r = await pedir({ caminho: `${FE}/v1/compras/${chave}/itens`, captcha: true, query: `situacoes=1,2,3,4,5,6,7,8,9,13,14&pagina=${pagina}&tamanhoPagina=50` });
-      const l = lista(r.dados);
-      todos.push(...l);
-      const paginas = Number(r.cabecalhos?.["pages-count"] ?? 0);
-      if (l.length < 50 || (paginas && pagina + 1 >= paginas)) break;
-    }
+    todos = await todasAsPaginas(`${FE}/v1/compras/${chave}${AGUARDANDO}`, true, 50);
+    if (!todos.length) aguardando = false;
   } catch (e) {
-    if (p.isFornecedorParticipante === true || !/vinculad|participante/i.test(mensagemDeErro(e))) throw e;
-    itensBloqueados = true;
+    aguardando = false;
+    semPropostas = /consulta não permitida/i.test(mensagemDeErro(e));
+  }
+  if (!aguardando) {
+    try {
+      todos = await todasAsPaginas(`${FE}/v1/compras/${chave}/itens`, true, 50, "situacoes=1,2,3,4,5,6,7,8,9,13,14&");
+    } catch (e) {
+      if (p.isFornecedorParticipante === true || !/vinculad|participante/i.test(mensagemDeErro(e))) throw e;
+      itensBloqueados = true;
+      semPropostas = false;
+    }
   }
   const srp = c.comCaracteristicaSRP === true;
   // Textos das declarações: os que vêm na compra ou os do fundamento legal dela.
@@ -198,23 +246,25 @@ export async function carregarCompra(chave: string): Promise<CompraCarregada> {
     const it = lerItem(b, srp);
     if (!it) continue;
     itens.push(it);
-    if (it.grupo) itens.push(...(await itensDoGrupo(chave, it.numero, srp)));
+    if (it.grupo) itens.push(...(await itensDoGrupo(chave, it.numero, srp, aguardando)));
   }
-  return { compra: c, participacao: p, itens, declaracoes: textos, itensBloqueados, cnpj };
+  await completarPelaLicitacao(chave, itens);
+  return { compra: c, participacao: p, itens, declaracoes: textos, itensBloqueados, cnpj, semPropostas };
 }
 
 /** Itens de dentro do grupo (a proposta do grupo é a soma das propostas deles). */
-export async function itensDoGrupo(chave: string, grupo: number, srp: boolean): Promise<ItemProposta[]> {
+export async function itensDoGrupo(chave: string, grupo: number, srp: boolean, aguardando = false): Promise<ItemProposta[]> {
   const brutos: unknown[] = [];
-  for (let pagina = 0; pagina < 10; pagina++) {
-    const query = `tamanhoPagina=100&pagina=${pagina}&size=100&page=${pagina}`;
-    const caminho = `${FE}/v1/compras/${chave}/itens/${grupo}/itens-grupo`;
-    let r = await pedir({ caminho, query }).catch(() => null);
-    if (!r || !lista(r.dados).length) r = await pedir({ caminho, query, captcha: true }).catch(() => null);
-    const l = r ? lista(r.dados) : [];
+  if (aguardando) {
+    // Na fase de cadastro, como a tela oficial: os itens do grupo já com a sua proposta.
+    const l = await todasAsPaginas(`${FE}/v1/compras/${chave}${AGUARDANDO}/${grupo}/itens-grupo`, false, 100).catch(() => [] as unknown[]);
     brutos.push(...l);
-    const paginas = Number(r?.cabecalhos?.["pages-count"] ?? 0);
-    if (l.length < 100 || !paginas || pagina + 1 >= paginas) break;
+  }
+  if (!brutos.length) {
+    const caminho = `${FE}/v1/compras/${chave}/itens/${grupo}/itens-grupo`;
+    let l = await todasAsPaginas(caminho, false, 100).catch(() => [] as unknown[]);
+    if (!l.length) l = await todasAsPaginas(caminho, true, 100).catch(() => [] as unknown[]);
+    brutos.push(...l);
   }
   return brutos
     .map((b) => lerItem(b, srp))
@@ -466,4 +516,128 @@ export async function buscarCompras(numeroTexto: string, uasgTexto: string, comC
   if (!achadas.size && falha) throw falha;
   // Mais recentes primeiro.
   return [...achadas.values()].sort((a, b) => b.chave.slice(13).localeCompare(a.chave.slice(13)) || a.chave.localeCompare(b.chave));
+}
+
+// ---------------- Quantidade e valor de referência pela própria licitação ----------------
+
+/**
+ * Algumas listas do Compras.gov.br vêm sem a quantidade e sem o valor estimado de cada item. Completa pelos dados
+ * oficiais da própria licitação (dados abertos do Compras, os mesmos números do edital/PNCP): a quantidade
+ * prevista, a unidade e o valor unitário de referência (só quando o orçamento não é sigiloso). Não troca o que o
+ * Compras já mandou; se a consulta falhar ou demorar, segue sem.
+ */
+async function completarPelaLicitacao(chave: string, itens: ItemProposta[]) {
+  const faltando = itens.filter((i) => !i.grupo && (i.quantidade == null || i.referencia.tipo !== "valor" || !i.unidade));
+  if (!faltando.length) return;
+  type Oficial = { numeroItemCompra?: number; numeroItemPncp?: number; quantidade?: number; valorUnitarioEstimado?: number; orcamentoSigiloso?: boolean; unidadeMedida?: string };
+  const r = await Promise.race([
+    api<{ resultado?: Oficial[] }>(`/mercado/itens-compra?chave=${chave}`).catch(() => null),
+    new Promise<null>((ok) => setTimeout(() => ok(null), 15000)),
+  ]);
+  const porNumero = new Map<number, Oficial>();
+  for (const o of r?.resultado ?? []) {
+    const n = num(o.numeroItemCompra ?? o.numeroItemPncp);
+    if (n != null) porNumero.set(n, o);
+  }
+  // Licitação recém-publicada (ainda fora dos dados abertos): os itens dela no PNCP.
+  if (!porNumero.size) {
+    const doPncp = await Promise.race([itensNoPncp(chave).catch(() => []), new Promise<Oficial[]>((ok) => setTimeout(() => ok([]), 15000))]);
+    for (const o of doPncp) porNumero.set(o.numeroItemCompra!, o);
+  }
+  for (const it of faltando) {
+    const o = porNumero.get(it.numero);
+    if (!o) continue;
+    if (it.quantidade == null && num(o.quantidade)) it.quantidade = num(o.quantidade);
+    if (!it.unidade && o.unidadeMedida) it.unidade = txt(o.unidadeMedida);
+    const v = num(o.valorUnitarioEstimado);
+    if (it.referencia.tipo !== "valor" && o.orcamentoSigiloso !== true && v != null && v > 0 && !it.desconto) {
+      const valor = it.porValorTotal && it.quantidade ? v * it.quantidade : v;
+      it.referencia = { tipo: "valor", valor };
+      it.valorEstimado = valor;
+    }
+  }
+}
+
+/** Itens da mesma compra no PNCP (acha a compra pelo número e pela UASG da chave). */
+async function itensNoPncp(chave: string) {
+  const uasg = chave.slice(0, 6).replace(/^0+(?=\d)/, "");
+  const numero = String(Number(chave.slice(8, 13)));
+  const ano = chave.slice(13);
+  const busca = await buscarLicitacoes({ ...FILTROS_PADRAO, modalidades: [], situacao: "todas", numero: `${numero}/${ano}`, uasg }, 1, 20);
+  const r = busca.itens.find((x) => daBusca(x)?.chave === chave);
+  if (!r) return [];
+  return (await listarItens(r)).map((i) => ({
+    numeroItemCompra: Number(i.numero),
+    quantidade: i.quantidade ?? undefined,
+    valorUnitarioEstimado: i.valorUnitario ?? undefined,
+    unidadeMedida: i.unidade ?? undefined,
+  }));
+}
+
+// ---------------- Grupos da compra (para organizar os itens na busca) ----------------
+
+export interface GrupoCompra {
+  numero: number;
+  nome: string;
+  /** Números dos itens de dentro do grupo (os mesmos números do PNCP). */
+  itens: number[];
+  valorEstimado: number | null;
+}
+
+const cacheGrupos = new Map<string, Promise<GrupoCompra[]>>();
+
+/**
+ * Grupos da compra no Compras.gov.br (o PNCP não diz quais itens são de grupo). Pelo aplicativo: a lista da tela
+ * de cadastro (logada ou pública) e, se ela não vier, a lista pública de itens; depois os itens de cada grupo.
+ * Sem grupo (ou sem conseguir ler) devolve lista vazia — a tela mostra os itens soltos, como antes.
+ */
+export function gruposDaCompra(chave: string): Promise<GrupoCompra[]> {
+  let p = cacheGrupos.get(chave);
+  if (!p) {
+    p = lerGrupos(chave).catch(() => []);
+    cacheGrupos.set(chave, p);
+  }
+  return p;
+}
+
+async function lerGrupos(chave: string): Promise<GrupoCompra[]> {
+  const situacoes = "situacoes=1,2,3,4,5,6,7,8,9,13,14&";
+  const fontes = [
+    { caminho: `${FE}/v1/compras/${chave}${AGUARDANDO}`, extra: "" },
+    { caminho: `${FE}/public/v1/compras/${chave}${AGUARDANDO}`, extra: "" },
+    { caminho: `${FE}/public/v1/compras/${chave}/itens`, extra: situacoes },
+    { caminho: `${FE}/v1/compras/${chave}/itens`, extra: situacoes },
+  ];
+  let brutos: unknown[] = [];
+  let fonte = fontes[0];
+  for (const f of fontes) {
+    const l = await todasAsPaginas(f.caminho, true, 100, f.extra).catch(() => [] as unknown[]);
+    if (l.length) {
+      brutos = l;
+      fonte = f;
+      break;
+    }
+  }
+  const cabecas = brutos.map(obj).filter((x) => {
+    const n = num(x.numero);
+    return n != null && (n < 0 || x.isGrupo === true) && x.isSubItem !== true;
+  });
+  const grupos: GrupoCompra[] = [];
+  for (const g of cabecas) {
+    const n = num(g.numero)!;
+    const publica = fonte.caminho.includes("/public/");
+    const caminhos = [
+      ...(fonte.caminho.endsWith(AGUARDANDO) ? [`${fonte.caminho}/${n}/itens-grupo`] : []),
+      `${FE}${publica ? "/public" : ""}/v1/compras/${chave}/itens/${n}/itens-grupo`,
+    ];
+    let sub: unknown[] = [];
+    for (const c of caminhos) {
+      sub = await todasAsPaginas(c, publica, 100).catch(() => [] as unknown[]);
+      if (!sub.length) sub = await todasAsPaginas(c, true, 100).catch(() => [] as unknown[]);
+      if (sub.length) break;
+    }
+    const itens = sub.map((b) => num(obj(b).numero)).filter((x): x is number => x != null && x > 0 && x !== n);
+    if (itens.length) grupos.push({ numero: n, nome: txt(g.descricao) || `Grupo ${Math.abs(n)}`, itens, valorEstimado: valorDe(g.valorEstimadoTotal) });
+  }
+  return grupos;
 }

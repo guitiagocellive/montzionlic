@@ -1,8 +1,8 @@
 {
-  "versao": "3.1.44",
-  "data": "2026-11-14",
+  "versao": "3.1.45",
+  "data": "2026-11-16",
   "novidades": [
-    "Links compartilhados abrem no aplicativo: ao clicar no link de uma licitação (WhatsApp, e-mail), o navegador oferece \"Abrir no aplicativo Montzion\" e o aplicativo abre direto na licitação. Se o Montzion já estiver aberto, a janela vai para a licitação e aparece na frente.",
-    "Na primeira vez, o navegador pergunta se pode abrir o Montzion: marque \"Sempre permitir\" para as próximas abrirem direto. Dá para mudar a escolha em Configurações → Aplicativo → Links compartilhados."
+    "Propostas já cadastradas aparecem certas: a plataforma passa a ler os itens como a tela \"Cadastrar propostas\" do Compras.gov.br, com o seu valor, a quantidade, a marca e o modelo de cada item (antes um item cadastrado podia aparecer como \"Proposta não cadastrada\").",
+    "Licitações de grupo: os itens aparecem dentro do grupo no cadastro, em Cadastradas e na busca de licitações."
   ]
 }

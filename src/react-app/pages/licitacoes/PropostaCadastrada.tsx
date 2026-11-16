@@ -111,7 +111,9 @@ function Conteudo({ chave, nome, dados, cnpj, recarregar }: { chave: string; nom
 
   const participando = participacao.isFornecedorParticipante === true;
   const encerrado = prazoEncerrado(compra);
-  const liberado = participando && !encerrado;
+  // Aplicativo antigo: a lista de itens veio sem as suas propostas. Mostra o aviso e não deixa cadastrar por cima.
+  const semLeitura = dados.semPropostas;
+  const liberado = participando && !encerrado && !semLeitura;
   const fim = txt(compra.dataHoraFimPropostas);
   const endereco = enderecoDoFornecedor(participacao);
   const orgao = [txt(compra.numeroUasg) || chave.slice(0, 6).replace(/^0+/, ""), txt(compra.nomeUasg)].filter(Boolean).join(" - ");
@@ -150,6 +152,28 @@ function Conteudo({ chave, nome, dados, cnpj, recarregar }: { chave: string; nom
     setMudadas((m) => new Map(m).set(it.numero, null));
     recarregar();
   };
+  // Lixeira: com a proposta lida, só nos itens que têm proposta; sem a leitura (aplicativo antigo), em todos.
+  const podeApagar = participando && !encerrado;
+
+  /** Lixeira do grupo: apaga a proposta de todos os itens dele (o Compras só aceita o grupo completo). */
+  async function excluirGrupo(grupo: ItemProposta, doGrupo: ItemProposta[]) {
+    const alvo = doGrupo.filter((i) => semLeitura || i.proposta);
+    if (!alvo.length || !window.confirm(`Excluir a proposta do ${grupo.nomeGrupo} (${alvo.length} ${alvo.length === 1 ? "item" : "itens"}) no Compras.gov.br?`)) return;
+    let apagados = 0;
+    let erro = "";
+    for (const it of alvo) {
+      try {
+        await pedir({ metodo: "DELETE", caminho: `${FE}/v1/compras/${chave}/itens/${it.numero}/participacao` });
+        apagados++;
+        setMudadas((m) => new Map(m).set(it.numero, null));
+      } catch (e) {
+        erro = mensagemDeErro(e);
+      }
+    }
+    if (apagados) avisar(`Proposta do ${grupo.nomeGrupo} excluída (${apagados} ${apagados === 1 ? "item" : "itens"}).`);
+    if (erro) avisar(`${apagados ? "Alguns itens não foram excluídos" : "Não consegui excluir"}: ${erro}`, "erro");
+    recarregar();
+  }
 
   const linha = (it: ItemProposta) => (
     <ItemComoCompras
@@ -159,6 +183,8 @@ function Conteudo({ chave, nome, dados, cnpj, recarregar }: { chave: string; nom
       item={it}
       sugestao={doQuadro?.get(it.numero) ?? null}
       liberado={liberado}
+      podeApagar={podeApagar && (semLeitura || !!it.proposta)}
+      semLeitura={semLeitura}
       aberto={abertos.has(it.numero)}
       aoAlternar={() => alternar(it.numero)}
       aoEnviado={enviado}
@@ -266,11 +292,19 @@ function Conteudo({ chave, nome, dados, cnpj, recarregar }: { chave: string; nom
       <section className="cp-itens">
         <div className="cp-itens-topo">
           <h3>Itens</h3>
-          <span className={`chip ${comProposta.length === simples.length && simples.length ? "verde" : "amarelo"}`}>
-            {comProposta.length} de {simples.length} com proposta
-          </span>
+          {!semLeitura && (
+            <span className={`chip ${comProposta.length === simples.length && simples.length ? "verde" : "amarelo"}`}>
+              {comProposta.length} de {simples.length} com proposta
+            </span>
+          )}
           {total > 0 && <strong>{formatarMoeda(total)}</strong>}
         </div>
+        {semLeitura && (
+          <p className="alerta aviso">
+            O aplicativo Montzion deste computador ainda não lê as propostas já cadastradas no Compras.gov.br. Atualize para a versão 3.1.45 (Configurações → Aplicativo →
+            Verificar atualização) para ver o seu valor, a marca e o modelo de cada item e poder alterar por aqui.
+          </p>
+        )}
         {!participando && <p className="alerta aviso">Aceite as declarações para o Compras.gov.br liberar os itens.</p>}
         {itens.length === 0 && participando && <p className="texto-fraco">O Compras.gov.br não devolveu os itens desta compra agora.</p>}
         <ul className="cp-lista">
@@ -278,7 +312,11 @@ function Conteudo({ chave, nome, dados, cnpj, recarregar }: { chave: string; nom
             .filter((i) => i.grupoDe == null)
             .map((it) =>
               it.grupo ? (
-                <GrupoComoCompras key={`g${it.numero}`} grupo={it} itens={itens.filter((x) => x.grupoDe === it.numero)} aberto={abertos.has(it.numero)} aoAlternar={() => alternar(it.numero)}>
+                <GrupoComoCompras
+                  key={`g${it.numero}`}
+                  semLeitura={semLeitura}
+                  aoExcluir={podeApagar && (semLeitura || itens.some((x) => x.grupoDe === it.numero && x.proposta)) ? () => excluirGrupo(it, itens.filter((x) => x.grupoDe === it.numero)) : undefined}
+                  grupo={it} itens={itens.filter((x) => x.grupoDe === it.numero)} aberto={abertos.has(it.numero)} aoAlternar={() => alternar(it.numero)}>
                   {itens.filter((x) => x.grupoDe === it.numero).map(linha)}
                 </GrupoComoCompras>
               ) : (
@@ -317,19 +355,35 @@ function situacaoGrupo(itens: ItemProposta[]) {
   return { texto: "Proposta não cadastrada", classe: "falta" };
 }
 
-function GrupoComoCompras({ grupo, itens, aberto, aoAlternar, children }: { grupo: ItemProposta; itens: ItemProposta[]; aberto: boolean; aoAlternar: () => void; children: React.ReactNode }) {
-  const sit = situacaoGrupo(itens);
+function GrupoComoCompras({
+  grupo,
+  itens,
+  aberto,
+  semLeitura,
+  aoExcluir,
+  aoAlternar,
+  children,
+}: {
+  grupo: ItemProposta;
+  itens: ItemProposta[];
+  aberto: boolean;
+  semLeitura: boolean;
+  aoExcluir?: () => void;
+  aoAlternar: () => void;
+  children: React.ReactNode;
+}) {
+  const sit = semLeitura ? { texto: "Atualize o aplicativo para ver a proposta", classe: "" } : situacaoGrupo(itens);
   const meu = itens.every((i) => i.proposta && !i.desconto)
     ? itens.reduce((s, i) => s + (i.proposta?.valor ?? 0) * (i.porValorTotal ? 1 : (i.proposta?.quantidade ?? i.quantidade ?? 0)), 0)
     : null;
   return (
     <li className={`cp-grupo ${aberto ? "aberto" : ""}`}>
-      <button className="cp-cabeca cp-cabeca-grupo" onClick={aoAlternar} aria-expanded={aberto}>
-        <span className="cp-nome">
+      <div className="cp-cabeca cp-cabeca-grupo">
+        <button className="cp-nome" onClick={aoAlternar} aria-expanded={aberto}>
           <Layers size={16} />
           <strong>{grupo.nomeGrupo.toUpperCase()}</strong>
           <span className="texto-fraco">| {itens.length} {itens.length === 1 ? "item" : "itens"}</span>
-        </span>
+        </button>
         <span />
         <dl className="cp-dados-item">
           <dt>Valor estimado (total)</dt>
@@ -342,8 +396,17 @@ function GrupoComoCompras({ grupo, itens, aberto, aoAlternar, children }: { grup
           )}
           <dd className={`cp-situacao ${sit.classe}`}>{sit.texto}</dd>
         </dl>
-        <ChevronDown size={18} className="cp-seta" />
-      </button>
+        <div className="cp-acoes">
+          {aoExcluir && (
+            <button className="botao-icone" onClick={aoExcluir} aria-label={`Excluir a proposta do ${grupo.nomeGrupo}`} title="Excluir a proposta do grupo">
+              <Trash2 size={15} />
+            </button>
+          )}
+          <button className="botao-icone cp-seta" onClick={aoAlternar} aria-expanded={aberto} aria-label={aberto ? "Recolher o grupo" : "Abrir o grupo"}>
+            <ChevronDown size={18} />
+          </button>
+        </div>
+      </div>
       {aberto && <ul className="cp-lista cp-sub">{itens.length ? children : <li className="texto-fraco pequeno">Não consegui ler os itens deste grupo agora.</li>}</ul>}
     </li>
   );
@@ -355,6 +418,8 @@ function ItemComoCompras({
   item: it,
   sugestao,
   liberado,
+  podeApagar,
+  semLeitura,
   aberto,
   aoAlternar,
   aoEnviado,
@@ -366,6 +431,9 @@ function ItemComoCompras({
   item: ItemProposta;
   sugestao: SugestaoItem | null;
   liberado: boolean;
+  /** Mostra a lixeira (tem proposta, ou o aplicativo antigo não deixou saber). */
+  podeApagar: boolean;
+  semLeitura: boolean;
   aberto: boolean;
   aoAlternar: () => void;
   aoEnviado: (it: ItemProposta, d: DadosProposta, alterada: boolean) => void;
@@ -469,11 +537,11 @@ function ItemComoCompras({
               <dd className="cp-meu">{valorTexto(it, p.valor)}</dd>
             </>
           ) : (
-            <dd className="cp-situacao falta">Proposta não cadastrada</dd>
+            <dd className={`cp-situacao ${semLeitura ? "" : "falta"}`}>{semLeitura ? "Atualize o aplicativo para ver" : "Proposta não cadastrada"}</dd>
           )}
         </dl>
         <div className="cp-acoes">
-          {p && liberado && (
+          {podeApagar && (
             <button className="botao-icone" onClick={excluir} disabled={ocupado} aria-label={`Excluir a proposta do item ${it.numero}`} title="Excluir a proposta">
               <Trash2 size={15} />
             </button>

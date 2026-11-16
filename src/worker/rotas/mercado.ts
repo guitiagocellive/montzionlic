@@ -118,6 +118,14 @@ rotasMercado.get("/itens-vencidos", async (c) => {
   });
 });
 
+// Itens de uma compra pelo código dela no Compras.gov.br (17 dígitos): quantidade e valor unitário estimado de
+// cada item, como no edital. O cadastro de proposta usa quando o Compras não manda esses campos na lista.
+rotasMercado.get("/itens-compra", async (c) => {
+  const chave = c.req.query("chave") ?? "";
+  if (!/^\d{17}$/.test(chave)) return c.json({ erro: "Compra inválida." }, 400);
+  return repassar(c, "/modulo-contratacoes/2.1_consultarItensContratacoes_PNCP_14133_Id", { tipo: "idCompra", codigo: chave });
+});
+
 // Nome e cidade de um órgão comprador (UASG).
 rotasMercado.get("/uasg", async (c) => {
   const codigo = c.req.query("codigo") ?? "";

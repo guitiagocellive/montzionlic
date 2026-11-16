@@ -142,6 +142,15 @@ Não existe cadastro público: só um administrador adiciona pessoas.
     marca e modelo. Licitação de **grupo** mostra o grupo (nº de itens, valor estimado total e situação: não
     cadastrada, incompleta ou cadastrada) com os itens dentro. Dá para alterar, cadastrar o que falta e excluir
     (`PropostaCadastrada.tsx`).
+  - **Itens com a sua proposta** (app 3.1.45+): o cadastro e Cadastradas leem a lista da tela "Cadastrar propostas"
+    (`itens/aguardando-abertura-sessao-publica`, e a de cada grupo), que traz valor, quantidade, marca e modelo já
+    cadastrados. Com o aplicativo antigo, a tela avisa para atualizar (e mostra a lixeira em todos os itens). As listas
+    são lidas página por página até o fim (o Compras devolve de 20 em 20, mesmo pedindo mais).
+  - **Quantidade e valor de referência pela licitação**: quando o Compras não manda, vêm dos dados abertos oficiais da
+    própria compra (`/mercado/itens-compra`, pelo código de 17 dígitos) ou, se ela ainda não estiver lá, do PNCP.
+  - **Grupos**: número negativo é sempre grupo (o Compras às vezes não manda `isGrupo`). Na busca de licitações, com o
+    aplicativo conectado, os itens do mesmo grupo aparecem num bloco ("Grupo 1 · 3 itens"), porque o PNCP não informa
+    grupo. Lixeira por item e por grupo em Cadastradas.
   - **Anexos**: se o Compras não entrega o arquivo pelo nome guardado ("No message available"), a plataforma tenta os
     outros identificadores que ele mandou (id/sequencial) e, se nada der, explica o erro com "Tentar de novo".
   - **Rápido**: o aplicativo consulta o Compras.gov.br direto com a sessão do gov.br (`desktop/direto.go`); a página

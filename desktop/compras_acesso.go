@@ -45,6 +45,10 @@ var leiturasPermitidas = []*regexp.Regexp{
 	regexp.MustCompile(ce + `/v1` + cmp + `/participacao$`),
 	regexp.MustCompile(ce + `/v1` + cmp + `/itens$`),
 	regexp.MustCompile(ce + `/v1` + cmp + it + `/itens-grupo$`), // itens dentro de um grupo
+	// Itens da compra antes da sessão abrir, como a tela "Cadastrar propostas": já trazem a sua proposta
+	// (valor, quantidade, marca e modelo) e a quantidade solicitada; a lista geral de itens não traz.
+	regexp.MustCompile(ce + `/v1` + cmp + `/itens/aguardando-abertura-sessao-publica$`),
+	regexp.MustCompile(ce + `/v1` + cmp + `/itens/aguardando-abertura-sessao-publica/-?\d{1,5}/itens-grupo$`),
 	regexp.MustCompile(ce + `/v1/declaracoes$`),
 	regexp.MustCompile(ce + `/v1/enums$`), // listas oficiais (ex.: níveis da declaração de equidade de gênero)
 }

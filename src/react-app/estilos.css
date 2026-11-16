@@ -16336,7 +16336,8 @@ button.cp-cabeca { width: 100%; border: 0; background: none; color: inherit; fon
 .cp-acoes { display: flex; gap: 4px; align-items: center; }
 .cp-seta { transition: transform 0.2s; color: var(--acento-texto); }
 .cp-item.aberto > .cp-cabeca .cp-seta svg,
-.cp-grupo.aberto > .cp-cabeca > .cp-seta { transform: rotate(180deg); }
+.cp-grupo.aberto > .cp-cabeca .cp-seta svg { transform: rotate(180deg); }
+.cp-seta svg { transition: transform 0.2s; }
 .cp-corpo { display: grid; gap: 14px; padding: 0 16px 16px; animation: aparecer 0.18s ease both; }
 .cp-descricao { padding-bottom: 12px; border-bottom: 1px solid var(--borda); }
 .cp-descricao p { margin: 2px 0 0; font-size: 0.84rem; color: var(--texto-suave); }
@@ -16354,7 +16355,7 @@ button.cp-cabeca { width: 100%; border: 0; background: none; color: inherit; fon
 @media (max-width: 860px) {
   .cp-cabeca, .cp-cabeca-grupo { grid-template-columns: minmax(0, 1fr) auto; }
   .cp-cabeca > .cp-nome { grid-column: 1; }
-  .cp-cabeca > .cp-acoes, .cp-cabeca-grupo > .cp-seta { grid-column: 2; grid-row: 1; }
+  .cp-cabeca > .cp-acoes { grid-column: 2; grid-row: 1; }
   .cp-cabeca > .cp-dados-item { grid-column: 1 / -1; }
   .cp-cabeca-grupo > span:empty { display: none; }
   .cp-campos { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
@@ -16363,4 +16364,48 @@ button.cp-cabeca { width: 100%; border: 0; background: none; color: inherit; fon
   .cp-botoes { width: 100%; }
   .cp-botoes .botao { flex: 1 1 auto; justify-content: center; }
   .resultado-proposta h2 { font-size: 1.15rem; }
+}
+
+/* ---------- Busca: itens de um mesmo grupo num bloco só ---------- */
+.lendo-grupos { margin: 0 0 8px; }
+.grupo-itens-pncp {
+  border: 1px solid color-mix(in oklab, var(--acento) 35%, var(--borda));
+  border-radius: 18px;
+  background: color-mix(in oklab, var(--acento) 6%, var(--superficie-2));
+  overflow: hidden;
+}
+.grupo-itens-topo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 0;
+  background: none;
+  color: var(--texto);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.grupo-itens-topo > svg:first-child { color: var(--acento-texto); flex: none; }
+.grupo-itens-titulo { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.grupo-itens-titulo strong { font-size: 0.98rem; }
+.grupo-itens-titulo .texto-fraco { font-size: 0.82rem; overflow-wrap: anywhere; }
+.grupo-itens-pncp.aberto > .grupo-itens-topo .bolha-seta { transform: rotate(180deg); }
+.grupo-itens-lista { display: grid; gap: 8px; padding: 0 12px 12px 26px; position: relative; }
+.grupo-itens-lista::before {
+  content: "";
+  position: absolute;
+  left: 13px;
+  top: 0;
+  bottom: 18px;
+  width: 2px;
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--acento) 35%, transparent);
+}
+@media (max-width: 860px) {
+  .grupo-itens-topo { flex-wrap: wrap; }
+  .grupo-itens-topo .chip { order: 3; }
+  .grupo-itens-lista { padding: 0 8px 8px 18px; }
+  .grupo-itens-lista::before { left: 8px; }
 }

@@ -21,6 +21,8 @@ func TestListaFechadaDoFornecedor(t *testing.T) {
 		{Metodo: "GET", Caminho: "/comprasnet-fase-externa/v1/declaracoes", Query: "fundamentoLegal=LEI_14133%20art75"},
 		{Metodo: "GET", Caminho: "/comprasnet-fase-externa/v1/enums"},
 		{Metodo: "GET", Caminho: "/comprasnet-fase-externa/v1/compras/20033806001152026/itens/-1/itens-grupo", Query: "tamanhoPagina=100&pagina=0"},
+		{Metodo: "GET", Caminho: "/comprasnet-fase-externa/v1/compras/" + c + "/itens/aguardando-abertura-sessao-publica", Captcha: true, Query: "tamanhoPagina=50&pagina=0&size=50&page=0"},
+		{Metodo: "GET", Caminho: "/comprasnet-fase-externa/v1/compras/20033806001152026/itens/aguardando-abertura-sessao-publica/-1/itens-grupo", Query: "tamanhoPagina=100&pagina=0"},
 		{Metodo: "POST", Caminho: "/comprasnet-fase-externa/v1/compras/" + c + "/participacao", Corpo: []byte(`{"declaracaoMeEpp":true}`)},
 		{Metodo: "POST", Caminho: "/comprasnet-fase-externa/v1/compras/" + c + "/itens/2/participacao", Corpo: []byte(`{"valor":10}`)},
 		{Metodo: "PUT", Caminho: "/comprasnet-fase-externa/v1/compras/" + c + "/itens/2/participacao", Corpo: []byte(`{"valor":9}`)},

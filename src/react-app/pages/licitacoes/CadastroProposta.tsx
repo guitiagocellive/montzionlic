@@ -421,6 +421,12 @@ function ConteudoCadastro({
           )}
         </div>
       </div>
+      {dados.semPropostas && (
+        <p className="alerta aviso">
+          O aplicativo Montzion deste computador ainda não lê as propostas já cadastradas: um item pode aparecer como "Sem proposta" mesmo estando cadastrado
+          no Compras.gov.br. Atualize para a versão 3.1.45 em Configurações → Aplicativo → Verificar atualização.
+        </p>
+      )}
       {compra.compraNaBaseLegada === true && (
         <p className="alerta aviso">
           Esta compra é do sistema antigo do Compras.gov.br: o cadastro precisa
@@ -513,6 +519,7 @@ function ConteudoCadastro({
                 aoEnviado={enviado}
                 aoFalhar={falhou}
                 aoExcluido={(x) => setEnviadas((m) => new Map(m).set(x.numero, null))}
+                semLeitura={dados.semPropostas}
               />
             ),
           )}
@@ -818,6 +825,7 @@ function LinhaItemProposta({
   aoEnviado,
   aoFalhar,
   aoExcluido,
+  semLeitura = false,
 }: {
   chave: string;
   cnpj: string;
@@ -828,6 +836,8 @@ function LinhaItemProposta({
   aoEnviado: (it: ItemProposta, d: DadosProposta, alterada: boolean) => void;
   aoFalhar: (it: ItemProposta, d: DadosProposta, alterada: boolean, mensagem: string, tentar: () => void) => void;
   aoExcluido: (it: ItemProposta) => void;
+  /** Aplicativo antigo: não sabe se o item tem proposta, então a lixeira aparece em todos. */
+  semLeitura?: boolean;
 }) {
   const p = it.proposta;
   // Sem proposta ainda: valor de referência (ou o calculado pelo orçamento quando sigiloso/não informado).
@@ -1064,7 +1074,7 @@ function LinhaItemProposta({
               {ocupado ? <Loader2 className="girando" /> : <Save />}{" "}
               {p ? "Salvar" : "Cadastrar"}
             </button>
-            {p && (
+            {(p || semLeitura) && (
               <button
                 className="botao-icone"
                 onClick={excluir}

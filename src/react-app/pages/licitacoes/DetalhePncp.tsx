@@ -11,6 +11,7 @@ import {
   FileText,
   Image as Imagem,
   Landmark,
+  Layers,
   Loader2,
   MapPin,
   Plus,
@@ -26,6 +27,8 @@ import { Modal } from "../../components/Ui";
 import { link } from "../../rota";
 import { type ArquivoPncp, detalheCompra, type ItemPncp, listarArquivos, listarItens, type ResultadoPncp, urlPrevia } from "../../pncp";
 import { MarcasDoItem, tituloDoItem } from "./MarcasDoItem";
+import { chaveDoLink, type GrupoCompra, gruposDaCompra } from "./comprasCadastro";
+import { temPonte } from "../../robo/ponte";
 
 export function dataHora(iso: string | null) {
   if (!iso) return "";
@@ -165,21 +168,49 @@ function Arquivos({ carga, tentar }: { carga: Carga<ArquivoPncp[]>; tentar: () =
 
 // ---------------- Itens ----------------
 
-function Itens({ carga, tentar, limite }: { carga: Carga<ItemPncp[]>; tentar: () => void; limite?: number }) {
+function Itens({ carga, tentar, limite, chaveCompras }: { carga: Carga<ItemPncp[]>; tentar: () => void; limite?: number; chaveCompras?: string }) {
   const [todos, setTodos] = useState(!limite);
   const [aberto, setAberto] = useState<string | null>(null);
   const [completo, setCompleto] = useState<Set<string>>(new Set());
   const [marcas, setMarcas] = useState<ItemPncp | null>(null);
+  // O PNCP não diz quais itens são de grupo: o aplicativo pergunta ao Compras.gov.br (sem o app, ficam soltos).
+  const [grupos, setGrupos] = useState<GrupoCompra[]>([]);
+  const [lendoGrupos, setLendoGrupos] = useState(false);
+  const [fechados, setFechados] = useState<Set<number>>(new Set());
+  useEffect(() => {
+    setGrupos([]);
+    if (!chaveCompras || !temPonte()) return;
+    let vivo = true;
+    setLendoGrupos(true);
+    gruposDaCompra(chaveCompras)
+      .then((g) => vivo && setGrupos(g))
+      .finally(() => vivo && setLendoGrupos(false));
+    return () => {
+      vivo = false;
+    };
+  }, [chaveCompras]);
   if (carga.estado === "carregando") return <Carregando texto="Buscando os itens no PNCP…" />;
   if (carga.estado === "erro") return <Falha erro={carga.erro} tentar={tentar} />;
   const itens = carga.dados;
   if (!itens.length) return <p className="texto-fraco">Os itens ainda não foram publicados no PNCP.</p>;
   const total = itens.reduce((s, i) => s + (i.valorTotal ?? 0), 0);
   const visiveis = todos || !limite ? itens : itens.slice(0, limite);
-  return (
-    <>
-      <div className="bolhas-itens">
-        {visiveis.map((i) => {
+  // Com grupos: cada grupo vira um bloco com os itens dele, na ordem do menor item; os soltos ficam entre eles.
+  const doGrupo = new Map<string, GrupoCompra>();
+  for (const g of grupos) for (const n of g.itens) doGrupo.set(String(n), g);
+  const blocos: ({ tipo: "item"; item: ItemPncp } | { tipo: "grupo"; grupo: GrupoCompra; itens: ItemPncp[] })[] = [];
+  if (grupos.length) {
+    const vistos = new Set<number>();
+    for (const i of itens) {
+      const g = doGrupo.get(String(Number(i.numero)));
+      if (!g) blocos.push({ tipo: "item", item: i });
+      else if (!vistos.has(g.numero)) {
+        vistos.add(g.numero);
+        blocos.push({ tipo: "grupo", grupo: g, itens: itens.filter((x) => doGrupo.get(String(Number(x.numero))) === g) });
+      }
+    }
+  }
+  const bolha = (i: ItemPncp) => {
           const estaAberto = aberto === i.numero;
           const longo = i.descricao.length > 260;
           const verTudo = completo.has(i.numero);
@@ -244,14 +275,49 @@ function Itens({ carga, tentar, limite }: { carga: Carga<ItemPncp[]>; tentar: ()
               </div>
             </div>
           );
-        })}
-      </div>
+  };
+  return (
+    <>
+      {lendoGrupos && !grupos.length && <p className="texto-fraco pequeno lendo-grupos">Conferindo no Compras.gov.br se há itens agrupados…</p>}
+      {grupos.length > 0 ? (
+        <div className="bolhas-itens">
+          {blocos.map((b) => {
+            if (b.tipo === "item") return bolha(b.item);
+            const fechado = fechados.has(b.grupo.numero);
+            const soma = b.itens.reduce((s, i) => s + (i.valorTotal ?? 0), 0);
+            return (
+              <section key={`g${b.grupo.numero}`} className={`grupo-itens-pncp ${fechado ? "" : "aberto"}`}>
+                <button
+                  type="button"
+                  className="grupo-itens-topo"
+                  onClick={() => setFechados((f) => (f.has(b.grupo.numero) ? new Set([...f].filter((x) => x !== b.grupo.numero)) : new Set([...f, b.grupo.numero])))}
+                  aria-expanded={!fechado}
+                >
+                  <Layers size={17} aria-hidden="true" />
+                  <span className="grupo-itens-titulo">
+                    <strong>{b.grupo.nome}</strong>
+                    <span className="texto-fraco">
+                      {b.itens.length} {b.itens.length === 1 ? "item" : "itens"} ({b.itens.map((i) => i.numero).join(", ")})
+                      {soma > 0 ? ` · ${reais(soma)}` : b.grupo.valorEstimado ? ` · ${reais(b.grupo.valorEstimado)}` : ""}
+                    </span>
+                  </span>
+                  <span className="chip azul">Disputa pelo grupo</span>
+                  <ChevronDown className="bolha-seta" size={18} aria-hidden="true" />
+                </button>
+                {!fechado && <div className="grupo-itens-lista">{b.itens.map(bolha)}</div>}
+              </section>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="bolhas-itens">{visiveis.map(bolha)}</div>
+      )}
       {total > 0 && (
         <p className="total-bolhas">
           Total de referência ({itens.length} itens): <strong>{reais(total)}</strong>
         </p>
       )}
-      {!!limite && itens.length > limite && (
+      {!!limite && itens.length > limite && !grupos.length && (
         <button className="botao link pequeno" onClick={() => setTodos((t) => !t)}>
           {todos ? "Mostrar menos" : `Ver todos os ${itens.length} itens`}
         </button>
@@ -476,7 +542,7 @@ function Corpo({ resultado: r, etapa, aoMudarEtapa, idQuadro, podeImportar, impo
             Itens{qtdItens != null ? ` (${qtdItens})` : ""}
             {somaItens > 0 && <span className="texto-fraco"> · referência {reais(somaItens)}</span>}
           </h4>
-          <Itens carga={itens} tentar={tentarItens} />
+          <Itens carga={itens} tentar={tentarItens} chaveCompras={chaveDoLink(linkPortal) || undefined} />
         </div>
       )}
 
