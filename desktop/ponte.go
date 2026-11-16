@@ -20,6 +20,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -29,6 +30,9 @@ type configPonte struct {
 	Login      string // onde o login começa (gov.br de fornecedor)
 	Portal     string // portal antigo do Compras.gov.br (Área de Trabalho), ex.: https://www.comprasnet.gov.br
 }
+
+// ultimaConfigEm: hora (ms, na página) da última configuração aplicada.
+var ultimaConfigEm atomic.Int64
 
 func (c configPonte) paginaDisputas() string {
 	return strings.TrimRight(c.Compras, "/") + "/comprasnet-web/seguro/fornecedor/disputa"
@@ -605,6 +609,14 @@ func (p *ponte) atender(sessao, payload string) {
 		if pedido.EnviadoEm > 0 {
 			ultimaChegadaConfig.Store(time.Now().UnixMilli() - pedido.EnviadoEm)
 			temChegadaConfig.Store(true)
+		}
+		// Configuração mais velha que a última aplicada (chegou fora de ordem): não volta atrás.
+		if pedido.EnviadoEm > 0 && pedido.EnviadoEm < ultimaConfigEm.Load() {
+			resposta = mapa{"ok": true, "ignorada": true}
+			break
+		}
+		if pedido.EnviadoEm > 0 {
+			ultimaConfigEm.Store(pedido.EnviadoEm)
 		}
 		if pedido.Modos != nil {
 			p.motor.DefinirModos(pedido.Modos)

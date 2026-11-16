@@ -298,6 +298,33 @@ export interface ItemDisputa extends EstadoItem {
   colocacao: { posicao: number; total: number } | null;
   /** Situação do fornecedor na rodada (código do Compras.gov.br; o nome vem em painel.enumsRodada). */
   situacaoRodada: string;
+  /** Grupo: os itens de dentro dele (o lance é dado em cada item; o valor do grupo é a soma de unitário × quantidade). */
+  subitens: SubitemDisputa[];
+}
+
+export interface SubitemDisputa {
+  numero: number;
+  descricao: string;
+  quantidade: number;
+  /** Nosso lance (valor unitário). */
+  nosso: number | null;
+  /** Melhor lance do item (valor unitário), quando o Compras.gov.br informa. */
+  melhor: number | null;
+  variacaoMinima: number | null;
+  tipoVariacao: "V" | "P" | null;
+}
+
+function lerSubitem(b: Record<string, unknown>): SubitemDisputa {
+  const tipo = String(b.tipoVariacaoMinimaEntreLances ?? "").toUpperCase();
+  return {
+    numero: numero(b.numero) ?? 0,
+    descricao: String(b.descricao ?? b.descricaoDetalhada ?? ""),
+    quantidade: numero(b.quantidadeGrupo) ?? numero(b.quantidade) ?? 0,
+    nosso: numero(b.nossoUnitario),
+    melhor: numero(b.melhorUnitario),
+    variacaoMinima: numero(b.variacaoMinimaEntreLances),
+    tipoVariacao: tipo === "P" || tipo === "V" ? tipo : null,
+  };
 }
 
 /** Converte um item vindo de /comprasnet-disputa/v1/compras/{compra}/itens/em-disputa. */
@@ -310,6 +337,7 @@ export function lerItemDisputa(bruto: Record<string, unknown>): ItemDisputa {
     valorEstimado: numero(bruto.valorEstimado),
     fimEm: numero(bruto.fimEm),
     situacaoRodada: bruto.situacaoParticipacaoRodada == null ? "" : String(bruto.situacaoParticipacaoRodada),
+    subitens: Array.isArray(bruto.subitens) ? (bruto.subitens as Record<string, unknown>[]).map(lerSubitem).filter((s) => s.numero > 0) : [],
     colocacao: (() => {
       const c = bruto.classificacaoRobo as { posicao?: number; total?: number } | undefined;
       return c && c.posicao ? { posicao: Number(c.posicao), total: Number(c.total) || 0 } : null;

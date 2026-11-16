@@ -1,9 +1,8 @@
 {
-  "versao": "3.1.47",
+  "versao": "3.1.48",
   "data": "2026-11-16",
   "novidades": [
-    "Robô no modo aberto e fechado: na etapa aberta ele fica atrás do 1º lugar, até 5% acima dele — entra na etapa fechada sem mostrar o seu preço. A opção \"Lutar pelo 1º lugar\" (no lugar do \"Ganhar tempo\" nesse modo) faz o robô disputar o 1º até a etapa fechada.",
-    "Disputas mostram o modo de cada pregão: \"Disputa aberta\" ou \"Disputa aberta e fechada\".",
-    "Itens de grupo aparecem como GRUPO, com os itens de dentro do grupo (descrição, quantidade e valor estimado)."
+    "Disputa por grupo como no Compras.gov.br: cada item do grupo aparece com o seu lance, lance mínimo e desconto, e embaixo o resumo do grupo (melhor lance, o seu total e o mínimo do grupo). O robô decide pelo total do grupo e dá o lance em cada item, sem passar do mínimo de nenhum.",
+    "Configuração do robô não volta atrás quando a página manda várias mudanças seguidas."
   ]
 }

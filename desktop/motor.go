@@ -50,6 +50,14 @@ type compraMotor struct {
 	qtdLog   int // última quantidade de itens em disputa registrada no log (para o diagnóstico)
 	// Algum item passou pelo encerramento aleatório ou pela etapa fechada: a compra é do modo aberto-fechado.
 	abertoFechado bool
+	// Itens de dentro dos grupos (grupo → item), de que grupo é cada item e quando foram lidos (grupo.go).
+	subitens map[int]map[int]*subitemMotor
+	subGrupo map[int]int
+	subLidos map[int]time.Time
+	subLendo map[int]bool
+	subErro  map[int]string
+	// Quando o robô deu os últimos lances em cada grupo (o total do grupo no Compras pode demorar um instante).
+	grupoEnviado map[int]time.Time
 }
 
 // ehAbertoFechado: no modo aberto-fechado a etapa aberta dura 15 min + encerramento aleatório e lance NÃO prorroga
@@ -694,6 +702,10 @@ func (m *motor) mesclar(c *compraMotor, novo map[string]any, agora time.Time) st
 	if n == nil {
 		return ""
 	}
+	// Item de dentro de um grupo: fica com o grupo (o robô reavalia o grupo).
+	if k, sub := m.mesclarSub(c, novo, agora); sub {
+		return k
+	}
 	it := c.itens[int(*n)]
 	if it == nil {
 		it = &itemMotor{bruto: map[string]any{}}
@@ -770,6 +782,7 @@ func (m *motor) lerItens(chave string) {
 				presentes[int(*numeroDe(it["numero"]))] = true
 			}
 		}
+		m.talvezLerSubitens(c, agora)
 		// Saiu da lista "em disputa": a disputa do item acabou.
 		for n, it := range c.itens {
 			if f := textoDe(it.bruto["fase"]); !presentes[n] && f != "E" && (fasesDeLance[f] || it.teveLances) {
@@ -1271,6 +1284,10 @@ func (m *motor) avaliar(k string) {
 		return
 	}
 	numero, _ := strconv.Atoi(numTxt)
+	if numero < 0 {
+		m.avaliarGrupo(compra, numero, k)
+		return
+	}
 	agora := time.Now()
 	m.mu.Lock()
 	cfg, temCfg := m.config[k]
@@ -1611,6 +1628,9 @@ func (m *motor) Painel() any {
 			e := m.estadoAgora(it, agora)
 			if e.RestanteSeg != nil {
 				copia["tempoRestanteEmSegundos"] = *e.RestanteSeg
+			}
+			if n < 0 && len(c.subitens[n]) > 0 {
+				copia["subitens"] = subitensPainel(c, n, e.Fase)
 			}
 			if e.Situacao != "" {
 				copia["situacaoParticipanteDisputa"] = e.Situacao

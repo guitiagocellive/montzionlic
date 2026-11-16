@@ -315,6 +315,24 @@ func (m *motor) estadoRoboTexto() string {
 			if n < 0 || (e.Situacao == "" && e.Melhor != nil && e.Nosso != nil && *e.Nosso < *e.Melhor-1e-9) {
 				t += " | valores como vieram: " + camposDeValor(it.bruto)
 			}
+			if n < 0 {
+				if subs := c.subitens[n]; len(subs) > 0 {
+					soma := 0.0
+					partes := []string{}
+					for _, s := range subitensPainel(c, n, e.Fase) {
+						q, _ := s["quantidadeGrupo"].(float64)
+						u, _ := s["nossoUnitario"].(float64)
+						mu, _ := s["melhorUnitario"].(float64)
+						soma += q * u
+						partes = append(partes, fmt.Sprintf("item %v: %g × %s (melhor %s)", s["numero"], q, reaisTexto(u, true), reaisTexto(mu, true)))
+					}
+					t += fmt.Sprintf(" | itens do grupo: %s; soma %s", strings.Join(partes, "; "), reaisTexto(soma, true))
+				} else if c.subErro[n] != "" {
+					t += " | itens do grupo: " + c.subErro[n]
+				} else {
+					t += " | itens do grupo: ainda não lidos"
+				}
+			}
 			if temCfg {
 				tipo := "%"
 				if cfg.TipoDesconto == "V" {

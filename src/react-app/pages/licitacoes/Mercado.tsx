@@ -43,6 +43,18 @@ export function carregarCatalogo() {
   return catalogoCache;
 }
 
+/** Outros nomes do mesmo produto no catálogo do governo. */
+const SINONIMOS: [RegExp, string[]][] = [
+  [/\bVENTILADOR/, ["CIRCULADOR AR"]],
+  [/\bCIRCULADOR/, ["VENTILADOR"]],
+  [/\bAR\s*-?\s*CONDICIONADO|\bCONDICIONADOR\s+(DE\s+)?AR\b/, ["APARELHO AR CONDICIONADO", "AR CONDICIONADO"]],
+];
+export function sinonimos(texto: string): string[] {
+  const t = semAcentoMaiusculo(texto);
+  return SINONIMOS.filter(([re]) => re.test(t)).flatMap(([, s]) => s);
+}
+const primeiraPalavra = (nome: string) => semAcentoMaiusculo(nome).replace(/^APARELHO\s+/, "").split(/[^A-Z0-9]+/)[0] ?? "";
+
 export const dataIso = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 /** Últimos N meses começando no dia 1º do mês (ex.: 12 meses em 11/11/2026 → 01/11/2025 a 11/11/2026). */
 export function intervalo(meses: number): [string, string] {
@@ -430,6 +442,8 @@ export function Mercado() {
       const cat = catalogo ?? (await carregarCatalogo());
       setCatalogo(cat);
       let achados = buscarNoCatalogo(cat.pdms, t, 30);
+      // Outros nomes do mesmo produto no catálogo (ventilador ↔ circulador de ar; ar-condicionado ↔ condicionador de ar).
+      for (const s of sinonimos(forcado?.[1] ?? t)) achados.push(...buscarNoCatalogo(cat.pdms, s, 10).filter((x) => !achados.some((a) => a[0] === x[0])));
       if (forcado) achados = [forcado, ...achados.filter((x) => x[0] !== forcado[0])];
       if (!achados.length) {
         setCandidatos([]);
@@ -447,7 +461,14 @@ export function Mercado() {
       // "Teclado Microcomputador"): entram juntos com o escolhido.
       const mesmoNome = (a: string, b: string) => semAcentoMaiusculo(a).replace(/[^A-Z0-9]/g, "") === semAcentoMaiusculo(b).replace(/[^A-Z0-9]/g, "");
       const base = forcado ? lista.filter((c) => c.codigo === forcado[0]) : lista.filter((c, i) => c.total > 0 && (i === 0 || c.total >= maior * 0.25)).slice(0, 4);
-      const marcados = [...new Set([...base, ...lista.filter((c) => c.total > 0 && base.some((b) => mesmoNome(b.nome, c.nome)))].map((c) => c.codigo))];
+      // A família do produto entra junto: "VENTILADOR" leva "VENTILADOR TETO", "VENTILADOR AXIAL" e "CIRCULADOR AR" da mesma
+      // classe do catálogo — sem peças/acessórios ("VENTILADOR / EXAUSTOR - PEÇA") e sem outra classe (ventilador pulmonar).
+      // Núcleo: o escolhido e os de mesmo nome (o catálogo tem "VENTILADOR" de ambiente e "VENTILADOR" de computador).
+      const nucleo = [...base, ...lista.filter((c) => c.total > 0 && base.some((b) => mesmoNome(b.nome, c.nome)))];
+      const classes = new Set(nucleo.map((c) => c.classe));
+      const iniciais = new Set(nucleo.flatMap((c) => [primeiraPalavra(c.nome), ...sinonimos(c.nome).map(primeiraPalavra)]));
+      const familia = lista.filter((c) => c.total > 0 && classes.has(c.classe) && !/\s-\s|\//.test(c.nome) && iniciais.has(primeiraPalavra(c.nome))).slice(0, 10);
+      const marcados = [...new Set([...nucleo, ...familia].map((c) => c.codigo))];
       setEscolhidos(marcados);
       await analisar(lista, marcados, p, id);
     } catch (err) {

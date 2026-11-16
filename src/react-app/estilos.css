@@ -16508,3 +16508,85 @@ button.cp-cabeca { width: 100%; border: 0; background: none; color: inherit; fon
   background: var(--amarelo);
   color: #1a1a1a;
 }
+
+/* Disputas: grupo com lance em cada item e resumo do grupo */
+.tabela-grupo-disputa {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0 12px;
+}
+.linha-grupo-disputa {
+  display: grid;
+  grid-template-columns: minmax(180px, 2.4fr) 70px repeat(3, minmax(90px, 1fr)) 120px 100px;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  font-size: 0.86rem;
+}
+.linha-grupo-disputa.cabeca {
+  background: transparent;
+  border-color: transparent;
+  padding-block: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--texto-fraco);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.descricao-subitem {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.descricao-subitem b {
+  display: inline-block;
+  min-width: 22px;
+  color: var(--acento-texto);
+}
+.linha-grupo-disputa .entrada input {
+  width: 100%;
+  text-align: right;
+}
+.resumo-grupo-disputa {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto auto;
+  align-items: end;
+  gap: 12px 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--borda);
+  border-left: 3px solid var(--acento);
+  background: var(--acento-suave);
+}
+.resumo-grupo-disputa .valor-disputa small {
+  display: block;
+  font-size: 0.74rem;
+}
+.nota-grupo-disputa {
+  margin: 6px 0 0;
+}
+@media (max-width: 900px) {
+  .linha-grupo-disputa.cabeca {
+    display: none;
+  }
+  .linha-grupo-disputa {
+    grid-template-columns: 1fr 1fr;
+  }
+  .linha-grupo-disputa .descricao-subitem {
+    grid-column: 1 / -1;
+    white-space: normal;
+  }
+  .linha-grupo-disputa > span[data-rotulo]::before {
+    content: attr(data-rotulo);
+    display: block;
+    font-size: 0.7rem;
+    color: var(--texto-fraco);
+  }
+  .resumo-grupo-disputa {
+    grid-template-columns: 1fr 1fr;
+  }
+}

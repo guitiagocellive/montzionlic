@@ -215,7 +215,14 @@ Não existe cadastro público: só um administrador adiciona pessoas.
     1º, até 5% acima dele (vão à fechada o 1º e quem estiver até 10% acima), e quando sai da faixa volta para 4%
     acima (`vaga-fechada`); se o mínimo não deixa, busca ficar entre os 3 melhores. Marcado, disputa o 1º lugar.
     A página mostra o modo ("Disputa aberta", "Disputa aberta e fechada") e o item de grupo como GRUPO, com os itens
-    de dentro dele (quais são pelo Compras, descrição e quantidade pelos dados abertos). **Valores que não batem** (nosso abaixo do melhor, sem situação — visto em item de
+    de dentro dele (quais são pelo Compras, descrição e quantidade pelos dados abertos).
+  - **Grupo (3.1.48, `desktop/grupo.go`):** como na sala oficial, o lance é dado em cada item do grupo
+    (`POST .../itens/{item}/lances` com a fase do grupo) e o valor do grupo é a soma de unitário × quantidade. O
+    aplicativo lê os itens em `/comprasnet-disputa/v1/compras/{compra}/itens/em-disputa/{grupo}/itens-grupo` (sem
+    captcha; a cada 15 s, 2 s na reta final) e os avisos de subitem do tempo real ficam com o grupo. A tela mostra cada
+    item com lance mínimo e desconto e o resumo do grupo. O robô decide pelo total (mesma regra de um item, com mínimo
+    do grupo = Σ mínimo × quantidade) e reparte a redução começando pelo item com mais folga (`distribuirReducao`),
+    nunca abaixo do mínimo de cada item. Se o total que o Compras mostra não bate com a soma dos itens, não dá lance. **Valores que não batem** (nosso abaixo do melhor, sem situação — visto em item de
     grupo): o robô não dá lance (`conferir-valores`) e o diagnóstico mostra os campos de valor como vieram.
 - **Datas** sempre pelo calendário da plataforma (`components/Calendario.tsx`): data única ou período início–fim
   com atalhos; o campo `Campo type="date"` já usa o calendário.

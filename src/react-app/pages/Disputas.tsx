@@ -1,7 +1,7 @@
 import { Check, ChevronDown, CircleX, ClipboardCopy, Download, FileText, Gauge, Info, Layers, ListOrdered, Play, RefreshCw, Square, TriangleAlert, Volume2, VolumeX, Zap } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { podeEditar, podeVer } from "../../shared/permissoes";
-import { type CompraDisputa, type ConfigItemRobo, FAIXA_FECHADA, FASES, ITEM_ROBO_PADRAO, type ItemDisputa, lerCompra, lerItemDisputa, NOMES_MODO, normalizarModo, precisaQuatroCasas, SEGUNDOS_FINAIS } from "../../shared/robo";
+import { type CompraDisputa, type ConfigItemRobo, FAIXA_FECHADA, FASES, ITEM_ROBO_PADRAO, type ItemDisputa, lerCompra, lerItemDisputa, type SubitemDisputa, NOMES_MODO, normalizarModo, precisaQuatroCasas, SEGUNDOS_FINAIS } from "../../shared/robo";
 import type { Usuario } from "../../shared/tipos";
 import { api, mensagemDeErro } from "../api";
 import { avisar, Modal, Vazio } from "../components/Ui";
@@ -309,16 +309,24 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
   // Salva a configuração de um item: no robô do aplicativo na hora, na plataforma um instante depois.
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   function mudarItem(k: string, novo: Partial<ConfigItemRobo>) {
-    const item = { ...(configRef.current[k] ?? ITEM_ROBO_PADRAO), ...novo };
-    const todos = { ...configRef.current, [k]: item };
+    mudarVarios({ [k]: novo });
+  }
+
+  /** Vários itens de uma vez (ex.: o grupo e os itens dele): UM envio ao aplicativo, para não chegar fora de ordem. */
+  function mudarVarios(mudancas: Record<string, Partial<ConfigItemRobo>>) {
+    const todos = { ...configRef.current };
+    for (const [k, novo] of Object.entries(mudancas)) todos[k] = { ...(todos[k] ?? ITEM_ROBO_PADRAO), ...novo };
     configRef.current = todos;
     setConfig(todos);
     ponte.configurar(todos).catch((e) => avisar(mensagemDeErro(e), "erro"));
-    clearTimeout(timers.current.get(k));
-    timers.current.set(
-      k,
-      setTimeout(() => api(`/robo/itens/${encodeURIComponent(k)}`, { metodo: "PUT", corpo: { item } }).catch((e) => avisar(mensagemDeErro(e), "erro")), 500),
-    );
+    for (const k of Object.keys(mudancas)) {
+      const item = todos[k];
+      clearTimeout(timers.current.get(k));
+      timers.current.set(
+        k,
+        setTimeout(() => api(`/robo/itens/${encodeURIComponent(k)}`, { metodo: "PUT", corpo: { item } }).catch((e) => avisar(mensagemDeErro(e), "erro")), 500),
+      );
+    }
   }
 
   // Desconto do item: em R$ ou em %, como o intervalo mínimo entre lances do edital. Sem nada digitado, o campo já
@@ -410,6 +418,193 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
   const conferindo = visiveis.filter((c) => !c.lida).length;
   const ultimoLance = painel?.ultimoLance ?? null;
 
+  // ---------- Grupo: lance em cada item; o valor do grupo é a soma de unitário × quantidade ----------
+
+  /** O item do grupo no formato de item (para o desconto e o intervalo do edital). */
+  const comoItem = (g: ItemDisputa, s: SubitemDisputa): ItemDisputa => ({
+    ...g,
+    numero: s.numero,
+    descricao: s.descricao,
+    nossoLance: s.nosso,
+    melhorLance: s.melhor,
+    variacaoMinima: s.variacaoMinima ?? g.variacaoMinima,
+    tipoVariacao: s.tipoVariacao ?? g.tipoVariacao,
+    subitens: [],
+  });
+
+  function minimoDoSubitem(sk: string) {
+    return paraNumero(textos[`${sk}:minimo`] ?? "") ?? (configRef.current[sk] ?? ITEM_ROBO_PADRAO).minimo;
+  }
+
+  function alternarRoboGrupo(chave: string, g: ItemDisputa) {
+    const k = `${chave}:${g.numero}`;
+    const cfg = configRef.current[k] ?? ITEM_ROBO_PADRAO;
+    if (cfg.ligado) return mudarItem(k, { ligado: false });
+    let total = 0;
+    const acima: number[] = [];
+    const mudancas: Record<string, Partial<ConfigItemRobo>> = {};
+    for (const s of g.subitens) {
+      const sk = `${chave}:${s.numero}`;
+      const minimo = minimoDoSubitem(sk);
+      if (!(minimo && minimo > 0)) return avisar(`Informe o lance mínimo do item ${s.numero} do grupo antes de ligar o robô.`, "erro");
+      const item = comoItem(g, s);
+      const scfg = configRef.current[sk] ?? ITEM_ROBO_PADRAO;
+      const { tipo, valor } = descontoDoItem(sk, item, scfg);
+      const invalido = descontoInvalido(tipo, valor, item);
+      if (invalido) return avisar(`Item ${s.numero}: ${invalido}`, "erro");
+      if (s.nosso != null && minimo > s.nosso) acima.push(s.numero);
+      total += minimo * s.quantidade;
+      mudancas[sk] = { minimo, desconto: valor, tipoDesconto: tipo };
+    }
+    if (acima.length) avisar(`O mínimo dos itens ${acima.join(", ")} está acima do seu lance atual: o robô não baixa esses itens.`, "erro");
+    mudancas[k] = { minimo: Math.round(total * 100) / 100, ligado: true };
+    mudarVarios(mudancas);
+  }
+
+  const grupoDisputa = (c: CompraDisputa, g: ItemDisputa, modo: string, atraso: number) => {
+    const k = `${c.chave}:${g.numero}`;
+    const cfg = config[k] ?? ITEM_ROBO_PADRAO;
+    const restante = g.restanteSeg == null ? null : g.restanteSeg - atraso;
+    const nossoTotal = g.subitens.every((s) => s.nosso != null) ? Math.round(g.subitens.reduce((t, s) => t + (s.nosso ?? 0) * s.quantidade, 0) * 100) / 100 : null;
+    const minimos = g.subitens.map((s) => minimoDoSubitem(`${c.chave}:${s.numero}`));
+    const minimoTotal = minimos.every((m) => m != null && m > 0) ? g.subitens.reduce((t, s, n) => t + (minimos[n] as number) * s.quantidade, 0) : null;
+    // O total que o Compras.gov.br mostra para o grupo precisa bater com a soma dos itens.
+    const naoBate = nossoTotal != null && g.nossoLance != null && Math.abs(g.nossoLance - nossoTotal) > Math.max(0.05, nossoTotal * 0.002);
+    const melhor = g.melhorLance;
+    const nosso = nossoTotal != null && melhor != null && !naoBate && melhor >= nossoTotal - 1e-9;
+    const naFaixa = modo === "aberto-fechado" && !cfg.lutarPrimeiro && !nosso && melhor != null && nossoTotal != null && nossoTotal <= melhor * (1 + FAIXA_FECHADA / 100) + 1e-9;
+    const situacao = naoBate ? "" : naFaixa ? "faixa" : g.situacao === "G" || nosso ? "ganhando" : g.situacao === "E" ? "empatado" : melhor != null ? "perdendo" : "";
+    const msg = painel?.mensagens[k];
+    return (
+      <div key={k} className={`item-disputa grupo-disputa ${situacao} ${cfg.ligado ? "robo-ligado" : ""} ${faixaTempo(g.fase, restante)} ${tremendo.has(k) ? "lance-novo" : ""}`}>
+        <div className="item-disputa-titulo">
+          <strong className="titulo-grupo-disputa">
+            <Layers size={16} /> GRUPO {Math.abs(g.numero)} | {g.subitens.length} itens
+          </strong>
+          {situacao && <span className={`selo-situacao ${situacao}`}>{naFaixa ? "NA FAIXA DA FECHADA" : situacao.toUpperCase()}</span>}
+          {naoBate && <span className="selo-situacao conferir">CONFERIR VALORES</span>}
+          {g.colocacao && (
+            <span className="selo-colocacao" title="Pela última classificação lida">
+              {g.colocacao.posicao}º de {g.colocacao.total}
+            </span>
+          )}
+          <button className="botao secundario pequeno botao-classificacao" onClick={() => setClassificacao({ compra: c.chave, item: g.numero, titulo: `Grupo ${Math.abs(g.numero)}` })}>
+            <ListOrdered size={14} /> Classificação
+          </button>
+        </div>
+
+        <div className="tabela-grupo-disputa" role="table" aria-label={`Itens do grupo ${Math.abs(g.numero)}`}>
+          <div className="linha-grupo-disputa cabeca" role="row">
+            <span>Item</span>
+            <span>Qtde</span>
+            <span>Melhor (un.)</span>
+            <span>Meu lance (un.)</span>
+            <span>Total do item</span>
+            <span>Lance mínimo (un.)</span>
+            <span>Desconto</span>
+          </div>
+          {g.subitens.map((s) => {
+            const sk = `${c.chave}:${s.numero}`;
+            const scfg = config[sk] ?? ITEM_ROBO_PADRAO;
+            const item = comoItem(g, s);
+            const desc = descontoDoItem(sk, item, scfg);
+            const meuMelhor = s.nosso != null && s.melhor != null && s.melhor >= s.nosso - 1e-9;
+            return (
+              <div key={sk} className="linha-grupo-disputa" role="row">
+                <span className="descricao-subitem">
+                  <b>{s.numero}</b> {s.descricao || `Item ${s.numero}`}
+                </span>
+                <span data-rotulo="Qtde">{s.quantidade.toLocaleString("pt-BR")}</span>
+                <span data-rotulo="Melhor (un.)" className={s.melhor == null ? "texto-fraco" : meuMelhor ? "texto-verde" : "texto-perigo"}>
+                  {s.melhor == null ? "—" : moeda(s.melhor, false)}
+                </span>
+                <span data-rotulo="Meu lance (un.)">
+                  <strong>{moeda(s.nosso, false)}</strong>
+                </span>
+                <span data-rotulo="Total do item">{s.nosso == null ? "—" : moeda(s.nosso * s.quantidade, false)}</span>
+                <span data-rotulo="Lance mínimo (un.)" className="entrada">
+                  <input
+                    inputMode="decimal"
+                    value={textos[`${sk}:minimo`] ?? textoNumero(scfg.minimo)}
+                    onChange={(e) => setTextos((t) => ({ ...t, [`${sk}:minimo`]: e.target.value }))}
+                    onBlur={(e) => !cfg.ligado && mudarItem(sk, { minimo: paraNumero(e.target.value) })}
+                    disabled={cfg.ligado}
+                    title={cfg.ligado ? "Pare o robô do grupo para alterar" : "Valor unitário mínimo deste item"}
+                    aria-label={`Lance mínimo do item ${s.numero} do grupo`}
+                  />
+                </span>
+                <span data-rotulo={`Desconto (${desc.tipo === "V" ? "R$" : "%"})`} className="entrada">
+                  <input
+                    inputMode="decimal"
+                    value={desc.texto}
+                    onChange={(e) => setTextos((t) => ({ ...t, [`${sk}:desconto`]: e.target.value }))}
+                    onBlur={(e) => {
+                      const n = paraNumero(e.target.value) ?? 0;
+                      if (!cfg.ligado && !descontoInvalido(desc.tipo, n, item)) mudarItem(sk, { desconto: n, tipoDesconto: desc.tipo });
+                    }}
+                    disabled={cfg.ligado}
+                    placeholder={desc.tipo === "V" ? "0,00" : "0"}
+                    title={desc.temEdital ? "Quanto baixar neste item a cada lance (no mínimo o intervalo do edital)" : "0 = o menor valor permitido"}
+                    aria-label={`Desconto do item ${s.numero} do grupo (${desc.tipo === "V" ? "em reais" : "em porcentagem"})`}
+                  />
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="resumo-grupo-disputa">
+          <div className={`valor-disputa melhor-lance ${tremendo.has(k) ? "tremer" : ""}`} key={tremendo.has(k) ? `t${tremendo.get(k)}` : "parado"}>
+            <span>Melhor lance do grupo</span>
+            <strong className={naoBate ? "" : nosso ? "texto-verde" : "texto-perigo"}>
+              {moeda(melhor, false)} {!naoBate && melhor != null && <em className={`selo-quem ${nosso ? "voce" : ""}`}>{nosso ? "VOCÊ" : "CONCORRENTE"}</em>}
+            </strong>
+          </div>
+          <div className="valor-disputa">
+            <span>Meu total (soma dos itens)</span>
+            <strong className={naoBate ? "" : nosso ? "texto-verde" : "texto-perigo"}>{moeda(nossoTotal, false)}</strong>
+            {melhor != null && nossoTotal != null && !nosso && !naoBate && <small className="texto-fraco">{(((nossoTotal / melhor) - 1) * 100).toFixed(1).replace(".", ",")}% acima do 1º</small>}
+          </div>
+          <div className="valor-disputa">
+            <span>Mínimo do grupo</span>
+            <strong>{minimoTotal == null ? "—" : moeda(minimoTotal, false)}</strong>
+            {minimoTotal != null && melhor != null && <small className={minimoTotal < melhor ? "texto-verde" : "texto-perigo"}>{minimoTotal < melhor ? "dá para passar o 1º" : "não passa o 1º"}</small>}
+          </div>
+          <div className={`cronometro-disputa ${faixaTempo(g.fase, restante)}`} title="Tempo que falta para a etapa terminar">
+            <span>{g.fase === "AL" ? "aleatório" : restante != null ? relogio(restante) : "—"}</span>
+          </div>
+          <button
+            className={`botao-robo ${cfg.ligado ? "ligado" : ""}`}
+            onClick={() => alternarRoboGrupo(c.chave, g)}
+            aria-label={cfg.ligado ? `Parar o robô no grupo ${Math.abs(g.numero)}` : `Ligar o robô no grupo ${Math.abs(g.numero)}`}
+            title={cfg.ligado ? "Parar o robô" : "Ligar o robô no grupo (dá lance em cada item, até o mínimo de cada um)"}
+          >
+            {cfg.ligado ? <Square /> : <Play />}
+          </button>
+        </div>
+        {naoBate && (
+          <p className="alerta pequeno">
+            O Compras.gov.br mostra {moeda(g.nossoLance, false)} para o seu lance no grupo, mas a soma dos itens dá {moeda(nossoTotal, false)}. Enquanto não bater, o robô não dá lance neste grupo.
+          </p>
+        )}
+        <div className="item-disputa-opcoes">
+          {modo === "aberto-fechado" && (
+            <label className="opcao-lutar-primeiro" title={`Desmarcado (padrão), o robô deixa o total do grupo até ${FAIXA_FECHADA}% acima do 1º para ir à etapa fechada sem mostrar o seu preço. Marcado, disputa o 1º lugar.`}>
+              <input type="checkbox" checked={!!cfg.lutarPrimeiro} onChange={(e) => mudarItem(k, { lutarPrimeiro: e.target.checked })} /> Lutar pelo 1º lugar
+            </label>
+          )}
+          <label>
+            <input type="checkbox" checked={cfg.naoAguardar} onChange={(e) => mudarItem(k, { naoAguardar: e.target.checked })} /> Não esperar os últimos {SEGUNDOS_FINAIS} segundos para cobrir
+          </label>
+        </div>
+        <p className="texto-fraco pequeno nota-grupo-disputa">
+          {FASES[g.fase] ?? g.fase} · o robô decide pelo total do grupo e dá lance em cada item, começando pelo que tem mais folga até o mínimo dele.
+        </p>
+        <p className={`mensagem-robo ${msg?.erro ? "erro" : ""}`}>{cfg.ligado ? (msg?.texto ?? "Robô ligado") : "Robô parado"}</p>
+      </div>
+    );
+  };
+
   const cartaoCompra = (cn: CompraNaTela) => {
     const { compra: c, itens, lida, erro } = cn;
     const modo = c.modalidade === "dispensa" ? "" : modoDa(cn);
@@ -478,6 +673,7 @@ export function Disputas({ usuario }: { usuario: Usuario }) {
             {itens
               .filter((i) => abaDoItem(i.fase) === abaAtual)
               .map((i) => {
+                if (i.numero < 0 && i.subitens.length) return grupoDisputa(c, i, modo, atraso);
                 const k = `${c.chave}:${i.numero}`;
                 const cfg = config[k] ?? ITEM_ROBO_PADRAO;
                 // 4 casas: a escolha salva ou, sozinho, quando o edital ou os lances têm mais de 2 casas.
