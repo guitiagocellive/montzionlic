@@ -10,6 +10,7 @@ import { CadastroProposta, NovaProposta } from "./CadastroProposta";
 import { chavePropostas, conversaDoItem, COR_CHANCE, estadoDoItem, ItemCompras, jaLido, lerCodigoSolicitada, preCarregarPropostas, type PropostasDoItem } from "./ItemCompras";
 import { noAplicativo, ponte, type ResultadoTesteLeitura, temPonte } from "../../robo/ponte";
 import { SemContaGovBr } from "../../robo/ConexaoGovBr";
+import { PropostaCadastrada } from "./PropostaCadastrada";
 
 // Aba Acompanhamento: as participações no Compras.gov.br (em andamento e finalizadas), com a colocação de
 // cada item, a chance de ser chamado, os avisos do pregoeiro e a conversa com ele. Quem lê é o aplicativo do
@@ -512,7 +513,7 @@ export function Acompanhamento({ modo = "acompanhamento" }: { modo?: "acompanham
               }}
             />
           )}
-          {cadastro && <CadastroProposta chave={cadastro} cnpj={painel.cnpj ?? ""} aoFechar={() => setCadastro(null)} />}
+          {cadastro && <CadastroProposta chave={cadastro} cnpj={painel.cnpj ?? ""} emCadastradas={cadastradasModo} aoFechar={() => setCadastro(null)} />}
           {compraAberta && !cadastro && <JanelaCompra compra={compraAberta} cnpj={compraAberta.meuCnpj || idEmpresa(painel.cnpj)} conectado={!!painel.conectado} agora={agora} aoFechar={() => abrir(null)} aoCadastrar={() => setCadastro(compraAberta.chave)} />}
           <p className="texto-fraco pequeno nota-acomp">
             O aplicativo relê a lista a cada 3 minutos e a compra que você abre na hora. A chance é uma estimativa pela colocação: o pregoeiro analisa a 1ª colocada e,
@@ -844,6 +845,9 @@ function JanelaCompra({
   const [, setLidas] = useState(0);
   const passo = passoDa(c);
   const lidos = !!c.lidaEm;
+  // Proposta cadastrada e sessão ainda fechada: a janela é a tela "Cadastrar propostas" do Compras (prazo, endereço,
+  // termo/declarações e itens/grupos com o seu valor, marca e modelo), não a de acompanhamento da sessão.
+  const naFaseDeCadastro = ehCadastrada(c, agora) && conectado;
 
   // Assim que os itens chegam, lê as propostas de cada item por trás (2 de cada vez): as linhas mostram a
   // colocação e a situação, e o item abre na hora. Só nas fases em que já existem propostas para comparar.
@@ -925,7 +929,7 @@ function JanelaCompra({
                   <ExternalLink size={15} />
                 </a>
               )}
-              {["1", "2", "6"].includes(c.faseCodigo) && (
+              {["1", "2", "6"].includes(c.faseCodigo) && !naFaseDeCadastro && (
                 <button className="botao acento pequeno" onClick={aoCadastrar}>
                   <FilePlus2 size={14} /> Cadastrar / alterar proposta
                 </button>
@@ -942,7 +946,9 @@ function JanelaCompra({
           </div>
         </header>
 
-        {!lidos ? (
+        {naFaseDeCadastro ? (
+          <PropostaCadastrada chave={c.chave} nome={nomeCompra(c)} cnpj={cnpj} />
+        ) : !lidos ? (
           <div className="carregando-compra">
             <RefreshCw className="girando" size={18} />
             <span>Lendo os itens, a sua participação e as mensagens desta licitação…</span>

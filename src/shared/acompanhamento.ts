@@ -623,6 +623,11 @@ export interface AnexoCompras {
   tipo: string;
   tamanho: number | null;
   url: string;
+  /**
+   * Outros identificadores que o Compras.gov.br mandou para o mesmo arquivo (nome guardado, id, sequencial...).
+   * A tela logada pede pelo nome; a pública, em algumas compras, pelo número: tentamos um de cada vez.
+   */
+  alternativas?: string[];
 }
 
 export function lerAnexos(dados: unknown): AnexoCompras[] {
@@ -641,6 +646,7 @@ export function lerAnexos(dados: unknown): AnexoCompras[] {
         tipo: texto(primeiro(a.tipoAnexoDescricao, a.tipoAnexo, a.tipo, a.fase)),
         tamanho: numero(primeiro(a.tamanho, a.tamanhoArquivo)),
         url: texto(a.url),
+        alternativas: [...new Set([a.nome, a.nomeArquivo, a.id, a.identificador, a.sequencial, a.codigo].map(texto).filter(Boolean))],
       };
     })
     .filter((a) => a.id || a.url);

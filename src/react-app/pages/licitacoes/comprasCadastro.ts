@@ -55,6 +55,8 @@ export function textoReferencia(r: Referencia) {
 export interface ItemProposta {
   numero: number;
   descricao: string;
+  /** Descrição detalhada do catálogo (a tela oficial mostra embaixo do nome do item). */
+  descricaoDetalhada: string;
   quantidade: number | null;
   unidade: string;
   desconto: boolean;
@@ -101,6 +103,7 @@ export function lerItem(b: unknown, srp: boolean): ItemProposta | null {
   return {
     numero: n,
     descricao: txt(x.descricao ?? x.descricaoDetalhada) || `Item ${n}`,
+    descricaoDetalhada: txt(x.descricaoDetalhada ?? obj(x.detalhamento).descricaoDetalhada),
     quantidade: num(x.quantidadeSolicitada ?? obj(x.detalhamento).quantidadeSolicitada ?? x.quantidade ?? x.quantidadeTotal ?? x.quantidadeItem),
     unidade: txt(x.unidadeFornecimento ?? x.unidadeMedida ?? x.unidade),
     desconto,
@@ -257,6 +260,45 @@ export async function enviarProposta(chave: string, it: ItemProposta, d: DadosPr
     modificado: true,
   };
   await pedir({ metodo: p ? "PUT" : "POST", caminho: `${FE}/v1/compras/${chave}/itens/${it.numero}/participacao`, corpo });
+}
+
+/**
+ * Erro do Compras.gov.br ao salvar uma proposta, em linguagem simples: o motivo, o que fazer e se é caso de
+ * entrar de novo no gov.br. A mensagem original continua aparecendo (ela é a palavra final do Compras).
+ */
+export function explicarErroProposta(mensagem: string): { motivo: string; dica: string; login: boolean } {
+  const m = mensagem.toLowerCase();
+  if (/sess[aã]o|token|401|n[aã]o autenticad|unauthori|expirad|login/.test(m))
+    return { motivo: "A sua sessão do gov.br expirou ou caiu.", dica: "Entre de novo com o gov.br e tente outra vez: os valores digitados continuam aqui.", login: true };
+  if (/prazo|encerrad|fora do per[ií]odo|data limite/.test(m))
+    return { motivo: "O prazo para enviar propostas desta compra já terminou.", dica: "Depois do prazo o Compras.gov.br não aceita cadastrar nem alterar propostas.", login: false };
+  if (/captcha|rob[oô]/.test(m))
+    return { motivo: "O Compras.gov.br pediu a confirmação de que você não é um robô.", dica: "Resolva a verificação na janela do Compras.gov.br que abriu e tente de novo.", login: false };
+  if (/estimad|refer[eê]ncia|m[aá]ximo|superior|acima/.test(m))
+    return { motivo: "O valor ficou acima do que o órgão aceita para este item.", dica: "Diminua o valor unitário para no máximo o valor de referência e tente de novo.", login: false };
+  if (/marca|fabricante|modelo|vers[aã]o/.test(m))
+    return { motivo: "Faltou marca ou modelo (ou o Compras.gov.br não aceitou o texto).", dica: "Confira os campos Marca/Fabricante e Modelo/Versão e tente de novo.", login: false };
+  if (/quantidade/.test(m))
+    return { motivo: "A quantidade não foi aceita.", dica: "Sem registro de preços, a quantidade ofertada precisa ser a quantidade toda do edital.", login: false };
+  if (/declara|participa|vinculad/.test(m))
+    return { motivo: "A participação nesta compra ainda não foi confirmada.", dica: "Aceite as declarações (Termo de Aceitação e ME/EPP) e tente de novo.", login: false };
+  if (/aplicativo|ponte|conex|timeout|tempo|rede|network|fetch|sem dados|50\d/.test(m))
+    return { motivo: "Não consegui falar com o Compras.gov.br agora.", dica: "Pode ser instabilidade do site ou da internet. Espere alguns segundos e tente de novo.", login: false };
+  return { motivo: "O Compras.gov.br recusou a proposta.", dica: "Leia a mensagem do Compras.gov.br abaixo, corrija o que ele pede e tente de novo.", login: false };
+}
+
+/** Endereço do fornecedor como a tela oficial mostra (logradouro, município, UF), se o Compras mandou. */
+export function enderecoDoFornecedor(participacao: Bruto): { logradouro: string; municipio: string; uf: string } | null {
+  const part = obj(participacao.participante);
+  const e = { ...part, ...obj(part.endereco) };
+  const nome = (v: unknown) => (v && typeof v === "object" ? txt(obj(v).nome ?? obj(v).descricao) : txt(v));
+  const base = txt(e.logradouro ?? e.enderecoLogradouro);
+  const numero = txt(e.numero ?? e.numeroLogradouro);
+  const complemento = txt(e.complemento);
+  const logradouro = [base && numero && !base.includes(numero) ? `${base}, ${numero}` : base, complemento].filter(Boolean).join(" - ");
+  const municipio = nome(e.nomeMunicipio ?? e.municipio ?? e.cidade);
+  const uf = nome(e.uf ?? e.siglaUf ?? e.ufSigla);
+  return logradouro || municipio ? { logradouro, municipio, uf } : null;
 }
 
 // ---------------- Valor a cadastrar ----------------

@@ -132,6 +132,18 @@ Não existe cadastro público: só um administrador adiciona pessoas.
     UASG, modalidade, número e ano; aceita as **declarações** (texto oficial, ME/EPP, programa de integridade e equidade
     de gênero quando exigidos) e cadastra, altera ou exclui a **proposta de cada item** (valor unitário ou desconto,
     quantidade, marca e modelo para materiais; anexo quando o item exige). Cada envio pede confirmação.
+  - **Depois de Cadastrar**: quando não sobra item sem proposta, a janela do cadastro fecha e aparece o card
+    **"Licitação cadastrada com sucesso"** (itens, valores, marca/modelo, total e o prazo para alterar). Se o Compras
+    recusar, aparece o card **"Não deu certo"** com o motivo em português, a mensagem original do Compras e os botões
+    "Voltar e corrigir" e "Tentar de novo" (`ResultadoProposta.tsx`).
+  - **Cadastradas** (proposta enviada, sessão ainda fechada): a janela da licitação segue a tela "Cadastrar propostas"
+    do Compras.gov.br — data limite, endereço do fornecedor, termo/declarações (com a sanfona ME/EPP) e os itens com
+    quantidade solicitada, unidade, valor estimado, o seu valor, descrição detalhada, valor unitário, valor total,
+    marca e modelo. Licitação de **grupo** mostra o grupo (nº de itens, valor estimado total e situação: não
+    cadastrada, incompleta ou cadastrada) com os itens dentro. Dá para alterar, cadastrar o que falta e excluir
+    (`PropostaCadastrada.tsx`).
+  - **Anexos**: se o Compras não entrega o arquivo pelo nome guardado ("No message available"), a plataforma tenta os
+    outros identificadores que ele mandou (id/sequencial) e, se nada der, explica o erro com "Tentar de novo".
   - **Rápido**: o aplicativo consulta o Compras.gov.br direto com a sessão do gov.br (`desktop/direto.go`); a página
     oficial só gera o captcha, um por vez e só nas telas que exigem (ele aprende quais são). A página da plataforma só
     baixa o painel de novo quando algo muda (versão).

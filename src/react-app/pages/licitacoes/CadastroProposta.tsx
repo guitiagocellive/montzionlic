@@ -38,6 +38,8 @@ import {
   textoValor,
   textoReferencia,
   tituloDaChave,
+  type DadosProposta,
+  type PropostaDoItem,
   txt,
   valorSugerido,
 } from "./comprasCadastro";
@@ -48,6 +50,7 @@ import {
   sugestoesDoQuadro,
 } from "./sugestoesQuadro";
 import { pedir } from "./ItemCompras";
+import { itemEnviado, JanelaResultado, type ResultadoEnvio } from "./ResultadoProposta";
 
 export { chaveDaCompra } from "./comprasCadastro";
 
@@ -211,15 +214,28 @@ export function NovaProposta({
   );
 }
 
+/** Resultado de um envio, com o que o card precisa (cabeçalho da compra e, no erro, como tentar de novo). */
+export interface EnvioFeito {
+  resultado: ResultadoEnvio;
+  orgao: string;
+  fim: string;
+  tentar?: () => void;
+}
+
 export function CadastroProposta({
   chave,
   cnpj: cnpjDado,
+  emCadastradas = false,
   aoFechar,
 }: {
   chave: string;
   cnpj: string;
+  /** Aberto pela aba Cadastradas: o card de sucesso não mostra o atalho para ela. */
+  emCadastradas?: boolean;
   aoFechar: () => void;
 }) {
+  // Depois de Cadastrar: tudo cadastrado → fecha o cadastro e mostra o card de sucesso; erro → card por cima.
+  const [envio, setEnvio] = useState<EnvioFeito | null>(null);
   const [estado, setEstado] = useState<{ carregando: boolean; erro: string }>({
     carregando: true,
     erro: "",
@@ -245,7 +261,27 @@ export function CadastroProposta({
   }, [chave, vez]);
 
   const nome = tituloDaChave(chave);
+  const cardResultado = envio && (
+    <JanelaResultado
+      resultado={envio.resultado}
+      nome={nome}
+      orgao={envio.orgao}
+      fim={envio.fim}
+      emCadastradas={emCadastradas}
+      aoFechar={envio.resultado.ok ? aoFechar : () => setEnvio(null)}
+      aoTentar={
+        envio.tentar &&
+        (() => {
+          const t = envio.tentar!;
+          setEnvio(null);
+          t();
+        })
+      }
+    />
+  );
+  if (envio?.resultado.ok) return cardResultado;
   return (
+    <>
     <Modal titulo={`Proposta · ${nome}`} aoFechar={aoFechar} largo>
       <style>{".modal.largo:has(.cadastro-proposta){max-width:1100px}"}</style>
       <div className="cadastro-proposta">
@@ -263,10 +299,13 @@ export function CadastroProposta({
             dados={dados}
             cnpj={cnpjDado || dados.cnpj}
             recarregar={recarregar}
+            aoEnviar={setEnvio}
           />
         ) : null}
       </div>
     </Modal>
+    {cardResultado}
+    </>
   );
 }
 
@@ -276,14 +315,23 @@ function ConteudoCadastro({
   dados,
   cnpj,
   recarregar,
+  aoEnviar,
 }: {
   chave: string;
   nome: string;
   dados: CompraCarregada;
   cnpj: string;
   recarregar: () => void;
+  aoEnviar: (e: EnvioFeito) => void;
 }) {
-  const { compra, participacao, itens, declaracoes, itensBloqueados } = dados;
+  const { compra, participacao, itensBloqueados, declaracoes } = dados;
+  // Propostas enviadas nesta janela: o Compras.gov.br às vezes demora a devolvê-las na releitura.
+  // (null = excluída aqui)
+  const [enviadas, setEnviadas] = useState<Map<number, PropostaDoItem | null>>(new Map());
+  const itens = useMemo(
+    () => dados.itens.map((i) => (enviadas.has(i.numero) ? { ...i, proposta: enviadas.get(i.numero) ?? null } : i)),
+    [dados.itens, enviadas],
+  );
   const [soSem, setSoSem] = useState(false);
   // A mesma compra no quadro? Então valor (sigiloso/não informado), marca e modelo vêm do orçamento de lá.
   const [doQuadro, setDoQuadro] = useState<{
@@ -329,6 +377,26 @@ function ConteudoCadastro({
   ]
     .filter(Boolean)
     .join(" - ");
+
+  function enviado(it: ItemProposta, d: DadosProposta, alterada: boolean) {
+    const proposta: PropostaDoItem = { valor: d.valor, quantidade: d.quantidade, marca: d.marca, modelo: d.modelo, pais: it.proposta?.pais ?? "BRA", margem: it.proposta?.margem ?? "0" };
+    setEnviadas((m) => new Map(m).set(it.numero, proposta));
+    const todos = itens.filter((i) => !i.grupo).map((i) => (i.numero === it.numero ? { ...i, proposta } : i));
+    const faltam = todos.filter((i) => !i.proposta);
+    if (!faltam.length) {
+      aoEnviar({ resultado: { ok: true, alterada, itens: todos.map((i) => itemEnviado(i)) }, orgao, fim: fim ? dataHora(fim) : "" });
+      return;
+    }
+    avisar(
+      `Proposta do item ${it.numero} ${alterada ? "alterada" : "cadastrada"}. ${faltam.length === 1 ? `Falta o item ${faltam[0].numero}` : `Faltam ${faltam.length} itens`} para concluir.`,
+      "sucesso",
+    );
+    recarregar();
+  }
+
+  function falhou(it: ItemProposta, d: DadosProposta, alterada: boolean, mensagem: string, tentar: () => void) {
+    aoEnviar({ resultado: { ok: false, alterada, item: itemEnviado(it, d), mensagem }, orgao, fim: fim ? dataHora(fim) : "", tentar });
+  }
 
   return (
     <>
@@ -442,6 +510,9 @@ function ConteudoCadastro({
                 sugestao={doQuadro?.sugestoes.get(it.numero) ?? null}
                 liberado={participando && !encerrado}
                 aoSalvar={recarregar}
+                aoEnviado={enviado}
+                aoFalhar={falhou}
+                aoExcluido={(x) => setEnviadas((m) => new Map(m).set(x.numero, null))}
               />
             ),
           )}
@@ -533,12 +604,15 @@ export function Declaracoes({
   textos,
   encerrado,
   aoSalvar,
+  editando = false,
 }: {
   chave: string;
   participacao: Record<string, unknown>;
   textos: string[];
   encerrado: boolean;
   aoSalvar: () => void;
+  /** Já abre no formulário (para alterar), sem a linha "Declarações aceitas". */
+  editando?: boolean;
 }) {
   const participando = participacao.isFornecedorParticipante === true;
   const exigeIntegridade =
@@ -568,7 +642,7 @@ export function Declaracoes({
   const [aceite, setAceite] = useState(participando);
   const [verTexto, setVerTexto] = useState(false);
   const [salvando, setSalvando] = useState(false);
-  const [editar, setEditar] = useState(!participando);
+  const [editar, setEditar] = useState(!participando || editando);
 
   useEffect(() => {
     if (exigeEquidade) niveisEquidade().then(setOficial);
@@ -741,6 +815,9 @@ function LinhaItemProposta({
   sugestao,
   liberado,
   aoSalvar,
+  aoEnviado,
+  aoFalhar,
+  aoExcluido,
 }: {
   chave: string;
   cnpj: string;
@@ -748,6 +825,9 @@ function LinhaItemProposta({
   sugestao: SugestaoItem | null;
   liberado: boolean;
   aoSalvar: () => void;
+  aoEnviado: (it: ItemProposta, d: DadosProposta, alterada: boolean) => void;
+  aoFalhar: (it: ItemProposta, d: DadosProposta, alterada: boolean, mensagem: string, tentar: () => void) => void;
+  aoExcluido: (it: ItemProposta) => void;
 }) {
   const p = it.proposta;
   // Sem proposta ainda: valor de referência (ou o calculado pelo orçamento quando sigiloso/não informado).
@@ -809,23 +889,16 @@ function LinhaItemProposta({
     carregarAnexos();
   }, [carregarAnexos]);
 
-  async function salvar() {
+  async function salvar(semPerguntar = false) {
     const texto = `${p ? "Alterar" : "Cadastrar"} a proposta do item ${it.numero}?\n\n${it.desconto ? `Desconto: ${valor}%` : `Valor unitário: ${formatarMoeda(v)}`} · Quantidade: ${q}${it.material ? `\nMarca: ${marca} · Modelo: ${modelo}` : ""}`;
-    if (!window.confirm(texto)) return;
+    if (!semPerguntar && !window.confirm(texto)) return;
+    const d: DadosProposta = { valor: v!, quantidade: q!, marca, modelo };
     setOcupado(true);
     try {
-      await enviarProposta(chave, it, {
-        valor: v!,
-        quantidade: q!,
-        marca,
-        modelo,
-      });
-      avisar(
-        `Proposta do item ${it.numero} ${p ? "alterada" : "cadastrada"} no Compras.gov.br.`,
-      );
-      aoSalvar();
+      await enviarProposta(chave, it, d);
+      aoEnviado(it, d, !!p);
     } catch (e) {
-      avisar(mensagemDeErro(e), "erro");
+      aoFalhar(it, d, !!p, mensagemDeErro(e), () => void salvar(true));
     } finally {
       setOcupado(false);
     }
@@ -845,6 +918,7 @@ function LinhaItemProposta({
         caminho: `${FE}/v1/compras/${chave}/itens/${it.numero}/participacao`,
       });
       avisar(`Proposta do item ${it.numero} excluída.`);
+      aoExcluido(it);
       aoSalvar();
     } catch (e) {
       avisar(mensagemDeErro(e), "erro");
@@ -984,7 +1058,7 @@ function LinhaItemProposta({
             )}
             <button
               className="botao acento pequeno"
-              onClick={salvar}
+              onClick={() => salvar()}
               disabled={!liberado || ocupado || !valido || !mudou}
             >
               {ocupado ? <Loader2 className="girando" /> : <Save />}{" "}

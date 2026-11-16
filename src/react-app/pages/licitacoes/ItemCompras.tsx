@@ -1,5 +1,5 @@
 import { ErroCompras } from "../../robo/ErroCompras";
-import { BellRing, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Download, Eye, Mail, FileUp, Gavel, Loader2, MessageSquare, Paperclip, Send, Trash2 } from "lucide-react";
+import { BellRing, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Download, Eye, Mail, FileUp, Gavel, Loader2, MessageSquare, Paperclip, RefreshCw, Send, Trash2 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   definirCodigoSolicitada,
@@ -743,7 +743,7 @@ function ListaAnexos({
     try {
       await f(a);
     } catch (e) {
-      avisar(mensagemDeErro(e), "erro");
+      avisar(textoErroAnexo(mensagemDeErro(e)), "erro");
     } finally {
       setOcupado("");
     }
@@ -780,9 +780,11 @@ function ListaAnexos({
 function JanelaAnexo({ anexo, obter, aoFechar }: { anexo: AnexoCompras; obter: (a: AnexoCompras) => Promise<ArquivoCompras>; aoFechar: () => void }) {
   const [conteudo, setConteudo] = useState<Conteudo | null>(null);
   const [erro, setErro] = useState("");
+  const [vez, setVez] = useState(0);
   useEffect(() => {
     const urls: string[] = [];
     let vivo = true;
+    setErro("");
     obter(anexo)
       .then((r) => {
         if (!r.base64) throw new Error("O Compras.gov.br não devolveu o arquivo.");
@@ -795,12 +797,17 @@ function JanelaAnexo({ anexo, obter, aoFechar }: { anexo: AnexoCompras; obter: (
       vivo = false;
       urls.forEach((u) => URL.revokeObjectURL(u));
     };
-  }, [anexo, obter]);
+  }, [anexo, obter, vez]);
   return (
     <Modal titulo={anexo.nome} aoFechar={aoFechar} largo>
       <div className="janela-anexo">
         {erro ? (
-          <p className="alerta erro">Não consegui abrir este anexo agora. O Compras.gov.br respondeu: “{erro}”.</p>
+          <div className="erro-anexo">
+            <p className="alerta erro">{textoErroAnexo(erro)}</p>
+            <button className="botao secundario pequeno" onClick={() => setVez((v) => v + 1)}>
+              <RefreshCw size={14} /> Tentar de novo
+            </button>
+          </div>
         ) : !conteudo ? (
           <p className="texto-suave carregando-marcas">
             <Loader2 className="girando" size={16} /> Abrindo o arquivo do Compras.gov.br…
@@ -861,13 +868,36 @@ type ArquivoCompras = { base64?: string; nome?: string; tipo?: string };
 /** Busca o arquivo de um anexo (para ver ou baixar). */
 const obterAnexo = async (compra: CompraAcomp, item: ItemAcomp, cnpjEmpresa: string, a: AnexoCompras): Promise<ArquivoCompras> => {
   if (a.url) return pedir({ url: a.url });
-  const id = encodeURIComponent(a.id);
-  // O site logado baixa o anexo de qualquer empresa por "participacao/{cnpj}"; a tela pública (com captcha) é a reserva.
-  const r = await pedir({ caminho: `${FE}/v2/compras/${compra.chave}/itens/${item.numero}/participacao/${cnpjEmpresa}/anexos/${id}`, captcha: false, baixar: true }).catch(() =>
-    pedir({ caminho: `${FE}/public/v2/compras/${compra.chave}/itens/${item.numero}/participacoes/${cnpjEmpresa}/anexos/${id}`, captcha: true, baixar: true }),
-  );
-  return r;
+  // O site logado baixa o anexo de qualquer empresa por "participacao/{cnpj}" (pelo nome guardado); a tela pública
+  // (com captcha) é a reserva. Em compras antigas o Compras às vezes só acha o arquivo por outro identificador
+  // (id ou sequencial) e responde "No message available" pelo nome: tenta cada um antes de desistir.
+  const chaves = (a.alternativas?.length ? a.alternativas : [a.id]).slice(0, 3);
+  let ultimo: unknown = new Error("O Compras.gov.br não devolveu o arquivo.");
+  for (const chave of chaves) {
+    const id = encodeURIComponent(chave);
+    const rotas = [
+      { caminho: `${FE}/v2/compras/${compra.chave}/itens/${item.numero}/participacao/${cnpjEmpresa}/anexos/${id}`, captcha: false },
+      { caminho: `${FE}/public/v2/compras/${compra.chave}/itens/${item.numero}/participacoes/${cnpjEmpresa}/anexos/${id}`, captcha: true },
+    ];
+    for (const r of rotas) {
+      try {
+        const arquivo = await pedir({ ...r, baixar: true });
+        if (arquivo.base64) return arquivo;
+      } catch (e) {
+        ultimo = e;
+      }
+    }
+  }
+  throw ultimo;
 };
+
+/** Erro ao abrir um anexo, em português: "No message available" é o erro genérico do servidor do Compras. */
+export function textoErroAnexo(mensagem: string) {
+  if (/no message available|internal server error|50\d/i.test(mensagem))
+    return "O Compras.gov.br não entregou este arquivo agora (erro interno do site dele). Tente de novo em alguns segundos; se continuar, o arquivo só abre pela tela do Compras.gov.br.";
+  if (/40[34]|não encontr|not found/i.test(mensagem)) return "O Compras.gov.br não encontrou este arquivo (ele pode ter sido substituído ou excluído pela empresa).";
+  return `Não consegui abrir este anexo agora. O Compras.gov.br respondeu: “${mensagem}”.`;
+}
 
 function MeusAnexos({ compra, item, cnpj, convocado }: { compra: CompraAcomp; item: ItemAcomp; cnpj: string; convocado: boolean }) {
   const caminho = `${FE}/v1/compras/${compra.chave}/itens/${item.numero}/participacao/${cnpj}/anexos`;

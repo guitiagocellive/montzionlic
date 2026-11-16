@@ -16197,3 +16197,170 @@ body {
 .abrir-no-app a {
   color: var(--acento-texto);
 }
+
+/* ---------- Anexo do Compras que não abriu ---------- */
+.erro-anexo { display: grid; gap: 10px; justify-items: start; }
+.erro-anexo .alerta { margin: 0; }
+
+/* ---------- Card de resultado do cadastro da proposta (sucesso / não deu certo) ---------- */
+.modal.janela-resultado-proposta { max-width: 640px; }
+.resultado-proposta { display: grid; gap: 12px; justify-items: center; text-align: center; padding: 4px 4px 2px; }
+.resultado-proposta h2 { margin: 2px 0 0; font-size: 1.35rem; }
+.resultado-proposta > p { margin: 0; }
+.selo-resultado {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  color: #fff;
+  animation: selo-surge 0.5s cubic-bezier(0.18, 1.35, 0.4, 1) both;
+}
+.resultado-proposta.ok .selo-resultado { background: var(--verde); box-shadow: 0 0 0 8px color-mix(in oklab, var(--verde) 18%, transparent); }
+.resultado-proposta.erro .selo-resultado { background: var(--vermelho); box-shadow: 0 0 0 8px color-mix(in oklab, var(--vermelho) 18%, transparent); }
+@keyframes selo-surge {
+  from { transform: scale(0.3); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+.tabela-resultado-proposta { width: 100%; max-height: 260px; overflow: auto; border: 1px solid var(--borda); border-radius: 12px; }
+.tabela-resultado-proposta table { width: 100%; border-collapse: collapse; font-size: 0.84rem; text-align: left; }
+.tabela-resultado-proposta th { position: sticky; top: 0; background: var(--superficie-2); font-weight: 600; font-size: 0.74rem; color: var(--texto-fraco); }
+.tabela-resultado-proposta th,
+.tabela-resultado-proposta td { padding: 8px 10px; border-bottom: 1px solid var(--borda); vertical-align: top; }
+.tabela-resultado-proposta td:not(:first-child),
+.tabela-resultado-proposta th:not(:first-child) { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tabela-resultado-proposta td:first-child { display: grid; gap: 2px; }
+.tabela-resultado-proposta tbody tr:last-child td { border-bottom: 0; }
+.tabela-resultado-proposta tfoot td { font-weight: 700; border-top: 1px solid var(--borda); border-bottom: 0; }
+.tabela-resultado-proposta tfoot td:first-child { display: table-cell; }
+.nota-resultado-proposta { display: flex; gap: 6px; align-items: center; font-size: 0.82rem; color: var(--texto-suave); }
+.motivo-resultado,
+.mensagem-compras-resultado {
+  width: 100%;
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  text-align: left;
+}
+.motivo-resultado { background: color-mix(in oklab, var(--vermelho) 10%, var(--superficie-2)); border: 1px solid color-mix(in oklab, var(--vermelho) 30%, transparent); }
+.mensagem-compras-resultado { background: var(--superficie-2); font-size: 0.85rem; overflow-wrap: anywhere; }
+.linha-acoes.centro { justify-content: center; flex-wrap: wrap; }
+
+/* ---------- Cadastradas: a licitação no desenho da tela "Cadastrar propostas" do Compras.gov.br ---------- */
+.cp-cadastro { display: grid; gap: 14px; }
+.cp-bloco { display: grid; gap: 10px; padding: 14px 16px; border-radius: 16px; background: var(--superficie-2); }
+.cp-bloco h3, .cp-itens h3 { margin: 0; font-size: 0.98rem; font-weight: 600; }
+.cp-prazo { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; font-size: 0.9rem; }
+.cp-prazo > svg { color: var(--acento-texto); }
+.cp-endereco { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; font-size: 0.88rem; color: var(--texto-suave); }
+.cp-endereco strong { color: var(--texto); }
+.cp-endereco > svg { color: var(--acento-texto); }
+.cp-termo { display: grid; gap: 10px; justify-items: start; }
+.cp-termo-linha { display: flex; gap: 10px; align-items: flex-start; font-size: 0.88rem; }
+.cp-termo-linha input { margin-top: 3px; accent-color: var(--acento); }
+.cp-textos { max-height: 220px; overflow: auto; padding: 10px 12px; border-radius: 10px; background: var(--superficie); font-size: 0.8rem; color: var(--texto-suave); }
+.cp-textos p { margin: 0 0 8px; }
+.cp-sanfona {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 2px;
+  border: 0;
+  border-top: 1px solid var(--borda);
+  background: none;
+  color: var(--texto);
+  font: inherit;
+  font-size: 0.88rem;
+  text-align: left;
+  cursor: pointer;
+}
+.cp-sanfona svg { color: var(--acento-texto); transition: transform 0.2s; }
+.cp-sanfona[aria-expanded="true"] svg { transform: rotate(180deg); }
+.cp-declaracoes { display: grid; gap: 6px; width: 100%; margin: 0; }
+.cp-declaracoes > div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 12px; border-radius: 10px; background: var(--superficie); font-size: 0.85rem; }
+.cp-declaracoes dt { color: var(--texto-suave); }
+.cp-declaracoes dd { margin: 0; font-weight: 600; }
+.cp-itens { display: grid; gap: 10px; }
+.cp-itens-topo { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.cp-itens-topo h3 { margin-right: auto; }
+.cp-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.cp-item,
+.cp-grupo {
+  border-radius: 14px;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
+  transition: border-color 0.15s;
+}
+.cp-item:hover, .cp-grupo:hover { border-color: color-mix(in oklab, var(--acento) 45%, var(--borda)); }
+.cp-item.com-proposta { border-left: 3px solid var(--verde); }
+.cp-grupo { background: var(--superficie-2); }
+.cp-sub { padding: 0 12px 12px; }
+.cp-sub .cp-item { box-shadow: none; }
+.cp-cabeca {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(170px, 230px) minmax(200px, 260px) auto;
+  gap: 12px 18px;
+  align-items: center;
+  padding: 14px 16px;
+}
+button.cp-cabeca { width: 100%; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.cp-cabeca-grupo { grid-template-columns: minmax(0, 1fr) auto minmax(200px, 260px) auto; }
+.cp-nome { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 0; border: 0; background: none; color: var(--texto); font: inherit; text-align: left; cursor: pointer; }
+.cp-nome strong { font-size: 0.88rem; font-weight: 600; overflow-wrap: anywhere; }
+.cp-nome:hover strong { color: var(--acento-texto); }
+.cp-nome > svg { color: var(--acento-texto); flex: none; }
+.cp-numero {
+  display: grid;
+  place-items: center;
+  flex: none;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--superficie-2);
+  border: 1px solid var(--borda);
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+.cp-dados-item { display: grid; grid-template-columns: auto auto; gap: 3px 12px; margin: 0; font-size: 0.78rem; align-content: center; }
+.cp-dados-item dt { color: var(--texto-fraco); }
+.cp-dados-item dd { margin: 0; font-variant-numeric: tabular-nums; }
+.cp-dados-item .cp-meu { font-weight: 700; color: var(--verde); }
+.cp-situacao { grid-column: 1 / -1; font-weight: 500; }
+.cp-situacao.falta { color: var(--vermelho); }
+.cp-situacao.parcial { color: #d97706; }
+.cp-situacao.ok { color: var(--verde); }
+.cp-acoes { display: flex; gap: 4px; align-items: center; }
+.cp-seta { transition: transform 0.2s; color: var(--acento-texto); }
+.cp-item.aberto > .cp-cabeca .cp-seta svg,
+.cp-grupo.aberto > .cp-cabeca > .cp-seta { transform: rotate(180deg); }
+.cp-corpo { display: grid; gap: 14px; padding: 0 16px 16px; animation: aparecer 0.18s ease both; }
+.cp-descricao { padding-bottom: 12px; border-bottom: 1px solid var(--borda); }
+.cp-descricao p { margin: 2px 0 0; font-size: 0.84rem; color: var(--texto-suave); }
+.cp-campos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 18px; align-items: start; }
+.cp-campo { display: grid; gap: 6px; min-width: 0; }
+.cp-campo label, .cp-rotulo { font-size: 0.78rem; font-weight: 600; color: var(--texto-suave); }
+.cp-campo .entrada input { background: var(--superficie-2); }
+.cp-campo .entrada input:disabled { opacity: 0.6; cursor: not-allowed; }
+.cp-campo.largo { grid-column: span 2; }
+.cp-valor-fixo { font-size: 0.95rem; font-variant-numeric: tabular-nums; padding-top: 2px; }
+.cp-rodape { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+.cp-avisos { display: grid; gap: 2px; }
+.cp-botoes { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+
+@media (max-width: 860px) {
+  .cp-cabeca, .cp-cabeca-grupo { grid-template-columns: minmax(0, 1fr) auto; }
+  .cp-cabeca > .cp-nome { grid-column: 1; }
+  .cp-cabeca > .cp-acoes, .cp-cabeca-grupo > .cp-seta { grid-column: 2; grid-row: 1; }
+  .cp-cabeca > .cp-dados-item { grid-column: 1 / -1; }
+  .cp-cabeca-grupo > span:empty { display: none; }
+  .cp-campos { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .cp-campo.largo { grid-column: 1 / -1; }
+  .cp-sub { padding: 0 8px 8px; }
+  .cp-botoes { width: 100%; }
+  .cp-botoes .botao { flex: 1 1 auto; justify-content: center; }
+  .resultado-proposta h2 { font-size: 1.15rem; }
+}
