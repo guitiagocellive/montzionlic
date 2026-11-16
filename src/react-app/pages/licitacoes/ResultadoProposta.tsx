@@ -21,8 +21,10 @@ export interface ItemEnviado {
 }
 
 export type ResultadoEnvio =
-  | { ok: true; alterada: boolean; itens: ItemEnviado[] }
-  | { ok: false; item: ItemEnviado; mensagem: string; alterada: boolean };
+  /** itens = os que acabaram de ir para o Compras; faltam = itens da licitação ainda sem proposta. */
+  | { ok: true; alterada: boolean; itens: ItemEnviado[]; faltam?: number }
+  /** falhas = itens recusados (com a mensagem do Compras); enviados = os que foram no mesmo envio. */
+  | { ok: false; alterada: boolean; falhas: { item: ItemEnviado; mensagem: string }[]; enviados?: ItemEnviado[] };
 
 export function itemEnviado(it: ItemProposta, d?: DadosProposta): ItemEnviado {
   return {
@@ -47,6 +49,7 @@ export function JanelaResultado({
   emCadastradas = false,
   aoFechar,
   aoTentar,
+  aoContinuar,
 }: {
   resultado: ResultadoEnvio;
   nome: string;
@@ -58,9 +61,11 @@ export function JanelaResultado({
   aoFechar: () => void;
   /** Só no erro: manda de novo os mesmos valores. */
   aoTentar?: () => void;
+  /** Sucesso com itens ainda sem proposta: volta para cadastrar os outros. */
+  aoContinuar?: () => void;
 }) {
   if (resultado.ok) {
-    const { itens, alterada } = resultado;
+    const { itens, alterada, faltam = 0 } = resultado;
     const total = itens.reduce((s, i) => s + (totalDo(i) ?? 0), 0);
     return (
       <Modal titulo={alterada ? "Proposta alterada" : "Proposta cadastrada"} aoFechar={aoFechar} classe="modal-destaque janela-resultado-proposta">
@@ -74,7 +79,9 @@ export function JanelaResultado({
             {orgao && <> · UASG {orgao}</>}
           </p>
           <p className="texto-suave pequeno">
-            {itens.length === 1 ? "A proposta do item foi registrada no Compras.gov.br." : `As propostas dos ${itens.length} itens estão registradas no Compras.gov.br.`}
+            {itens.length === 1
+              ? `A proposta do item ${itens[0].numero} foi ${alterada ? "alterada" : "registrada"} no Compras.gov.br.`
+              : `As propostas de ${itens.length} itens foram ${alterada ? "alteradas" : "registradas"} no Compras.gov.br.`}
           </p>
           <div className="tabela-resultado-proposta">
             <table>
@@ -104,13 +111,18 @@ export function JanelaResultado({
               {itens.length > 1 && total > 0 && (
                 <tfoot>
                   <tr>
-                    <td colSpan={3}>Total da proposta</td>
+                    <td colSpan={3}>Total enviado</td>
                     <td>{formatarMoeda(total)}</td>
                   </tr>
                 </tfoot>
               )}
             </table>
           </div>
+          {faltam > 0 && (
+            <p className="nota-resultado-proposta falta">
+              Ainda {faltam === 1 ? "falta 1 item" : `faltam ${faltam} itens`} desta licitação sem proposta.
+            </p>
+          )}
           {fim && (
             <p className="nota-resultado-proposta">
               <CalendarClock size={15} /> Até {fim} dá para alterar ou excluir a proposta{emCadastradas ? "." : " na aba Cadastradas."}
@@ -129,6 +141,11 @@ export function JanelaResultado({
                 <ListChecks /> Ver em Cadastradas
               </a>
             )}
+            {faltam > 0 && aoContinuar && (
+              <button className="botao secundario" onClick={aoContinuar}>
+                Cadastrar os outros itens
+              </button>
+            )}
             <button className="botao acento" onClick={aoFechar} autoFocus>
               Concluir
             </button>
@@ -138,8 +155,10 @@ export function JanelaResultado({
     );
   }
 
-  const { item, mensagem, alterada } = resultado;
-  const { motivo, dica, login } = explicarErroProposta(mensagem);
+  const { falhas, alterada, enviados = [] } = resultado;
+  const { item, mensagem } = falhas[0];
+  const { motivo, dica } = explicarErroProposta(mensagem);
+  const login = falhas.some((f) => explicarErroProposta(f.mensagem).login);
   async function entrar() {
     try {
       await ponte.entrar(true);
@@ -156,17 +175,49 @@ export function JanelaResultado({
         </span>
         <h2>{alterada ? "Não deu certo alterar a proposta" : "Não deu certo cadastrar a proposta"}</h2>
         <p className="texto-suave">
-          <strong>{nome}</strong> · item {item.numero} · {item.descricao}
+          <strong>{nome}</strong>
+          {falhas.length === 1 ? (
+            <>
+              {" "}
+              · item {item.numero} · {item.descricao}
+            </>
+          ) : (
+            <> · {falhas.length} itens não foram aceitos</>
+          )}
         </p>
-        <div className="motivo-resultado">
-          <span className="texto-fraco pequeno">Motivo</span>
-          <strong>{motivo}</strong>
-          <span>{dica}</span>
-        </div>
-        <p className="mensagem-compras-resultado">
-          <span className="texto-fraco pequeno">Mensagem do Compras.gov.br</span>
-          <span>“{mensagem}”</span>
-        </p>
+        {enviados.length > 0 && (
+          <p className="texto-suave pequeno">
+            {enviados.length === 1 ? `O item ${enviados[0].numero} foi registrado.` : `${enviados.length} itens foram registrados.`} A janela continua aberta para corrigir o resto.
+          </p>
+        )}
+        {falhas.length === 1 ? (
+          <>
+            <div className="motivo-resultado">
+              <span className="texto-fraco pequeno">Motivo</span>
+              <strong>{motivo}</strong>
+              <span>{dica}</span>
+            </div>
+            <p className="mensagem-compras-resultado">
+              <span className="texto-fraco pequeno">Mensagem do Compras.gov.br</span>
+              <span>“{mensagem}”</span>
+            </p>
+          </>
+        ) : (
+          <ul className="falhas-resultado">
+            {falhas.map((f) => {
+              const e = explicarErroProposta(f.mensagem);
+              return (
+                <li key={f.item.numero}>
+                  <strong>
+                    Item {f.item.numero} · {f.item.descricao}
+                  </strong>
+                  <span>{e.motivo}</span>
+                  <span className="texto-fraco pequeno">“{f.mensagem}”</span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
         <div className="linha-acoes centro">
           {login && temPonte() && (
             <button className="botao secundario" onClick={entrar}>

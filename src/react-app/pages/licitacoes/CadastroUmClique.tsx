@@ -27,6 +27,7 @@ import {
   textoReferencia,
 } from "./comprasCadastro";
 import { type FichaQuadro, sugestoesDoQuadro } from "./sugestoesQuadro";
+import { type ItemEnviado, itemEnviado, JanelaResultado, type ResultadoEnvio } from "./ResultadoProposta";
 
 // Cadastro com um clique: a licitação do quadro já tem número, UASG, itens e orçamento. A plataforma acha a compra
 // no Compras.gov.br, casa os itens pelo número, preenche valor (proposta/orçamento), marca e modelo (produto
@@ -148,6 +149,8 @@ export function CadastroUmClique({
   const [linhas, setLinhas] = useState<Linha[]>([]);
   const [enviando, setEnviando] = useState(false);
   const [verCompleto, setVerCompleto] = useState(false);
+  // Depois de enviar: tudo certo → fecha e mostra o card de sucesso; algum erro → fica aberto com o card do erro.
+  const [resultado, setResultado] = useState<ResultadoEnvio | null>(null);
   const [vez, setVez] = useState(0);
   const tentarDeNovo = useCallback(() => {
     setErro("");
@@ -342,18 +345,22 @@ export function CadastroUmClique({
       return;
     setEnviando(true);
     let ok = 0;
+    const enviados: ItemEnviado[] = [];
+    const falhas: { item: ItemEnviado; mensagem: string }[] = [];
     for (let i = 0; i < linhas.length; i++) {
       const x = linhas[i];
-      if (!x.marcado) continue;
+      if (!x.marcado || x.item.grupo) continue;
       mudar(i, { status: "enviando", erro: "" });
+      const d = dadosDe(x);
       try {
-        const d = dadosDe(x);
         await enviarProposta(chave, x.item, d);
+        enviados.push(itemEnviado(x.item, d));
         const item = { ...x.item, proposta: { valor: d.valor, quantidade: d.quantidade, marca: d.marca, modelo: d.modelo, pais: x.item.proposta?.pais ?? "BRA", margem: x.item.proposta?.margem ?? "0" } };
         mudar(i, { status: "ok", marcado: false, item, origem: x.item.proposta ? "Alterada no Compras.gov.br" : "Cadastrada no Compras.gov.br", orig: assinatura(x) });
         ok++;
       } catch (e) {
         mudar(i, { status: "erro", erro: mensagemDeErro(e) });
+        falhas.push({ item: itemEnviado(x.item, d), mensagem: mensagemDeErro(e) });
       }
     }
     setEnviando(false);
@@ -361,12 +368,12 @@ export function CadastroUmClique({
       sincronizar(ls.filter((y) => !y.item.grupo && y.item.proposta).length);
       return ls;
     });
-    avisar(
-      ok === marcadas.length
-        ? `${ok} item(ns) ${alteradas.length && !novas.length ? "alterado(s)" : "enviado(s)"} no Compras.gov.br.`
-        : `${ok} de ${marcadas.length} cadastrado(s). Veja os erros na lista.`,
-      ok === marcadas.length ? "sucesso" : "erro",
-    );
+    const alterada = alteradas.length > 0 && !novas.length;
+    if (!falhas.length) {
+      const feitos = new Set(enviados.map((e) => e.numero));
+      const faltam = linhas.filter((x) => !x.item.grupo && !x.item.proposta && !feitos.has(x.item.numero)).length;
+      setResultado({ ok: true, alterada, itens: enviados, faltam });
+    } else setResultado({ ok: false, alterada, falhas, enviados });
   }
 
   const l = ficha?.licitacao;
@@ -375,6 +382,32 @@ export function CadastroUmClique({
     : l?.numero
       ? `Nº ${l.numero}`
       : "licitação";
+
+  const orgaoCompra = compra ? [txt(compra.compra.numeroUasg), txt(compra.compra.nomeUasg)].filter(Boolean).join(" - ") : "";
+  const fimCompra = (() => {
+    const t = Date.parse(txt(compra?.compra.dataHoraFimPropostas));
+    return Number.isFinite(t) ? new Date(t).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "";
+  })();
+  const cardResultado = resultado && (
+    <JanelaResultado
+      resultado={resultado}
+      nome={titulo}
+      orgao={orgaoCompra}
+      fim={fimCompra}
+      aoFechar={resultado.ok ? fechar : () => setResultado(null)}
+      aoContinuar={() => setResultado(null)}
+      aoTentar={
+        resultado.ok
+          ? undefined
+          : () => {
+              setResultado(null);
+              void confirmar();
+            }
+      }
+    />
+  );
+  // Deu certo: a janela do cadastro fecha e fica só o card.
+  if (resultado?.ok) return cardResultado;
 
   if (verCompleto && chave)
     return (
@@ -386,6 +419,7 @@ export function CadastroUmClique({
     );
 
   return (
+    <>
     <Modal
       titulo={`${jaCadastrada ? "Alterar proposta no Compras.gov.br" : "Cadastrar no Compras.gov.br"} · ${titulo}`}
       aoFechar={fechar}
@@ -750,6 +784,8 @@ export function CadastroUmClique({
         ) : null}
       </div>
     </Modal>
+    {cardResultado}
+    </>
   );
 }
 

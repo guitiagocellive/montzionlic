@@ -132,10 +132,12 @@ Não existe cadastro público: só um administrador adiciona pessoas.
     UASG, modalidade, número e ano; aceita as **declarações** (texto oficial, ME/EPP, programa de integridade e equidade
     de gênero quando exigidos) e cadastra, altera ou exclui a **proposta de cada item** (valor unitário ou desconto,
     quantidade, marca e modelo para materiais; anexo quando o item exige). Cada envio pede confirmação.
-  - **Depois de Cadastrar**: quando não sobra item sem proposta, a janela do cadastro fecha e aparece o card
-    **"Licitação cadastrada com sucesso"** (itens, valores, marca/modelo, total e o prazo para alterar). Se o Compras
-    recusar, aparece o card **"Não deu certo"** com o motivo em português, a mensagem original do Compras e os botões
-    "Voltar e corrigir" e "Tentar de novo" (`ResultadoProposta.tsx`).
+  - **Depois de Cadastrar** (janela de cadastro e cadastro com um clique): deu certo → a janela fecha e aparece o card
+    **"Licitação cadastrada com sucesso"** com o que acabou de ir (valor, quantidade, marca/modelo, total), quantos
+    itens ainda faltam ("Cadastrar os outros itens" reabre a janela) e o prazo para alterar. Deu erro → a janela fica
+    aberta e o card **"Não deu certo"** mostra o motivo em português e a mensagem do Compras de cada item recusado,
+    com "Voltar e corrigir" e "Tentar de novo" (`ResultadoProposta.tsx`). Em Cadastradas o card aparece por cima e a
+    licitação continua aberta. O que a pessoa digita não é trocado quando o orçamento do quadro chega depois.
   - **Cadastradas** (proposta enviada, sessão ainda fechada): a janela da licitação segue a tela "Cadastrar propostas"
     do Compras.gov.br — data limite, endereço do fornecedor, termo/declarações (com a sanfona ME/EPP) e os itens com
     quantidade solicitada, unidade, valor estimado, o seu valor, descrição detalhada, valor unitário, valor total,

@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { Campo } from "../../components/Formulario";
 import { temPonte } from "../../robo/ponte";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { lerAnexos } from "../../../shared/acompanhamento";
 import { mensagemDeErro } from "../../api";
 import { avisar, Modal } from "../../components/Ui";
@@ -234,8 +234,11 @@ export function CadastroProposta({
   emCadastradas?: boolean;
   aoFechar: () => void;
 }) {
-  // Depois de Cadastrar: tudo cadastrado → fecha o cadastro e mostra o card de sucesso; erro → card por cima.
+  // Depois de Cadastrar: deu certo → a janela do cadastro fecha e fica só o card de sucesso; erro → a janela
+  // continua aberta, com o card do erro por cima.
   const [envio, setEnvio] = useState<EnvioFeito | null>(null);
+  // Propostas enviadas/excluídas aqui (null = excluída): o Compras às vezes demora a devolvê-las na releitura.
+  const [enviadas, setEnviadas] = useState<Map<number, PropostaDoItem | null>>(new Map());
   const [estado, setEstado] = useState<{ carregando: boolean; erro: string }>({
     carregando: true,
     erro: "",
@@ -269,6 +272,10 @@ export function CadastroProposta({
       fim={envio.fim}
       emCadastradas={emCadastradas}
       aoFechar={envio.resultado.ok ? aoFechar : () => setEnvio(null)}
+      aoContinuar={() => {
+        setEnvio(null);
+        recarregar();
+      }}
       aoTentar={
         envio.tentar &&
         (() => {
@@ -300,6 +307,8 @@ export function CadastroProposta({
             cnpj={cnpjDado || dados.cnpj}
             recarregar={recarregar}
             aoEnviar={setEnvio}
+            enviadas={enviadas}
+            setEnviadas={setEnviadas}
           />
         ) : null}
       </div>
@@ -316,6 +325,8 @@ function ConteudoCadastro({
   cnpj,
   recarregar,
   aoEnviar,
+  enviadas,
+  setEnviadas,
 }: {
   chave: string;
   nome: string;
@@ -323,11 +334,10 @@ function ConteudoCadastro({
   cnpj: string;
   recarregar: () => void;
   aoEnviar: (e: EnvioFeito) => void;
+  enviadas: Map<number, PropostaDoItem | null>;
+  setEnviadas: React.Dispatch<React.SetStateAction<Map<number, PropostaDoItem | null>>>;
 }) {
   const { compra, participacao, itensBloqueados, declaracoes } = dados;
-  // Propostas enviadas nesta janela: o Compras.gov.br às vezes demora a devolvê-las na releitura.
-  // (null = excluída aqui)
-  const [enviadas, setEnviadas] = useState<Map<number, PropostaDoItem | null>>(new Map());
   const itens = useMemo(
     () => dados.itens.map((i) => (enviadas.has(i.numero) ? { ...i, proposta: enviadas.get(i.numero) ?? null } : i)),
     [dados.itens, enviadas],
@@ -381,21 +391,12 @@ function ConteudoCadastro({
   function enviado(it: ItemProposta, d: DadosProposta, alterada: boolean) {
     const proposta: PropostaDoItem = { valor: d.valor, quantidade: d.quantidade, marca: d.marca, modelo: d.modelo, pais: it.proposta?.pais ?? "BRA", margem: it.proposta?.margem ?? "0" };
     setEnviadas((m) => new Map(m).set(it.numero, proposta));
-    const todos = itens.filter((i) => !i.grupo).map((i) => (i.numero === it.numero ? { ...i, proposta } : i));
-    const faltam = todos.filter((i) => !i.proposta);
-    if (!faltam.length) {
-      aoEnviar({ resultado: { ok: true, alterada, itens: todos.map((i) => itemEnviado(i)) }, orgao, fim: fim ? dataHora(fim) : "" });
-      return;
-    }
-    avisar(
-      `Proposta do item ${it.numero} ${alterada ? "alterada" : "cadastrada"}. ${faltam.length === 1 ? `Falta o item ${faltam[0].numero}` : `Faltam ${faltam.length} itens`} para concluir.`,
-      "sucesso",
-    );
-    recarregar();
+    const faltam = itens.filter((i) => !i.grupo && i.numero !== it.numero && !i.proposta).length;
+    aoEnviar({ resultado: { ok: true, alterada, itens: [itemEnviado(it, d)], faltam }, orgao, fim: fim ? dataHora(fim) : "" });
   }
 
   function falhou(it: ItemProposta, d: DadosProposta, alterada: boolean, mensagem: string, tentar: () => void) {
-    aoEnviar({ resultado: { ok: false, alterada, item: itemEnviado(it, d), mensagem }, orgao, fim: fim ? dataHora(fim) : "", tentar });
+    aoEnviar({ resultado: { ok: false, alterada, falhas: [{ item: itemEnviado(it, d), mensagem }] }, orgao, fim: fim ? dataHora(fim) : "", tentar });
   }
 
   return (
@@ -509,7 +510,7 @@ function ConteudoCadastro({
               />
             ) : (
               <LinhaItemProposta
-                key={`${it.numero}-${doQuadro ? 1 : 0}`}
+                key={it.numero}
                 chave={chave}
                 cnpj={cnpj}
                 item={it}
@@ -861,6 +862,15 @@ function LinhaItemProposta({
   );
   const [marca, setMarca] = useState(p?.marca ?? inicial?.marca ?? "");
   const [modelo, setModelo] = useState(p?.modelo ?? inicial?.modelo ?? "");
+  // O orçamento do quadro pode chegar depois: aplica a sugestão só se a pessoa ainda não mexeu nos campos.
+  const editado = useRef(false);
+  useEffect(() => {
+    if (p || editado.current || !sugestao) return;
+    if (!it.desconto) setValor(textoValor(sugestao.valor));
+    if (it.quantidade == null && sugestao.quantidade != null) setQuantidade(textoNumero(sugestao.quantidade));
+    if (sugestao.marca) setMarca(sugestao.marca);
+    if (sugestao.modelo) setModelo(sugestao.modelo);
+  }, [sugestao]); // eslint-disable-line react-hooks/exhaustive-deps
   const [ocupado, setOcupado] = useState(false);
   const [aberto, setAberto] = useState(false);
   const [anexos, setAnexos] = useState<{ nome: string; id: string }[] | null>(
@@ -1017,7 +1027,7 @@ function LinhaItemProposta({
             id={id("valor")}
             aria-label={`Valor do item ${it.numero}`}
             value={valor}
-            onChange={(e) => setValor(e.target.value)}
+            onChange={(e) => ((editado.current = true), setValor(e.target.value))}
             inputMode="decimal"
             disabled={!liberado || ocupado}
             placeholder={it.desconto ? "10,5" : "0,00"}
@@ -1027,7 +1037,7 @@ function LinhaItemProposta({
             id={id("quantidade")}
             aria-label={`Quantidade do item ${it.numero}`}
             value={quantidade}
-            onChange={(e) => setQuantidade(e.target.value)}
+            onChange={(e) => ((editado.current = true), setQuantidade(e.target.value))}
             inputMode="decimal"
             disabled={!liberado || ocupado}
             title={
@@ -1043,7 +1053,7 @@ function LinhaItemProposta({
                 id={id("marca")}
                 aria-label={`Marca do item ${it.numero}`}
                 value={marca}
-                onChange={(e) => setMarca(e.target.value)}
+                onChange={(e) => ((editado.current = true), setMarca(e.target.value))}
                 maxLength={100}
                 disabled={!liberado || ocupado}
               />
@@ -1052,7 +1062,7 @@ function LinhaItemProposta({
                 id={id("modelo")}
                 aria-label={`Modelo do item ${it.numero}`}
                 value={modelo}
-                onChange={(e) => setModelo(e.target.value)}
+                onChange={(e) => ((editado.current = true), setModelo(e.target.value))}
                 maxLength={100}
                 disabled={!liberado || ocupado}
               />

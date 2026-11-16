@@ -1,5 +1,5 @@
 import { CalendarClock, ChevronDown, Layers, Loader2, MapPin, Save, Trash2, Undo2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { lerAnexos } from "../../../shared/acompanhamento";
 import { mensagemDeErro } from "../../api";
 import { avisar } from "../../components/Ui";
@@ -136,18 +136,13 @@ function Conteudo({ chave, nome, dados, cnpj, recarregar }: { chave: string; nom
   function enviado(it: ItemProposta, d: DadosProposta, alterada: boolean) {
     const proposta: PropostaDoItem = { valor: d.valor, quantidade: d.quantidade, marca: d.marca, modelo: d.modelo, pais: it.proposta?.pais ?? "BRA", margem: it.proposta?.margem ?? "0" };
     setMudadas((m) => new Map(m).set(it.numero, proposta));
-    const todos = simples.map((i) => (i.numero === it.numero ? { ...i, proposta } : i));
-    const faltamItens = todos.filter((i) => !i.proposta);
-    if (!faltamItens.length) setEnvio({ resultado: { ok: true, alterada, itens: todos.map((i) => itemEnviado(i)) }, orgao, fim: fim ? dataHora(fim) : "" });
-    else
-      avisar(
-        `Proposta do item ${it.numero} ${alterada ? "alterada" : "cadastrada"}. ${faltamItens.length === 1 ? `Falta o item ${faltamItens[0].numero}` : `Faltam ${faltamItens.length} itens`} para concluir.`,
-        "sucesso",
-      );
+    // Cada envio que dá certo mostra o card (a licitação continua aberta por baixo).
+    const faltam = simples.filter((i) => i.numero !== it.numero && !i.proposta).length;
+    setEnvio({ resultado: { ok: true, alterada, itens: [itemEnviado(it, d)], faltam }, orgao, fim: fim ? dataHora(fim) : "" });
     recarregar();
   }
   const falhou = (it: ItemProposta, d: DadosProposta, alterada: boolean, mensagem: string, tentar: () => void) =>
-    setEnvio({ resultado: { ok: false, alterada, item: itemEnviado(it, d), mensagem }, orgao, fim: fim ? dataHora(fim) : "", tentar });
+    setEnvio({ resultado: { ok: false, alterada, falhas: [{ item: itemEnviado(it, d), mensagem }] }, orgao, fim: fim ? dataHora(fim) : "", tentar });
   const excluido = (it: ItemProposta) => {
     setMudadas((m) => new Map(m).set(it.numero, null));
     recarregar();
@@ -177,7 +172,7 @@ function Conteudo({ chave, nome, dados, cnpj, recarregar }: { chave: string; nom
 
   const linha = (it: ItemProposta) => (
     <ItemComoCompras
-      key={`${it.numero}-${doQuadro ? 1 : 0}`}
+      key={it.numero}
       chave={chave}
       cnpj={cnpj}
       item={it}
@@ -452,6 +447,15 @@ function ItemComoCompras({
   const [quantidade, setQuantidade] = useState(original.quantidade);
   const [marca, setMarca] = useState(original.marca);
   const [modelo, setModelo] = useState(original.modelo);
+  // O orçamento do quadro pode chegar depois: aplica a sugestão só se a pessoa ainda não mexeu nos campos.
+  const editado = useRef(false);
+  useEffect(() => {
+    if (p || editado.current || !sugestao) return;
+    if (!it.desconto) setValor(textoValor(sugestao.valor));
+    if (it.quantidade == null && sugestao.quantidade != null) setQuantidade(textoNumero(sugestao.quantidade));
+    if (sugestao.marca) setMarca(sugestao.marca);
+    if (sugestao.modelo) setModelo(sugestao.modelo);
+  }, [sugestao]); // eslint-disable-line react-hooks/exhaustive-deps
   const [ocupado, setOcupado] = useState(false);
   const [anexos, setAnexos] = useState<{ nome: string; id: string }[] | null>(null);
   const v = paraNumero(valor);
@@ -476,6 +480,7 @@ function ItemComoCompras({
   }, [aberto, carregarAnexos]);
 
   function desfazer() {
+    editado.current = false;
     setValor(original.valor);
     setQuantidade(original.quantidade);
     setMarca(original.marca);
@@ -564,7 +569,7 @@ function ItemComoCompras({
               <label htmlFor={id("qtd")}>Quantidade ofertada</label>
               {it.srp ? (
                 <div className="entrada">
-                  <input id={id("qtd")} value={quantidade} onChange={(e) => setQuantidade(e.target.value)} inputMode="decimal" disabled={!liberado || ocupado} aria-label={`Quantidade do item ${it.numero}`} />
+                  <input id={id("qtd")} value={quantidade} onChange={(e) => ((editado.current = true), setQuantidade(e.target.value))} inputMode="decimal" disabled={!liberado || ocupado} aria-label={`Quantidade do item ${it.numero}`} />
                 </div>
               ) : (
                 <span className="cp-valor-fixo" id={id("qtd")}>
@@ -578,7 +583,7 @@ function ItemComoCompras({
                 <input
                   id={id("valor")}
                   value={valor}
-                  onChange={(e) => setValor(e.target.value)}
+                  onChange={(e) => ((editado.current = true), setValor(e.target.value))}
                   inputMode="decimal"
                   placeholder={it.desconto ? "10,5" : "0,00"}
                   disabled={!liberado || ocupado}
@@ -595,13 +600,13 @@ function ItemComoCompras({
                 <div className="cp-campo">
                   <label htmlFor={id("marca")}>Marca/Fabricante</label>
                   <div className="entrada">
-                    <input id={id("marca")} value={marca} onChange={(e) => setMarca(e.target.value)} maxLength={100} disabled={!liberado || ocupado} aria-label={`Marca do item ${it.numero}`} />
+                    <input id={id("marca")} value={marca} onChange={(e) => ((editado.current = true), setMarca(e.target.value))} maxLength={100} disabled={!liberado || ocupado} aria-label={`Marca do item ${it.numero}`} />
                   </div>
                 </div>
                 <div className="cp-campo largo">
                   <label htmlFor={id("modelo")}>Modelo/Versão</label>
                   <div className="entrada">
-                    <input id={id("modelo")} value={modelo} onChange={(e) => setModelo(e.target.value)} maxLength={100} disabled={!liberado || ocupado} aria-label={`Modelo do item ${it.numero}`} />
+                    <input id={id("modelo")} value={modelo} onChange={(e) => ((editado.current = true), setModelo(e.target.value))} maxLength={100} disabled={!liberado || ocupado} aria-label={`Modelo do item ${it.numero}`} />
                   </div>
                 </div>
               </>
