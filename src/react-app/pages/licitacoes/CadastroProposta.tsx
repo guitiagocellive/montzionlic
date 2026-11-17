@@ -343,6 +343,18 @@ function ConteudoCadastro({
     [dados.itens, enviadas],
   );
   const [soSem, setSoSem] = useState(false);
+  // Itens preenchidos e ainda sem proposta (cada linha avisa quando está pronta): o "Cadastrar todas" manda esses.
+  const [prontos, setProntos] = useState<Map<number, () => DadosProposta>>(new Map());
+  const [enviandoTodas, setEnviandoTodas] = useState<{ feitos: number; total: number } | null>(null);
+  const registrar = useCallback((numero: number, dados: (() => DadosProposta) | null) => {
+    setProntos((m) => {
+      if ((m.get(numero) ?? null) === dados) return m;
+      const n = new Map(m);
+      if (dados) n.set(numero, dados);
+      else n.delete(numero);
+      return n;
+    });
+  }, []);
   // A mesma compra no quadro? Então valor (sigiloso/não informado), marca e modelo vêm do orçamento de lá.
   const [doQuadro, setDoQuadro] = useState<{
     sugestoes: Map<number, SugestaoItem>;
@@ -397,6 +409,52 @@ function ConteudoCadastro({
 
   function falhou(it: ItemProposta, d: DadosProposta, alterada: boolean, mensagem: string, tentar: () => void) {
     aoEnviar({ resultado: { ok: false, alterada, falhas: [{ item: itemEnviado(it, d), mensagem }] }, orgao, fim: fim ? dataHora(fim) : "", tentar });
+  }
+
+  const paraTodas = itens.filter((i) => !i.grupo && !i.proposta && prontos.has(i.numero));
+  const semProposta = itens.filter((i) => !i.grupo && !i.proposta).length;
+
+  /** Cadastra, um por vez, todos os itens preenchidos que ainda não têm proposta; no fim, um card só com o resultado. */
+  async function cadastrarTodas(lista?: { it: ItemProposta; d: DadosProposta }[]) {
+    const envios = lista ?? paraTodas.map((it) => ({ it, d: prontos.get(it.numero)!() }));
+    if (!envios.length) return;
+    if (!lista) {
+      const linhas = envios
+        .map(({ it, d }) => `Item ${it.numero}: ${it.desconto ? `${textoNumero(d.valor)}%` : formatarMoeda(d.valor)} · Qtde ${textoNumero(d.quantidade)}${it.material ? ` · ${d.marca} ${d.modelo}`.trimEnd() : ""}`)
+        .join("\n");
+      if (!window.confirm(`Cadastrar a proposta de ${envios.length === 1 ? "1 item" : `${envios.length} itens`} no Compras.gov.br?\n\n${linhas}`)) return;
+    }
+    const ok: { it: ItemProposta; d: DadosProposta }[] = [];
+    const falhas: { it: ItemProposta; d: DadosProposta; mensagem: string }[] = [];
+    setEnviandoTodas({ feitos: 0, total: envios.length });
+    for (const e of envios) {
+      try {
+        await enviarProposta(chave, e.it, e.d);
+        ok.push(e);
+        setEnviadas((m) => new Map(m).set(e.it.numero, { valor: e.d.valor, quantidade: e.d.quantidade, marca: e.d.marca, modelo: e.d.modelo, pais: e.it.proposta?.pais ?? "BRA", margem: e.it.proposta?.margem ?? "0" }));
+      } catch (erro) {
+        falhas.push({ ...e, mensagem: mensagemDeErro(erro) });
+      }
+      setEnviandoTodas({ feitos: ok.length + falhas.length, total: envios.length });
+    }
+    setEnviandoTodas(null);
+    const cabeca = { orgao, fim: fim ? dataHora(fim) : "" };
+    if (!falhas.length) {
+      const enviadosAgora = new Set(ok.map((e) => e.it.numero));
+      const faltamAinda = itens.filter((i) => !i.grupo && !i.proposta && !enviadosAgora.has(i.numero)).length;
+      aoEnviar({ resultado: { ok: true, alterada: false, itens: ok.map((e) => itemEnviado(e.it, e.d)), faltam: faltamAinda }, ...cabeca });
+    } else {
+      aoEnviar({
+        resultado: {
+          ok: false,
+          alterada: false,
+          falhas: falhas.map((f) => ({ item: itemEnviado(f.it, f.d), mensagem: f.mensagem })),
+          enviados: ok.map((e) => itemEnviado(e.it, e.d)),
+        },
+        ...cabeca,
+        tentar: () => void cadastrarTodas(falhas.map(({ it, d }) => ({ it, d }))),
+      });
+    }
   }
 
   return (
@@ -467,6 +525,23 @@ function ConteudoCadastro({
               {comProposta.length} com proposta
             </span>
             {total > 0 && <strong>{formatarMoeda(total)}</strong>}
+            {participando && !encerrado && semProposta > 0 && (
+              <button
+                className="botao acento pequeno cadastrar-todas"
+                onClick={() => cadastrarTodas()}
+                disabled={!!enviandoTodas || paraTodas.length === 0}
+                title={
+                  paraTodas.length
+                    ? "Cadastra no Compras.gov.br todos os itens preenchidos que ainda não têm proposta"
+                    : "Preencha valor, quantidade, marca e modelo dos itens para cadastrar todos de uma vez"
+                }
+              >
+                {enviandoTodas ? <Loader2 className="girando" /> : <Send />}{" "}
+                {enviandoTodas
+                  ? `Cadastrando ${Math.min(enviandoTodas.feitos + 1, enviandoTodas.total)} de ${enviandoTodas.total}…`
+                  : `Cadastrar todas${paraTodas.length ? ` (${paraTodas.length})` : ""}`}
+              </button>
+            )}
             {itens.length > 6 && (
               <label className="pequeno">
                 <input
@@ -515,8 +590,9 @@ function ConteudoCadastro({
                 cnpj={cnpj}
                 item={it}
                 sugestao={doQuadro?.sugestoes.get(it.numero) ?? null}
-                liberado={participando && !encerrado}
+                liberado={participando && !encerrado && !enviandoTodas}
                 aoSalvar={recarregar}
+                registrar={registrar}
                 aoEnviado={enviado}
                 aoFalhar={falhou}
                 aoExcluido={(x) => setEnviadas((m) => new Map(m).set(x.numero, null))}
@@ -826,6 +902,7 @@ function LinhaItemProposta({
   aoEnviado,
   aoFalhar,
   aoExcluido,
+  registrar,
   semLeitura = false,
 }: {
   chave: string;
@@ -837,6 +914,8 @@ function LinhaItemProposta({
   aoEnviado: (it: ItemProposta, d: DadosProposta, alterada: boolean) => void;
   aoFalhar: (it: ItemProposta, d: DadosProposta, alterada: boolean, mensagem: string, tentar: () => void) => void;
   aoExcluido: (it: ItemProposta) => void;
+  /** Avisa a lista quando o item está preenchido e sem proposta (entra no "Cadastrar todas"). */
+  registrar?: (numero: number, dados: (() => DadosProposta) | null) => void;
   /** Aplicativo antigo: não sabe se o item tem proposta, então a lixeira aparece em todos. */
   semLeitura?: boolean;
 }) {
@@ -890,6 +969,16 @@ function LinhaItemProposta({
     marca,
     modelo,
   });
+  // Os valores do momento, para o "Cadastrar todas" ler sem a linha precisar se registrar de novo a cada tecla.
+  const atuais = useRef<DadosProposta>({ valor: 0, quantidade: 0, marca, modelo });
+  atuais.current = { valor: v ?? 0, quantidade: q ?? 0, marca, modelo };
+  const lerAtuais = useCallback(() => ({ ...atuais.current }), []);
+  const prontoParaTodas = liberado && !ocupado && !p && !it.grupo && valido;
+  useEffect(() => {
+    if (!registrar) return;
+    registrar(it.numero, prontoParaTodas ? lerAtuais : null);
+    return () => registrar(it.numero, null);
+  }, [registrar, it.numero, prontoParaTodas, lerAtuais]);
   const caminhoAnexos = `${FE}/v1/compras/${chave}/itens/${it.numero}/participacao/${cnpj}/anexos`;
 
   const carregarAnexos = useCallback(async () => {
