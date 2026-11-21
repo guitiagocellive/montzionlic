@@ -16590,3 +16590,51 @@ button.cp-cabeca { width: 100%; border: 0; background: none; color: inherit; fon
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* Card do quadro: quem adicionou a licitação e quem é o responsável (foto e nome). */
+.card-pessoas {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 10px;
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--borda);
+}
+.card-pessoa {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--texto);
+}
+.card-pessoa > span:last-child {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.card-pessoa small {
+  font-size: 0.64rem;
+  font-weight: 500;
+  color: var(--texto-fraco);
+}
+.card-pessoa .avatar.pequeno {
+  width: 22px;
+  height: 22px;
+  font-size: 0.58rem;
+}
+.card-pessoa.sem-responsavel {
+  color: var(--texto-fraco);
+  font-weight: 500;
+}
+.avatar.vazio {
+  background: var(--superficie-3);
+  color: var(--texto-fraco);
+  border: 1px dashed var(--borda);
+}

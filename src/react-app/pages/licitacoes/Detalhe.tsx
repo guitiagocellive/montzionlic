@@ -10,7 +10,7 @@ import { PainelAtividade } from "../../components/Atividade";
 import { avisar, Carregando, Modal } from "../../components/Ui";
 import { MenuContexto } from "../../components/MenuContexto";
 import { diasAte } from "../../../shared/negocio";
-import { formatarData, formatarMoeda, formatarNumero, hojeIso, textoPrazo } from "../../formato";
+import { dataDoBanco, formatarData, formatarMoeda, formatarNumero, hojeIso, textoPrazo } from "../../formato";
 import { link, navegar } from "../../rota";
 import { AbaDados } from "./AbaDados";
 import { AbaItens } from "./AbaItens";
@@ -265,7 +265,7 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
                     {responsavel ? (
                       <span className="responsavel-resumo">
                         <Avatar nome={responsavel.nome} cor={responsavel.cor} foto={responsavel.foto} pequeno />
-                        {responsavel.nome.split(" ")[0]}
+                        {responsavel.nome}
                       </span>
                     ) : (
                       "Ninguém"
@@ -273,6 +273,20 @@ export function DetalheLicitacao({ id, usuario }: { id: number; usuario: Usuario
                   </dd>
                 </div>
               </div>
+              {l.criado_por_nome && (
+                <div>
+                  <dt>
+                    <UserRound /> Adicionada ao quadro por
+                  </dt>
+                  <dd>
+                    <span className="responsavel-resumo">
+                      <Avatar nome={l.criado_por_nome} cor={l.criado_por_cor} foto={l.criado_por_foto} pequeno />
+                      {l.criado_por_nome}
+                      {dataDoBanco(l.criado_em) && <span className="texto-fraco pequeno">em {dataDoBanco(l.criado_em)}</span>}
+                    </span>
+                  </dd>
+                </div>
+              )}
               <div>
                 <dt>Objeto</dt>
                 <dd className="objeto-resumo">{l.objeto || <span className="falta">Não informado</span>}</dd>

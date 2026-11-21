@@ -36,7 +36,7 @@ import { lerCodigoSolicitada } from "./ItemCompras";
 import { abrirPopupGovBr, useConexaoGovBr } from "../../robo/ConexaoGovBr";
 import { detectarCadastrosNoPortal, diaDeHoje, elegivelParaSinc, lerMudouHoje, lerUltimaSinc, participacoesForaDoQuadro, sincronizarQuadro } from "./sincronizarQuadro";
 import { avisar, Carregando, CampoSelect, Modal } from "../../components/Ui";
-import { formatarMoeda, hojeIso } from "../../formato";
+import { dataDoBanco, formatarMoeda, hojeIso } from "../../formato";
 import { navegar } from "../../rota";
 import { CadastroUmClique, ehDoCompras, situacaoCadastro } from "./CadastroUmClique";
 import { puxarESalvarResultado } from "./puxarResultado";
@@ -449,11 +449,6 @@ function CardLicitacao({ l, hoje, mudou, aoMover }: { l: LicitacaoResumo; hoje: 
           {l.uasg && <small className="card-uasg">UASG {l.uasg}</small>}
           {mudou && <span className="card-mudou" title={`Mudou hoje no Compras.gov.br: ${mudou}`} aria-label="Mudou hoje" />}
         </h4>
-        {l.responsavel_nome && (
-          <span title={`Responsável: ${l.responsavel_nome}`}>
-            <Avatar nome={l.responsavel_nome} cor={l.responsavel_cor} foto={l.responsavel_foto} pequeno />
-          </span>
-        )}
       </div>
       <p className="card-orgao">{l.orgao || "Órgão não informado"}</p>
       {meta && <p className="card-meta">{meta}</p>}
@@ -490,6 +485,7 @@ function CardLicitacao({ l, hoje, mudou, aoMover }: { l: LicitacaoResumo; hoje: 
         {l.itens_acompanhando > 0 && <span className="amarelo">{l.itens_acompanhando} acompanhando</span>}
         {l.itens_perdidos > 0 && <span className="vermelho">{l.itens_perdidos} perdido(s)</span>}
       </div>
+      <PessoasDoCard l={l} />
       {mudou && <p className="card-mudou-texto">{mudou}</p>}
       {sugestao && (
         <button
@@ -505,6 +501,42 @@ function CardLicitacao({ l, hoje, mudou, aoMover }: { l: LicitacaoResumo; hoje: 
         </button>
       )}
     </>
+  );
+}
+
+const primeiroNome = (nome: string) => nome.trim().split(/\s+/)[0];
+
+/** Rodapé do card: quem adicionou a licitação ao quadro e quem é o responsável (foto e nome). */
+function PessoasDoCard({ l }: { l: LicitacaoResumo }) {
+  const quando = dataDoBanco(l.criado_em);
+  return (
+    <div className="card-pessoas">
+      {l.criado_por_nome && (
+        <span className="card-pessoa" title={`Adicionada ao quadro por ${l.criado_por_nome}${quando ? ` em ${quando}` : ""}`}>
+          <Avatar nome={l.criado_por_nome} cor={l.criado_por_cor} foto={l.criado_por_foto} pequeno />
+          <span>
+            <small>Adicionou</small>
+            {primeiroNome(l.criado_por_nome)}
+          </span>
+        </span>
+      )}
+      <span
+        className={`card-pessoa ${l.responsavel_nome ? "" : "sem-responsavel"}`}
+        title={l.responsavel_nome ? `Responsável: ${l.responsavel_nome}` : "Sem responsável (defina na ficha, aba Dados)"}
+      >
+        {l.responsavel_nome ? (
+          <Avatar nome={l.responsavel_nome} cor={l.responsavel_cor} foto={l.responsavel_foto} pequeno />
+        ) : (
+          <span className="avatar pequeno vazio" aria-hidden="true">
+            ?
+          </span>
+        )}
+        <span>
+          <small>Responsável</small>
+          {l.responsavel_nome ? primeiroNome(l.responsavel_nome) : "Ninguém"}
+        </span>
+      </span>
+    </div>
   );
 }
 

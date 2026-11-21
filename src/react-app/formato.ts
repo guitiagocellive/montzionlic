@@ -63,3 +63,11 @@ export function paraNumero(valor: string): number | null {
   const n = Number(valor.replace(",", "."));
   return Number.isFinite(n) ? n : null;
 }
+
+/** "12/11/2026" a partir do datetime do banco (UTC, "AAAA-MM-DD HH:MM:SS"). */
+export function dataDoBanco(s?: string | null) {
+  if (!s) return "";
+  const t = Date.parse(s.includes("T") ? s : `${s.replace(" ", "T")}Z`);
+  return Number.isFinite(t) ? new Date(t).toLocaleDateString("pt-BR") : "";
+}
+

@@ -248,6 +248,12 @@ export interface LicitacaoResumo {
   responsavel_nome: string | null;
   responsavel_cor: string | null;
   responsavel_foto: string | null;
+  /** Quem adicionou a licitação ao quadro (null = a pessoa foi excluída). */
+  criado_por?: number | null;
+  criado_por_nome?: string | null;
+  criado_por_cor?: string | null;
+  criado_por_foto?: string | null;
+  criado_em?: string;
   total_itens: number;
   total_arquivos: number;
   total_cotacoes: number;
@@ -288,6 +294,11 @@ export interface Licitacao {
   lucro_percentual: number;
   imposto_percentual: number;
   responsavel_id: number | null;
+  /** Quem adicionou a licitação ao quadro. */
+  criado_por?: number | null;
+  criado_por_nome?: string | null;
+  criado_por_cor?: string | null;
+  criado_por_foto?: string | null;
   data_resultado: string | null;
   motivo_perda: string | null;
   observacao_resultado: string | null;
